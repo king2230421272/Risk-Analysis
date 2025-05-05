@@ -759,13 +759,37 @@ with main_container:
     with tab6:
         st.header("Database Management")
         
-        # Database operations
-        db_operation = st.radio(
-            "Select Database Operation:",
-            ["Save Dataset", "Load Dataset", "List Saved Datasets", "Save Analysis Result", "View Analysis Results", "Delete Dataset"]
-        )
+        # Check if database is available
+        if not hasattr(db_handler, 'db_available') or not db_handler.db_available:
+            st.error("⚠️ Database connection is not available. Database features are disabled.")
+            st.info("The application will continue to work without database functionality. You can still import, process, and analyze data, but you won't be able to save or load from the database.")
+            st.info("Please check your database connection settings or contact your administrator for assistance.")
+            
+            # Show technical details in an expander for troubleshooting
+            with st.expander("Technical Details"):
+                st.code("""
+# Common issues:
+1. PostgreSQL service may not be running
+2. Database credentials may be incorrect
+3. Network connectivity issues
+4. SSL connection failures
+
+# Troubleshooting:
+- Check that the PostgreSQL database service is running
+- Verify that the DATABASE_URL environment variable is correctly set
+- Ensure network connectivity to the database server
+- Check firewall settings that might block database connections
+                """)
+        else:
+            # Database operations
+            db_operation = st.radio(
+                "Select Database Operation:",
+                ["Save Dataset", "Load Dataset", "List Saved Datasets", "Save Analysis Result", "View Analysis Results", "Delete Dataset"]
+            )
         
-        if db_operation == "Save Dataset":
+        if not hasattr(db_handler, 'db_available') or not db_handler.db_available:
+            pass  # Already handled with error message above
+        elif db_operation == "Save Dataset":
             st.subheader("Save Dataset to Database")
             
             # Select dataset to save

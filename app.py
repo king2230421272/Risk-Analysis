@@ -1436,11 +1436,15 @@ with main_container:
                                     if consecutive_mode and st.session_state.datasets_to_analyze:
                                         selected_datasets = st.session_state.datasets_to_analyze
                                         st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
+                                        
+                                        # Process one dataset now, others will be processed in a loop
+                                        # Default to first dataset for parameters
+                                        selected_dataset = selected_datasets[0] if selected_datasets else dataset_options[0]
                                     else:
                                         # Regular mode - select a single dataset
                                         selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="kmeans_dataset")
                                     
-                                    # Get the selected dataset
+                                    # Get the selected dataset for parameters
                                     if selected_dataset == "Original Data":
                                         analysis_data = original_data
                                         dataset_label = "Original Data"
@@ -1489,100 +1493,225 @@ with main_container:
                                                     st.session_state.current_analysis_step = 2
                                             else:
                                                 try:
-                                                    with st.spinner("Running K-Means clustering..."):
-                                                        # Prepare data for clustering
-                                                        from sklearn.cluster import KMeans
-                                                        from sklearn.preprocessing import StandardScaler
+                                                    # In consecutive mode with multiple datasets selected
+                                                    if consecutive_mode and st.session_state.datasets_to_analyze and len(st.session_state.datasets_to_analyze) > 0:
+                                                        # Process each selected dataset in turn
+                                                        datasets_to_process = st.session_state.datasets_to_analyze
                                                         
-                                                        # Get data without missing values
-                                                        cluster_data = analysis_data[selected_features].dropna()
+                                                        # Create dictionary to store results for all datasets
+                                                        all_kmeans_results = {}
                                                         
-                                                        if len(cluster_data) < k_clusters:
-                                                            st.error(f"Not enough data points ({len(cluster_data)}) for {k_clusters} clusters after removing missing values.")
-                                                        else:
-                                                            # Scale the data
-                                                            scaler = StandardScaler()
-                                                            scaled_data = scaler.fit_transform(cluster_data)
-                                                            
-                                                            # Run K-Means
-                                                            kmeans = KMeans(n_clusters=k_clusters, max_iter=max_iter, random_state=random_state)
-                                                            clusters = kmeans.fit_predict(scaled_data)
-                                                            
-                                                            # Add cluster labels to the data
-                                                            cluster_data['Cluster'] = clusters
-                                                            
-                                                            # Calculate convergence metrics
-                                                            inertia = kmeans.inertia_  # Sum of squared distances to the nearest centroid
-                                                            
-                                                            # Display results
-                                                            st.success(f"K-Means clustering completed successfully for {dataset_label}.")
-                                                            
-                                                            # Visualization
-                                                            st.write("### Clustering Results")
-                                                            st.write(f"Inertia (Sum of squared distances): {inertia:.2f}")
-                                                            
-                                                            # Display cluster distribution
-                                                            st.write("#### Cluster Distribution")
-                                                            cluster_counts = cluster_data['Cluster'].value_counts().sort_index()
-                                                            fig = plt.figure(figsize=(10, 6))
-                                                            plt.bar(cluster_counts.index, cluster_counts.values)
-                                                            plt.xlabel('Cluster')
-                                                            plt.ylabel('Number of Data Points')
-                                                            plt.title('Distribution of Data Points Across Clusters')
-                                                            plt.xticks(range(k_clusters))
-                                                            st.pyplot(fig)
-                                                            
-                                                            # Store clustering results in dataset info
-                                                            if selected_dataset != "Original Data":
-                                                                dataset_id = int(selected_dataset.split()[-1])
-                                                                for ds in st.session_state.convergence_datasets:
-                                                                    if ds['id'] == dataset_id:
-                                                                        ds['convergence_scores']['kmeans_inertia'] = inertia
-                                                                        ds['convergence_scores']['kmeans_cluster_counts'] = cluster_counts.to_dict()
-                                                                        break
-                                                            
-                                                            # Create a 2D visualization if possible
-                                                            if len(selected_features) >= 2:
-                                                                st.write("#### 2D Visualization of Clusters")
+                                                        with st.spinner(f"Running K-Means clustering on {len(datasets_to_process)} datasets..."):
+                                                            for selected_ds in datasets_to_process:
+                                                                st.write(f"Processing {selected_ds}...")
                                                                 
-                                                                # Select two features for visualization
-                                                                viz_features = selected_features[:2]
+                                                                # Get data for this dataset
+                                                                if selected_ds == "Original Data":
+                                                                    curr_data = original_data.copy()
+                                                                    curr_label = "Original Data"
+                                                                else:
+                                                                    ds_id = int(selected_ds.split()[-1])
+                                                                    dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
+                                                                    if dataset is not None:
+                                                                        curr_data = dataset['data'].copy()
+                                                                        curr_label = f"Dataset {ds_id}"
+                                                                    else:
+                                                                        st.warning(f"Dataset {selected_ds} not found, skipping...")
+                                                                        continue
                                                                 
-                                                                fig, ax = plt.subplots(figsize=(10, 8))
-                                                                scatter = ax.scatter(
-                                                                    cluster_data[viz_features[0]], 
-                                                                    cluster_data[viz_features[1]], 
-                                                                    c=cluster_data['Cluster'], 
-                                                                    cmap='viridis', 
-                                                                    alpha=0.6,
-                                                                    s=50
-                                                                )
+                                                                # Import required libraries
+                                                                from sklearn.cluster import KMeans
+                                                                from sklearn.preprocessing import StandardScaler
                                                                 
-                                                                # Plot centroids
-                                                                centroids = scaler.inverse_transform(kmeans.cluster_centers_)
-                                                                ax.scatter(
-                                                                    centroids[:, 0], 
-                                                                    centroids[:, 1],
-                                                                    marker='X',
-                                                                    s=200,
-                                                                    linewidths=2,
-                                                                    color='red',
-                                                                    label='Centroids'
-                                                                )
+                                                                # Prepare data for clustering
+                                                                cluster_data = curr_data[selected_features].dropna()
                                                                 
-                                                                ax.set_xlabel(viz_features[0])
-                                                                ax.set_ylabel(viz_features[1])
-                                                                ax.set_title(f'K-Means Clustering ({k_clusters} clusters)')
-                                                                ax.legend()
-                                                                plt.colorbar(scatter, label='Cluster')
-                                                                st.pyplot(fig)
+                                                                if len(cluster_data) < k_clusters:
+                                                                    st.warning(f"{curr_label}: Not enough data points ({len(cluster_data)}) for {k_clusters} clusters after removing missing values.")
+                                                                    continue
+                                                                
+                                                                # Scale the data
+                                                                scaler = StandardScaler()
+                                                                scaled_data = scaler.fit_transform(cluster_data)
+                                                                
+                                                                # Run K-Means
+                                                                kmeans = KMeans(n_clusters=k_clusters, max_iter=max_iter, random_state=random_state)
+                                                                clusters = kmeans.fit_predict(scaled_data)
+                                                                
+                                                                # Add cluster labels to the data
+                                                                cluster_data['Cluster'] = clusters
+                                                                
+                                                                # Calculate convergence metrics
+                                                                inertia = kmeans.inertia_  # Sum of squared distances to the nearest centroid
+                                                                
+                                                                # Store clustering results in dataset info if not original data
+                                                                if selected_ds != "Original Data":
+                                                                    ds_id = int(selected_ds.split()[-1])
+                                                                    for ds in st.session_state.convergence_datasets:
+                                                                        if ds['id'] == ds_id:
+                                                                            ds['convergence_scores']['kmeans_inertia'] = inertia
+                                                                            ds['convergence_scores']['kmeans_cluster_counts'] = cluster_data['Cluster'].value_counts().sort_index().to_dict()
+                                                                            break
+                                                                
+                                                                # Store results for later display if needed
+                                                                all_kmeans_results[curr_label] = {
+                                                                    'inertia': inertia,
+                                                                    'data': cluster_data,
+                                                                    'kmeans': kmeans,
+                                                                    'scaler': scaler
+                                                                }
                                                             
-                                                            # If in consecutive mode, progress to next step
+                                                            # Report completion
+                                                            if all_kmeans_results:
+                                                                st.success(f"K-Means clustering completed for {len(all_kmeans_results)} datasets.")
+                                                                
+                                                                # Show summary of results
+                                                                st.write("### Clustering Results Summary")
+                                                                summary_data = {label: {'Inertia': results['inertia']} 
+                                                                            for label, results in all_kmeans_results.items()}
+                                                                
+                                                                summary_df = pd.DataFrame.from_dict(summary_data, orient='index')
+                                                                st.dataframe(summary_df)
+                                                                
+                                                                # Show the first dataset's visualization as an example
+                                                                if len(selected_features) >= 2:
+                                                                    example_label = list(all_kmeans_results.keys())[0]
+                                                                    example_results = all_kmeans_results[example_label]
+                                                                    
+                                                                    st.write(f"#### Example Visualization: {example_label}")
+                                                                    viz_features = selected_features[:2]
+                                                                    
+                                                                    fig, ax = plt.subplots(figsize=(10, 8))
+                                                                    scatter = ax.scatter(
+                                                                        example_results['data'][viz_features[0]], 
+                                                                        example_results['data'][viz_features[1]], 
+                                                                        c=example_results['data']['Cluster'], 
+                                                                        cmap='viridis', 
+                                                                        alpha=0.6,
+                                                                        s=50
+                                                                    )
+                                                                    
+                                                                    # Plot centroids
+                                                                    centroids = example_results['scaler'].inverse_transform(example_results['kmeans'].cluster_centers_)
+                                                                    ax.scatter(
+                                                                        centroids[:, 0], 
+                                                                        centroids[:, 1],
+                                                                        marker='X',
+                                                                        s=200,
+                                                                        linewidths=2,
+                                                                        color='red',
+                                                                        label='Centroids'
+                                                                    )
+                                                                    
+                                                                    ax.set_xlabel(viz_features[0])
+                                                                    ax.set_ylabel(viz_features[1])
+                                                                    ax.set_title(f'K-Means Clustering ({k_clusters} clusters)')
+                                                                    ax.legend()
+                                                                    plt.colorbar(scatter, label='Cluster')
+                                                                    st.pyplot(fig)
+                                                            
+                                                            # Progress to next step
                                                             if consecutive_mode:
                                                                 st.session_state.current_analysis_step = 2
-                                                                st.success("K-Means clustering complete. Moving to Regression Analysis...")
+                                                                st.success("K-Means clustering complete for all datasets. Moving to Regression Analysis...")
                                                                 # Force a rerun to update the UI for the next step
                                                                 st.rerun()
+                                                    else:
+                                                        # Regular mode - process single dataset
+                                                        with st.spinner("Running K-Means clustering..."):
+                                                            # Prepare data for clustering
+                                                            from sklearn.cluster import KMeans
+                                                            from sklearn.preprocessing import StandardScaler
+                                                            
+                                                            # Get data without missing values
+                                                            cluster_data = analysis_data[selected_features].dropna()
+                                                            
+                                                            if len(cluster_data) < k_clusters:
+                                                                st.error(f"Not enough data points ({len(cluster_data)}) for {k_clusters} clusters after removing missing values.")
+                                                            else:
+                                                                # Scale the data
+                                                                scaler = StandardScaler()
+                                                                scaled_data = scaler.fit_transform(cluster_data)
+                                                                
+                                                                # Run K-Means
+                                                                kmeans = KMeans(n_clusters=k_clusters, max_iter=max_iter, random_state=random_state)
+                                                                clusters = kmeans.fit_predict(scaled_data)
+                                                                
+                                                                # Add cluster labels to the data
+                                                                cluster_data['Cluster'] = clusters
+                                                                
+                                                                # Calculate convergence metrics
+                                                                inertia = kmeans.inertia_  # Sum of squared distances to the nearest centroid
+                                                                
+                                                                # Display results
+                                                                st.success(f"K-Means clustering completed successfully for {dataset_label}.")
+                                                                
+                                                                # Visualization
+                                                                st.write("### Clustering Results")
+                                                                st.write(f"Inertia (Sum of squared distances): {inertia:.2f}")
+                                                                
+                                                                # Display cluster distribution
+                                                                st.write("#### Cluster Distribution")
+                                                                cluster_counts = cluster_data['Cluster'].value_counts().sort_index()
+                                                                fig = plt.figure(figsize=(10, 6))
+                                                                plt.bar(cluster_counts.index, cluster_counts.values)
+                                                                plt.xlabel('Cluster')
+                                                                plt.ylabel('Number of Data Points')
+                                                                plt.title('Distribution of Data Points Across Clusters')
+                                                                plt.xticks(range(k_clusters))
+                                                                st.pyplot(fig)
+                                                                
+                                                                # Store clustering results in dataset info
+                                                                if selected_dataset != "Original Data":
+                                                                    dataset_id = int(selected_dataset.split()[-1])
+                                                                    for ds in st.session_state.convergence_datasets:
+                                                                        if ds['id'] == dataset_id:
+                                                                            ds['convergence_scores']['kmeans_inertia'] = inertia
+                                                                            ds['convergence_scores']['kmeans_cluster_counts'] = cluster_counts.to_dict()
+                                                                            break
+                                                                
+                                                                # Create a 2D visualization if possible
+                                                                if len(selected_features) >= 2:
+                                                                    st.write("#### 2D Visualization of Clusters")
+                                                                    
+                                                                    # Select two features for visualization
+                                                                    viz_features = selected_features[:2]
+                                                                    
+                                                                    fig, ax = plt.subplots(figsize=(10, 8))
+                                                                    scatter = ax.scatter(
+                                                                        cluster_data[viz_features[0]], 
+                                                                        cluster_data[viz_features[1]], 
+                                                                        c=cluster_data['Cluster'], 
+                                                                        cmap='viridis', 
+                                                                        alpha=0.6,
+                                                                        s=50
+                                                                    )
+                                                                    
+                                                                    # Plot centroids
+                                                                    centroids = scaler.inverse_transform(kmeans.cluster_centers_)
+                                                                    ax.scatter(
+                                                                        centroids[:, 0], 
+                                                                        centroids[:, 1],
+                                                                        marker='X',
+                                                                        s=200,
+                                                                        linewidths=2,
+                                                                        color='red',
+                                                                        label='Centroids'
+                                                                    )
+                                                                    
+                                                                    ax.set_xlabel(viz_features[0])
+                                                                    ax.set_ylabel(viz_features[1])
+                                                                    ax.set_title(f'K-Means Clustering ({k_clusters} clusters)')
+                                                                    ax.legend()
+                                                                    plt.colorbar(scatter, label='Cluster')
+                                                                    st.pyplot(fig)
+                                                                
+                                                                # If in consecutive mode, progress to next step
+                                                                if consecutive_mode:
+                                                                    st.session_state.current_analysis_step = 2
+                                                                    st.success("K-Means clustering complete. Moving to Regression Analysis...")
+                                                                    # Force a rerun to update the UI for the next step
+                                                                    st.rerun()
                                                 
                                                 except Exception as e:
                                                     st.error(f"Error during K-Means clustering: {e}")
@@ -1602,9 +1731,20 @@ with main_container:
                                     
                                     # Select dataset to analyze
                                     dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
-                                    selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="regression_dataset")
                                     
-                                    # Get the selected dataset
+                                    # In consecutive mode, analyze all selected datasets
+                                    if consecutive_mode and st.session_state.datasets_to_analyze:
+                                        selected_datasets = st.session_state.datasets_to_analyze
+                                        st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
+                                        
+                                        # Process one dataset now, others will be processed in a loop
+                                        # Default to first dataset for parameters
+                                        selected_dataset = selected_datasets[0] if selected_datasets else dataset_options[0]
+                                    else:
+                                        # Regular mode - select a single dataset
+                                        selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="regression_dataset")
+                                    
+                                    # Get the selected dataset for parameters
                                     if selected_dataset == "Original Data":
                                         analysis_data = original_data
                                         dataset_label = "Original Data"
@@ -1666,108 +1806,261 @@ with main_container:
                                                     st.session_state.current_analysis_step = 3
                                             else:
                                                 try:
-                                                    with st.spinner("Running linear regression..."):
-                                                        from sklearn.linear_model import LinearRegression
-                                                        from sklearn.metrics import mean_squared_error, r2_score
-                                                        from sklearn.model_selection import train_test_split
+                                                    # In consecutive mode with multiple datasets selected
+                                                    if consecutive_mode and st.session_state.datasets_to_analyze and len(st.session_state.datasets_to_analyze) > 0:
+                                                        # Process each selected dataset in turn
+                                                        datasets_to_process = st.session_state.datasets_to_analyze
                                                         
-                                                        # Prepare data
-                                                        reg_data = analysis_data[independent_vars + [dependent_var]].dropna()
+                                                        # Create dictionary to store results for all datasets
+                                                        all_regression_results = {}
                                                         
-                                                        if len(reg_data) < 10:  # Minimum sample size
-                                                            st.error(f"Not enough data points ({len(reg_data)}) after removing missing values.")
-                                                        else:
-                                                            # Split data
-                                                            X = reg_data[independent_vars]
-                                                            y = reg_data[dependent_var]
+                                                        with st.spinner(f"Running Linear Regression on {len(datasets_to_process)} datasets..."):
+                                                            for selected_ds in datasets_to_process:
+                                                                st.write(f"Processing {selected_ds}...")
+                                                                
+                                                                # Get data for this dataset
+                                                                if selected_ds == "Original Data":
+                                                                    curr_data = original_data.copy()
+                                                                    curr_label = "Original Data"
+                                                                else:
+                                                                    ds_id = int(selected_ds.split()[-1])
+                                                                    dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
+                                                                    if dataset is not None:
+                                                                        curr_data = dataset['data'].copy()
+                                                                        curr_label = f"Dataset {ds_id}"
+                                                                    else:
+                                                                        st.warning(f"Dataset {selected_ds} not found, skipping...")
+                                                                        continue
+                                                                
+                                                                # Import required libraries
+                                                                from sklearn.linear_model import LinearRegression
+                                                                from sklearn.metrics import mean_squared_error, r2_score
+                                                                from sklearn.model_selection import train_test_split
+                                                                
+                                                                # Prepare data for regression
+                                                                reg_data = curr_data[independent_vars + [dependent_var]].dropna()
+                                                                
+                                                                if len(reg_data) < 10:  # Minimum sample size
+                                                                    st.warning(f"{curr_label}: Not enough data points ({len(reg_data)}) after removing missing values.")
+                                                                    continue
+                                                                # Split data for this dataset
+                                                                X = reg_data[independent_vars]
+                                                                y = reg_data[dependent_var]
+                                                                
+                                                                X_train, X_test, y_train, y_test = train_test_split(
+                                                                    X, y, test_size=test_size, random_state=random_state
+                                                                )
+                                                                
+                                                                # Fit model
+                                                                model = LinearRegression()
+                                                                model.fit(X_train, y_train)
+                                                                
+                                                                # Predictions
+                                                                y_train_pred = model.predict(X_train)
+                                                                y_test_pred = model.predict(X_test)
+                                                                
+                                                                # Metrics
+                                                                train_mse = mean_squared_error(y_train, y_train_pred)
+                                                                test_mse = mean_squared_error(y_test, y_test_pred)
+                                                                train_r2 = r2_score(y_train, y_train_pred)
+                                                                test_r2 = r2_score(y_test, y_test_pred)
+                                                                
+                                                                # Store regression results in dataset info if not original data
+                                                                if selected_ds != "Original Data":
+                                                                    ds_id = int(selected_ds.split()[-1])
+                                                                    for ds in st.session_state.convergence_datasets:
+                                                                        if ds['id'] == ds_id:
+                                                                            ds['convergence_scores']['regression_test_r2'] = test_r2
+                                                                            ds['convergence_scores']['regression_test_mse'] = test_mse
+                                                                            ds['convergence_scores']['regression_coefficients'] = {
+                                                                                'intercept': float(model.intercept_),
+                                                                                'coef': {feat: float(coef) for feat, coef in zip(independent_vars, model.coef_)}
+                                                                            }
+                                                                            break
+                                                                
+                                                                # Store results for later display
+                                                                all_regression_results[curr_label] = {
+                                                                    'model': model,
+                                                                    'train_mse': train_mse,
+                                                                    'test_mse': test_mse,
+                                                                    'train_r2': train_r2,
+                                                                    'test_r2': test_r2,
+                                                                    'y_train': y_train,
+                                                                    'y_train_pred': y_train_pred,
+                                                                    'y_test': y_test,
+                                                                    'y_test_pred': y_test_pred,
+                                                                    'independent_vars': independent_vars,
+                                                                    'coef': model.coef_,
+                                                                    'intercept': model.intercept_
+                                                                }
                                                             
-                                                            X_train, X_test, y_train, y_test = train_test_split(
-                                                                X, y, test_size=test_size, random_state=random_state
-                                                            )
+                                                            # Report completion
+                                                            if all_regression_results:
+                                                                st.success(f"Linear Regression completed for {len(all_regression_results)} datasets.")
+                                                                
+                                                                # Show summary of results
+                                                                st.write("### Regression Results Summary")
+                                                                summary_data = {
+                                                                    label: {
+                                                                        'Test R²': f"{results['test_r2']:.4f}",
+                                                                        'Test MSE': f"{results['test_mse']:.4f}",
+                                                                    }
+                                                                    for label, results in all_regression_results.items()
+                                                                }
+                                                                
+                                                                summary_df = pd.DataFrame.from_dict(summary_data, orient='index')
+                                                                st.dataframe(summary_df)
+                                                                
+                                                                # Show the first dataset's visualization as an example
+                                                                example_label = list(all_regression_results.keys())[0]
+                                                                example_results = all_regression_results[example_label]
+                                                                
+                                                                st.write(f"#### Example Visualization: {example_label}")
+                                                                
+                                                                # Model coefficients
+                                                                st.write("##### Model Coefficients")
+                                                                coef_df = pd.DataFrame({
+                                                                    'Feature': example_results['independent_vars'],
+                                                                    'Coefficient': example_results['coef']
+                                                                })
+                                                                st.dataframe(coef_df)
+                                                                st.write(f"Intercept: {example_results['intercept']:.4f}")
+                                                                
+                                                                # Visualize predictions vs actual
+                                                                st.write("##### Predictions vs Actual")
+                                                                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+                                                                
+                                                                # Training set
+                                                                ax1.scatter(example_results['y_train'], example_results['y_train_pred'], alpha=0.5)
+                                                                y_min = min(example_results['y_train'].min(), example_results['y_train_pred'].min())
+                                                                y_max = max(example_results['y_train'].max(), example_results['y_train_pred'].max())
+                                                                ax1.plot([y_min, y_max], [y_min, y_max], 'r--')
+                                                                ax1.set_xlabel('Actual')
+                                                                ax1.set_ylabel('Predicted')
+                                                                ax1.set_title(f'Training Set (R² = {example_results["train_r2"]:.4f})')
+                                                                
+                                                                # Test set
+                                                                ax2.scatter(example_results['y_test'], example_results['y_test_pred'], alpha=0.5)
+                                                                y_min = min(example_results['y_test'].min(), example_results['y_test_pred'].min())
+                                                                y_max = max(example_results['y_test'].max(), example_results['y_test_pred'].max())
+                                                                ax2.plot([y_min, y_max], [y_min, y_max], 'r--')
+                                                                ax2.set_xlabel('Actual')
+                                                                ax2.set_ylabel('Predicted')
+                                                                ax2.set_title(f'Test Set (R² = {example_results["test_r2"]:.4f})')
+                                                                
+                                                                plt.tight_layout()
+                                                                st.pyplot(fig)
                                                             
-                                                            # Fit model
-                                                            model = LinearRegression()
-                                                            model.fit(X_train, y_train)
-                                                            
-                                                            # Predictions
-                                                            y_train_pred = model.predict(X_train)
-                                                            y_test_pred = model.predict(X_test)
-                                                            
-                                                            # Metrics
-                                                            train_mse = mean_squared_error(y_train, y_train_pred)
-                                                            test_mse = mean_squared_error(y_test, y_test_pred)
-                                                            train_r2 = r2_score(y_train, y_train_pred)
-                                                            test_r2 = r2_score(y_test, y_test_pred)
-                                                            
-                                                            # Display results
-                                                            st.success(f"Linear regression completed successfully for {dataset_label}.")
-                                                            
-                                                            # Model coefficients
-                                                            st.write("### Model Coefficients")
-                                                            coef_df = pd.DataFrame({
-                                                                'Feature': independent_vars,
-                                                                'Coefficient': model.coef_
-                                                            })
-                                                            st.dataframe(coef_df)
-                                                            st.write(f"Intercept: {model.intercept_:.4f}")
-                                                            
-                                                            # Model performance
-                                                            st.write("### Model Performance")
-                                                            metrics_df = pd.DataFrame({
-                                                                'Metric': ['Mean Squared Error (MSE)', 'R² Score'],
-                                                                'Training Set': [train_mse, train_r2],
-                                                                'Test Set': [test_mse, test_r2]
-                                                            })
-                                                            st.dataframe(metrics_df)
-                                                            
-                                                            # Store regression results in dataset info
-                                                            if selected_dataset != "Original Data":
-                                                                dataset_id = int(selected_dataset.split()[-1])
-                                                                for ds in st.session_state.convergence_datasets:
-                                                                    if ds['id'] == dataset_id:
-                                                                        ds['convergence_scores']['regression_test_r2'] = test_r2
-                                                                        ds['convergence_scores']['regression_test_mse'] = test_mse
-                                                                        ds['convergence_scores']['regression_coefficients'] = {
-                                                                            'intercept': float(model.intercept_),
-                                                                            'coef': {feat: float(coef) for feat, coef in zip(independent_vars, model.coef_)}
-                                                                        }
-                                                                        break
-                                                            
-                                                            # Visualize predictions vs actual
-                                                            st.write("### Predictions vs Actual")
-                                                            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-                                                            
-                                                            # Training set
-                                                            ax1.scatter(y_train, y_train_pred, alpha=0.5)
-                                                            ax1.plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--')
-                                                            ax1.set_xlabel('Actual')
-                                                            ax1.set_ylabel('Predicted')
-                                                            ax1.set_title('Training Set')
-                                                            
-                                                            # Test set
-                                                            ax2.scatter(y_test, y_test_pred, alpha=0.5)
-                                                            ax2.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
-                                                            ax2.set_xlabel('Actual')
-                                                            ax2.set_ylabel('Predicted')
-                                                            ax2.set_title('Test Set')
-                                                            
-                                                            plt.tight_layout()
-                                                            st.pyplot(fig)
-                                                            
-                                                            # Display regression equation
-                                                            eq = f"y = {model.intercept_:.4f}"
-                                                            for i, var in enumerate(independent_vars):
-                                                                eq += f" + ({model.coef_[i]:.4f} × {var})"
-                                                            
-                                                            st.write("### Regression Equation")
-                                                            st.write(eq)
-                                                            
-                                                            # If in consecutive mode, progress to next step
+                                                            # Progress to next step
                                                             if consecutive_mode:
                                                                 st.session_state.current_analysis_step = 3
-                                                                st.success("Linear Regression complete. Moving to PCA Factor Analysis...")
+                                                                st.success("Regression analysis complete for all datasets. Moving to PCA Analysis...")
                                                                 # Force a rerun to update the UI for the next step
                                                                 st.rerun()
+                                                    else:
+                                                        # Regular mode - process single dataset
+                                                        with st.spinner("Running linear regression..."):
+                                                            from sklearn.linear_model import LinearRegression
+                                                            from sklearn.metrics import mean_squared_error, r2_score
+                                                            from sklearn.model_selection import train_test_split
+                                                            
+                                                            # Prepare data
+                                                            reg_data = analysis_data[independent_vars + [dependent_var]].dropna()
+                                                            
+                                                            if len(reg_data) < 10:  # Minimum sample size
+                                                                st.error(f"Not enough data points ({len(reg_data)}) after removing missing values.")
+                                                            else:
+                                                                # Split data
+                                                                X = reg_data[independent_vars]
+                                                                y = reg_data[dependent_var]
+                                                                
+                                                                X_train, X_test, y_train, y_test = train_test_split(
+                                                                    X, y, test_size=test_size, random_state=random_state
+                                                                )
+                                                                
+                                                                # Fit model
+                                                                model = LinearRegression()
+                                                                model.fit(X_train, y_train)
+                                                                
+                                                                # Predictions
+                                                                y_train_pred = model.predict(X_train)
+                                                                y_test_pred = model.predict(X_test)
+                                                                
+                                                                # Metrics
+                                                                train_mse = mean_squared_error(y_train, y_train_pred)
+                                                                test_mse = mean_squared_error(y_test, y_test_pred)
+                                                                train_r2 = r2_score(y_train, y_train_pred)
+                                                                test_r2 = r2_score(y_test, y_test_pred)
+                                                                
+                                                                # Display results
+                                                                st.success(f"Linear regression completed successfully for {dataset_label}.")
+                                                                
+                                                                # Model coefficients
+                                                                st.write("### Model Coefficients")
+                                                                coef_df = pd.DataFrame({
+                                                                    'Feature': independent_vars,
+                                                                    'Coefficient': model.coef_
+                                                                })
+                                                                st.dataframe(coef_df)
+                                                                st.write(f"Intercept: {model.intercept_:.4f}")
+                                                                
+                                                                # Model performance
+                                                                st.write("### Model Performance")
+                                                                metrics_df = pd.DataFrame({
+                                                                    'Metric': ['Mean Squared Error (MSE)', 'R² Score'],
+                                                                    'Training Set': [train_mse, train_r2],
+                                                                    'Test Set': [test_mse, test_r2]
+                                                                })
+                                                                st.dataframe(metrics_df)
+                                                                
+                                                                # Store regression results in dataset info
+                                                                if selected_dataset != "Original Data":
+                                                                    dataset_id = int(selected_dataset.split()[-1])
+                                                                    for ds in st.session_state.convergence_datasets:
+                                                                        if ds['id'] == dataset_id:
+                                                                            ds['convergence_scores']['regression_test_r2'] = test_r2
+                                                                            ds['convergence_scores']['regression_test_mse'] = test_mse
+                                                                            ds['convergence_scores']['regression_coefficients'] = {
+                                                                                'intercept': float(model.intercept_),
+                                                                                'coef': {feat: float(coef) for feat, coef in zip(independent_vars, model.coef_)}
+                                                                            }
+                                                                            break
+                                                                
+                                                                # Visualize predictions vs actual
+                                                                st.write("### Predictions vs Actual")
+                                                                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+                                                                
+                                                                # Training set
+                                                                ax1.scatter(y_train, y_train_pred, alpha=0.5)
+                                                                ax1.plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--')
+                                                                ax1.set_xlabel('Actual')
+                                                                ax1.set_ylabel('Predicted')
+                                                                ax1.set_title('Training Set')
+                                                                
+                                                                # Test set
+                                                                ax2.scatter(y_test, y_test_pred, alpha=0.5)
+                                                                ax2.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+                                                                ax2.set_xlabel('Actual')
+                                                                ax2.set_ylabel('Predicted')
+                                                                ax2.set_title('Test Set')
+                                                            
+                                                                plt.tight_layout()
+                                                                st.pyplot(fig)
+                                                                
+                                                                # Display regression equation
+                                                                eq = f"y = {model.intercept_:.4f}"
+                                                                for i, var in enumerate(independent_vars):
+                                                                    eq += f" + ({model.coef_[i]:.4f} × {var})"
+                                                                
+                                                                st.write("### Regression Equation")
+                                                                st.write(eq)
+                                                            
+                                                                # If in consecutive mode, progress to next step
+                                                                if consecutive_mode:
+                                                                    st.session_state.current_analysis_step = 3
+                                                                    st.success("Linear Regression complete. Moving to PCA Factor Analysis...")
+                                                                    # Force a rerun to update the UI for the next step
+                                                                    st.rerun()
                                                 
                                                 except Exception as e:
                                                     st.error(f"Error during linear regression: {e}")

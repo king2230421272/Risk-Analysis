@@ -307,117 +307,640 @@ with main_container:
                 if st.session_state.data is None:
                     st.warning("No active dataset selected. Please select a dataset in the Data Import tab.")
                 else:
+                    # Initialize the processed data output if needed
+                    if 'basic_processed_outputs' not in st.session_state:
+                        st.session_state.basic_processed_outputs = {}
+                
                     # Data preview
                     st.write("Active Dataset Preview:")
                     st.dataframe(st.session_state.data.head())
                     
-                    # Data processing options
-                    st.write("Data Processing Options")
+                    # Create tabs for different processing categories
+                    basic_tabs = st.tabs(["Feature Selection", "Data Cleaning", "Transformation", "Interpolation", "Results"])
                     
-                    # Feature selection
-                    st.write("Select features for processing:")
-                    all_columns = st.session_state.data.columns.tolist()
-                    st.session_state.selected_features = st.multiselect(
-                        "Features",
-                        all_columns,
-                        default=st.session_state.selected_features if st.session_state.selected_features else all_columns
-                    )
+                    # 1. FEATURE SELECTION TAB
+                    with basic_tabs[0]:
+                        st.write("### Feature Selection")
+                        st.write("Select features and target variable for processing:")
+                        
+                        # Get all columns
+                        all_columns = st.session_state.data.columns.tolist()
+                        
+                        # Feature selection
+                        st.session_state.selected_features = st.multiselect(
+                            "Features to include in processing",
+                            all_columns,
+                            default=st.session_state.selected_features if st.session_state.selected_features else all_columns
+                        )
+                        
+                        # Target variable selection
+                        st.write("Select target variable (for prediction):")
+                        
+                        # Handle target column selection
+                        current_index = 0  # Default to 'None'
+                        if st.session_state.target_column is not None and st.session_state.target_column != "None":
+                            try:
+                                current_index = all_columns.index(st.session_state.target_column) + 1
+                            except ValueError:
+                                # Target column not in the list, reset to None
+                                st.session_state.target_column = None
+                                
+                        st.session_state.target_column = st.selectbox(
+                            "Target Variable",
+                            ["None"] + all_columns,
+                            index=current_index,
+                            key="target_column_select"
+                        )
+                        
+                        # Apply feature selection
+                        if st.button("Apply Feature Selection", key="apply_feature_btn"):
+                            # Get a subset of data with selected features
+                            if st.session_state.selected_features:
+                                subset_data = st.session_state.data[st.session_state.selected_features].copy()
+                                
+                                # Store the subset data
+                                st.session_state.basic_processed_outputs['selected_features'] = subset_data
+                                
+                                st.success(f"Selected {len(st.session_state.selected_features)} features")
+                                st.write("Preview of selected features:")
+                                st.dataframe(subset_data.head())
+                            else:
+                                st.warning("No features selected.")
                     
-                    # Target variable selection
-                    st.write("Select target variable (for prediction):")
-                    
-                    # Handle target column selection
-                    current_index = 0  # Default to 'None'
-                    if st.session_state.target_column is not None and st.session_state.target_column != "None":
-                        try:
-                            current_index = all_columns.index(st.session_state.target_column) + 1
-                        except ValueError:
-                            # Target column not in the list, reset to None
-                            st.session_state.target_column = None
-                            
-                    st.session_state.target_column = st.selectbox(
-                        "Target Variable",
-                        ["None"] + all_columns,
-                        index=current_index,
-                        key="target_column_select"
-                    )
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        # Data cleaning options
-                        st.subheader("Data Cleaning")
-                        handle_missing = st.checkbox("Handle missing values")
-                        missing_method = "Mean imputation"  # Default value
+                    # 2. DATA CLEANING TAB
+                    with basic_tabs[1]:
+                        st.write("### Data Cleaning")
+                        st.write("Options for cleaning and preparing the data:")
+                        
+                        # Choose data source
+                        data_source_options = ["Original Data"]
+                        if st.session_state.basic_processed_outputs:
+                            data_source_options.extend(list(st.session_state.basic_processed_outputs.keys()))
+                        
+                        data_source = st.selectbox(
+                            "Select data source for cleaning:",
+                            data_source_options,
+                            key="cleaning_data_source"
+                        )
+                        
+                        # Get the selected data
+                        if data_source == "Original Data":
+                            cleaning_data = st.session_state.data
+                        else:
+                            cleaning_data = st.session_state.basic_processed_outputs[data_source]
+                        
+                        # Missing value handling
+                        st.write("#### Missing Value Handling")
+                        handle_missing = st.checkbox("Handle missing values", key="handle_missing")
+                        
                         if handle_missing:
                             missing_method = st.radio(
                                 "Method for handling missing values:",
-                                ["Remove rows", "Mean imputation", "Median imputation", "Mode imputation"]
+                                ["Remove rows", "Remove columns", "Mean imputation", "Median imputation", "Mode imputation"],
+                                key="missing_method"
                             )
+                            
+                            # Show missing value statistics
+                            missing_df = pd.DataFrame({
+                                'Column': cleaning_data.columns,
+                                'Missing Values': cleaning_data.isna().sum().values,
+                                'Percentage': (cleaning_data.isna().sum().values / len(cleaning_data) * 100).round(2)
+                            }).sort_values(by='Missing Values', ascending=False)
+                            
+                            st.write("#### Missing Value Statistics")
+                            st.dataframe(missing_df)
                         
-                        remove_duplicates = st.checkbox("Remove duplicate rows")
+                        # Duplicate handling
+                        st.write("#### Duplicate Handling")
+                        remove_duplicates = st.checkbox("Remove duplicate rows", key="remove_duplicates")
+                        
+                        if remove_duplicates:
+                            # Show duplicate information
+                            duplicate_count = cleaning_data.duplicated().sum()
+                            if duplicate_count > 0:
+                                st.write(f"Found {duplicate_count} duplicate rows ({duplicate_count/len(cleaning_data)*100:.2f}% of data)")
+                            else:
+                                st.write("No duplicate rows found in the data.")
+                        
+                        # Apply cleaning button
+                        if st.button("Apply Data Cleaning", key="apply_cleaning_btn"):
+                            # Create a copy of the data
+                            cleaned_data = cleaning_data.copy()
+                            cleaning_steps = []
+                            
+                            try:
+                                # Handle missing values
+                                if handle_missing:
+                                    if missing_method == "Remove rows":
+                                        rows_before = len(cleaned_data)
+                                        cleaned_data = cleaned_data.dropna()
+                                        rows_removed = rows_before - len(cleaned_data)
+                                        cleaning_steps.append(f"Removed {rows_removed} rows with missing values")
+                                    
+                                    elif missing_method == "Remove columns":
+                                        cols_before = len(cleaned_data.columns)
+                                        # Remove columns with more than 50% missing values
+                                        threshold = 0.5
+                                        cleaned_data = cleaned_data.loc[:, cleaned_data.isna().mean() < threshold]
+                                        cols_removed = cols_before - len(cleaned_data.columns)
+                                        cleaning_steps.append(f"Removed {cols_removed} columns with >50% missing values")
+                                    
+                                    elif missing_method == "Mean imputation":
+                                        # Only apply to numeric columns
+                                        numeric_cols = cleaned_data.select_dtypes(include=['number']).columns
+                                        for col in numeric_cols:
+                                            cleaned_data[col] = cleaned_data[col].fillna(cleaned_data[col].mean())
+                                        cleaning_steps.append(f"Filled missing values in numeric columns with mean")
+                                    
+                                    elif missing_method == "Median imputation":
+                                        # Only apply to numeric columns
+                                        numeric_cols = cleaned_data.select_dtypes(include=['number']).columns
+                                        for col in numeric_cols:
+                                            cleaned_data[col] = cleaned_data[col].fillna(cleaned_data[col].median())
+                                        cleaning_steps.append(f"Filled missing values in numeric columns with median")
+                                    
+                                    elif missing_method == "Mode imputation":
+                                        # Apply to all columns
+                                        for col in cleaned_data.columns:
+                                            # Check if mode exists
+                                            mode_values = cleaned_data[col].mode()
+                                            if not mode_values.empty:
+                                                cleaned_data[col] = cleaned_data[col].fillna(mode_values[0])
+                                        cleaning_steps.append(f"Filled missing values in all columns with mode")
+                                
+                                # Handle duplicates
+                                if remove_duplicates:
+                                    rows_before = len(cleaned_data)
+                                    cleaned_data = cleaned_data.drop_duplicates()
+                                    rows_removed = rows_before - len(cleaned_data)
+                                    cleaning_steps.append(f"Removed {rows_removed} duplicate rows")
+                                
+                                # Store the cleaned data
+                                st.session_state.basic_processed_outputs['cleaned_data'] = cleaned_data
+                                
+                                # Display summary
+                                st.success("Data cleaning applied successfully!")
+                                st.write("#### Cleaning Summary")
+                                for step in cleaning_steps:
+                                    st.write(f"- {step}")
+                                
+                                # Display shape information
+                                st.write(f"Original shape: {cleaning_data.shape[0]} rows, {cleaning_data.shape[1]} columns")
+                                st.write(f"Cleaned shape: {cleaned_data.shape[0]} rows, {cleaned_data.shape[1]} columns")
+                                
+                                # Display cleaned data
+                                st.write("#### Cleaned Data Preview")
+                                st.dataframe(cleaned_data.head())
+                                
+                            except Exception as e:
+                                st.error(f"Error during data cleaning: {e}")
                     
-                    with col2:
-                        # Data transformation options
-                        st.subheader("Data Transformation")
-                        normalize_data = st.checkbox("Normalize numerical features")
-                        norm_method = "Min-Max Scaling"  # Default value
+                    # 3. TRANSFORMATION TAB
+                    with basic_tabs[2]:
+                        st.write("### Data Transformation")
+                        st.write("Apply transformations to prepare data for modeling:")
+                        
+                        # Choose data source
+                        data_source_options = ["Original Data"]
+                        if st.session_state.basic_processed_outputs:
+                            data_source_options.extend(list(st.session_state.basic_processed_outputs.keys()))
+                        
+                        data_source = st.selectbox(
+                            "Select data source for transformation:",
+                            data_source_options,
+                            key="transform_data_source"
+                        )
+                        
+                        # Get the selected data
+                        if data_source == "Original Data":
+                            transform_data = st.session_state.data
+                        else:
+                            transform_data = st.session_state.basic_processed_outputs[data_source]
+                        
+                        # Normalization/Scaling
+                        st.write("#### Normalization & Scaling")
+                        normalize_data = st.checkbox("Normalize/Scale numerical features", key="normalize_data")
+                        
                         if normalize_data:
                             norm_method = st.radio(
                                 "Normalization method:",
-                                ["Min-Max Scaling", "Standard Scaling"]
+                                ["Min-Max Scaling", "Standard Scaling", "Robust Scaling"],
+                                key="norm_method"
                             )
+                        
+                        # Apply transformations button
+                        if st.button("Apply Transformations", key="apply_transform_btn"):
+                            # Create a copy of the data
+                            transformed_data = transform_data.copy()
+                            transform_steps = []
+                            
+                            try:
+                                # Apply normalizations
+                                if normalize_data:
+                                    # Get numeric columns
+                                    numeric_cols = transformed_data.select_dtypes(include=['number']).columns.tolist()
+                                    
+                                    if numeric_cols:
+                                        # Process data using existing data_processor
+                                        transformed_data = data_processor.process_data(
+                                            transformed_data,
+                                            target_column=st.session_state.target_column if st.session_state.target_column != "None" else None,
+                                            handle_missing=False,
+                                            remove_duplicates=False,
+                                            normalize_data=True,
+                                            norm_method=norm_method
+                                        )
+                                        
+                                        transform_steps.append(f"Applied {norm_method} to {len(numeric_cols)} numeric columns")
+                                    else:
+                                        st.warning("No numeric columns found for normalization.")
+                                
+                                # Store the transformed data
+                                st.session_state.basic_processed_outputs['transformed_data'] = transformed_data
+                                
+                                # Display summary
+                                st.success("Data transformations applied successfully!")
+                                st.write("#### Transformation Summary")
+                                for step in transform_steps:
+                                    st.write(f"- {step}")
+                                
+                                # Display shape information
+                                st.write(f"Original shape: {transform_data.shape[0]} rows, {transform_data.shape[1]} columns")
+                                st.write(f"Transformed shape: {transformed_data.shape[0]} rows, {transformed_data.shape[1]} columns")
+                                
+                                # Display the transformed data
+                                st.write("#### Transformed Data Preview")
+                                st.dataframe(transformed_data.head())
+                                
+                            except Exception as e:
+                                st.error(f"Error during data transformation: {e}")
                     
-                    # Process data button
-                    if st.button("Process Data", key="basic_process_btn"):
-                        try:
-                            if st.session_state.target_column == "None":
-                                target = None
-                            else:
-                                target = st.session_state.target_column
+                    # 4. INTERPOLATION TAB
+                    with basic_tabs[3]:
+                        st.write("### Data Interpolation")
+                        st.write("Fill missing values using various interpolation methods:")
+                        
+                        # Choose data source
+                        data_source_options = ["Original Data"]
+                        if st.session_state.basic_processed_outputs:
+                            data_source_options.extend(list(st.session_state.basic_processed_outputs.keys()))
+                        
+                        data_source = st.selectbox(
+                            "Select data source for interpolation:",
+                            data_source_options,
+                            key="interp_data_source"
+                        )
+                        
+                        # Get the selected data
+                        if data_source == "Original Data":
+                            interp_data = st.session_state.data
+                        else:
+                            interp_data = st.session_state.basic_processed_outputs[data_source]
+                        
+                        # Check if there are any missing values
+                        missing_counts = interp_data.isna().sum()
+                        total_missing = missing_counts.sum()
+                        
+                        if total_missing == 0:
+                            st.info("The selected data does not contain any missing values. Consider creating artificial missing values for testing interpolation.")
                             
-                            # Get a subset of data with selected features
-                            if st.session_state.selected_features:
-                                data_subset = st.session_state.data[st.session_state.selected_features].copy()
-                            else:
-                                data_subset = st.session_state.data.copy()
+                            # Option to create artificial missing values
+                            create_missing = st.checkbox("Create artificial missing values", key="create_artificial_missing")
                             
-                            # Process the data
-                            st.session_state.processed_data = data_processor.process_data(
-                                data_subset,
-                                target_column=target,
-                                handle_missing=handle_missing,
-                                missing_method=missing_method,
-                                remove_duplicates=remove_duplicates,
-                                normalize_data=normalize_data,
-                                norm_method=norm_method
+                            if create_missing:
+                                # Choose percentage of missing values
+                                missing_pct = st.slider(
+                                    "Percentage of values to make missing:",
+                                    min_value=5,
+                                    max_value=50,
+                                    value=20,
+                                    key="missing_pct"
+                                )
+                                
+                                # Select columns where missing values will be created
+                                missing_cols = st.multiselect(
+                                    "Select columns where missing values will be created:",
+                                    interp_data.columns.tolist(),
+                                    key="missing_cols"
+                                )
+                                
+                                # Create missing values
+                                if st.button("Create Missing Values", key="create_missing_btn"):
+                                    try:
+                                        import numpy as np
+                                        
+                                        # Create a copy of the data
+                                        data_with_missing = interp_data.copy()
+                                        
+                                        # Create missing values only in selected columns
+                                        for col in missing_cols:
+                                            # Calculate how many values to make missing
+                                            n_missing = int(len(data_with_missing) * missing_pct / 100)
+                                            
+                                            # Create random indices for missing values
+                                            missing_indices = np.random.choice(
+                                                data_with_missing.index, 
+                                                size=n_missing, 
+                                                replace=False
+                                            )
+                                            
+                                            # Set values as missing
+                                            data_with_missing.loc[missing_indices, col] = np.nan
+                                        
+                                        # Store the data with artificial missing values
+                                        st.session_state.basic_processed_outputs['data_with_missing'] = data_with_missing
+                                        
+                                        # Display the result
+                                        st.success(f"Created artificial missing values in {len(missing_cols)} columns")
+                                        st.write("#### Missing Value Counts After")
+                                        missing_df = pd.DataFrame({
+                                            'Column': data_with_missing.columns,
+                                            'Missing Values': data_with_missing.isna().sum().values,
+                                            'Percentage': (data_with_missing.isna().sum().values / len(data_with_missing) * 100).round(2)
+                                        }).sort_values(by='Missing Values', ascending=False)
+                                        
+                                        st.dataframe(missing_df)
+                                        
+                                        # Update the interpolation data to use the one with missing values
+                                        interp_data = data_with_missing
+                                        
+                                    except Exception as e:
+                                        st.error(f"Error creating artificial missing values: {e}")
+                        else:
+                            # Display missing value statistics
+                            st.write("#### Missing Value Statistics")
+                            missing_df = pd.DataFrame({
+                                'Column': interp_data.columns,
+                                'Missing Values': interp_data.isna().sum().values,
+                                'Percentage': (interp_data.isna().sum().values / len(interp_data) * 100).round(2)
+                            }).sort_values(by='Missing Values', ascending=False)
+                            
+                            st.dataframe(missing_df)
+                        
+                        # Interpolation options
+                        st.write("#### Interpolation Method")
+                        interp_method = st.radio(
+                            "Select interpolation method:",
+                            ["Linear Interpolation", "Polynomial Interpolation", "Spline Interpolation", "Nearest Neighbor", "MCMC (Monte Carlo)"],
+                            key="interp_method"
+                        )
+                        
+                        # Method-specific options
+                        if interp_method == "Polynomial Interpolation":
+                            poly_order = st.slider(
+                                "Polynomial order:",
+                                min_value=1,
+                                max_value=5,
+                                value=2,
+                                key="poly_order"
+                            )
+                        
+                        elif interp_method == "Spline Interpolation":
+                            spline_order = st.slider(
+                                "Spline order:",
+                                min_value=1,
+                                max_value=5,
+                                value=3,
+                                key="spline_order"
+                            )
+                        
+                        elif interp_method == "MCMC (Monte Carlo)":
+                            st.info("This will use the Advanced Processing MCMC method.")
+                            
+                            # MCMC specific parameters
+                            num_samples = st.slider(
+                                "Number of MCMC samples", 
+                                min_value=100, 
+                                max_value=1000, 
+                                value=500, 
+                                step=100
                             )
                             
-                            st.success("Data processed successfully!")
+                            chains = st.slider(
+                                "Number of MCMC chains", 
+                                min_value=1, 
+                                max_value=4, 
+                                value=2
+                            )
+                        
+                        # Select columns for interpolation
+                        interp_columns = st.multiselect(
+                            "Select columns for interpolation (leave empty for all columns with missing values):",
+                            interp_data.columns.tolist(),
+                            key="interp_columns"
+                        )
+                        
+                        # If no columns are selected, use all columns with missing values
+                        if not interp_columns:
+                            interp_columns = missing_counts[missing_counts > 0].index.tolist()
+                        
+                        # Apply interpolation button
+                        if st.button("Apply Interpolation", key="apply_interp_btn"):
+                            try:
+                                # Create a copy of the data
+                                interpolated_data = interp_data.copy()
+                                
+                                # Apply the selected interpolation method
+                                if interp_method == "Linear Interpolation":
+                                    # Apply linear interpolation to selected columns
+                                    for col in interp_columns:
+                                        interpolated_data[col] = interpolated_data[col].interpolate(method='linear')
+                                    
+                                    st.success(f"Applied linear interpolation to {len(interp_columns)} columns")
+                                
+                                elif interp_method == "Polynomial Interpolation":
+                                    # Apply polynomial interpolation to selected columns
+                                    for col in interp_columns:
+                                        if pd.api.types.is_numeric_dtype(interpolated_data[col]):
+                                            interpolated_data[col] = interpolated_data[col].interpolate(
+                                                method='polynomial', order=poly_order
+                                            )
+                                    
+                                    st.success(f"Applied polynomial interpolation (order {poly_order}) to {len(interp_columns)} columns")
+                                
+                                elif interp_method == "Spline Interpolation":
+                                    # Apply spline interpolation to selected columns
+                                    for col in interp_columns:
+                                        if pd.api.types.is_numeric_dtype(interpolated_data[col]):
+                                            interpolated_data[col] = interpolated_data[col].interpolate(
+                                                method='spline', order=spline_order
+                                            )
+                                    
+                                    st.success(f"Applied spline interpolation (order {spline_order}) to {len(interp_columns)} columns")
+                                
+                                elif interp_method == "Nearest Neighbor":
+                                    # Apply nearest neighbor interpolation to selected columns
+                                    for col in interp_columns:
+                                        interpolated_data[col] = interpolated_data[col].interpolate(
+                                            method='nearest'
+                                        )
+                                    
+                                    st.success(f"Applied nearest neighbor interpolation to {len(interp_columns)} columns")
+                                
+                                elif interp_method == "MCMC (Monte Carlo)":
+                                    # Use the advanced processor for MCMC interpolation
+                                    with st.spinner("Running MCMC interpolation... (this may take a while)"):
+                                        interpolated_data = advanced_processor.mcmc_interpolation(
+                                            interpolated_data,
+                                            num_samples=num_samples,
+                                            chains=chains
+                                        )
+                                    
+                                    st.success(f"Applied MCMC interpolation to {len(interp_columns)} columns")
+                                
+                                # Store the interpolated data
+                                st.session_state.basic_processed_outputs['interpolated_data'] = interpolated_data
+                                
+                                # Store in the interpolated_data session state for compatibility with advanced processing
+                                st.session_state.interpolated_data = interpolated_data
+                                
+                                # Display missing value statistics after interpolation
+                                st.write("#### Missing Value Counts After Interpolation")
+                                missing_after_df = pd.DataFrame({
+                                    'Column': interpolated_data.columns,
+                                    'Missing Values': interpolated_data.isna().sum().values,
+                                    'Percentage': (interpolated_data.isna().sum().values / len(interpolated_data) * 100).round(2)
+                                }).sort_values(by='Missing Values', ascending=False)
+                                
+                                st.dataframe(missing_after_df)
+                                
+                                # Display the interpolated data
+                                st.write("#### Interpolated Data Preview")
+                                st.dataframe(interpolated_data.head())
+                                
+                            except Exception as e:
+                                st.error(f"Error during interpolation: {e}")
+                    
+                    # 5. RESULTS TAB
+                    with basic_tabs[4]:
+                        st.write("### Processing Results")
+                        st.write("Review and set processed data for further analysis:")
+                        
+                        # Display available processed outputs
+                        if st.session_state.basic_processed_outputs:
+                            st.write("#### Available Processed Outputs")
                             
-                            # Display processed data
-                            st.subheader("Processed Data Preview")
-                            st.dataframe(st.session_state.processed_data.head())
+                            # Create a table to show available outputs
+                            output_info = []
+                            for output_name, output_data in st.session_state.basic_processed_outputs.items():
+                                output_info.append({
+                                    'Output Name': output_name,
+                                    'Shape': f"{output_data.shape[0]} rows × {output_data.shape[1]} columns",
+                                    'Missing Values': output_data.isna().sum().sum(),
+                                    'Data Types': len(output_data.dtypes.unique())
+                                })
                             
-                            # Display summary of processing
-                            st.subheader("Processing Summary")
-                            original_shape = st.session_state.data.shape
-                            processed_shape = st.session_state.processed_data.shape
+                            output_df = pd.DataFrame(output_info)
+                            st.dataframe(output_df)
                             
-                            st.write(f"Original data shape: {original_shape[0]} rows, {original_shape[1]} columns")
-                            st.write(f"Processed data shape: {processed_shape[0]} rows, {processed_shape[1]} columns")
+                            # Select output to view
+                            selected_output = st.selectbox(
+                                "Select output to view:",
+                                list(st.session_state.basic_processed_outputs.keys()),
+                                key="view_output"
+                            )
                             
-                            if handle_missing:
-                                st.write(f"Missing values handled using: {missing_method}")
+                            # Display selected output
+                            if selected_output:
+                                output_data = st.session_state.basic_processed_outputs[selected_output]
+                                
+                                st.write(f"#### Preview of '{selected_output}'")
+                                st.dataframe(output_data.head())
+                                
+                                # Options for setting data in session state
+                                st.write("#### Set Data for Analysis")
+                                
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    # Set as processed data (for prediction)
+                                    if st.button(f"Use as Processed Data", key=f"use_processed_{selected_output}"):
+                                        st.session_state.processed_data = output_data.copy()
+                                        st.success(f"'{selected_output}' set as processed data for prediction!")
+                                
+                                with col2:
+                                    # Set as interpolated data (for advanced processing)
+                                    if st.button(f"Use for Advanced Processing", key=f"use_advanced_{selected_output}"):
+                                        st.session_state.interpolated_data = output_data.copy()
+                                        st.success(f"'{selected_output}' set as data for advanced processing!")
+                                        
+                            # Export options
+                            st.write("#### Export Options")
                             
-                            if remove_duplicates:
-                                st.write(f"Duplicate rows removed")
+                            export_output = st.selectbox(
+                                "Select output to export:",
+                                list(st.session_state.basic_processed_outputs.keys()),
+                                key="export_output"
+                            )
                             
-                            if normalize_data:
-                                st.write(f"Numerical features normalized using: {norm_method}")
+                            if export_output:
+                                export_format = st.radio(
+                                    "Export format:",
+                                    ["CSV", "Excel"],
+                                    key="export_format"
+                                )
+                                
+                                output_data = st.session_state.basic_processed_outputs[export_output]
+                                
+                                if export_format == "CSV":
+                                    csv = data_handler.export_data(output_data, format='csv')
+                                    st.download_button(
+                                        label=f"Download {export_output} as CSV",
+                                        data=csv,
+                                        file_name=f"{export_output}.csv",
+                                        mime="text/csv"
+                                    )
+                                else:  # Excel
+                                    excel = data_handler.export_data(output_data, format='excel')
+                                    st.download_button(
+                                        label=f"Download {export_output} as Excel",
+                                        data=excel,
+                                        file_name=f"{export_output}.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                    )
                             
-                        except Exception as e:
-                            st.error(f"Error processing data: {e}")
+                            # Save to database
+                            st.write("#### Save to Database")
+                            
+                            db_output = st.selectbox(
+                                "Select output to save to database:",
+                                list(st.session_state.basic_processed_outputs.keys()),
+                                key="db_output"
+                            )
+                            
+                            if db_output:
+                                save_name = st.text_input(
+                                    "Dataset name:",
+                                    value=f"{db_output}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
+                                    key="save_name"
+                                )
+                                
+                                save_desc = st.text_area(
+                                    "Description (optional):",
+                                    key="save_desc"
+                                )
+                                
+                                if st.button("Save to Database", key="save_to_db"):
+                                    try:
+                                        output_data = st.session_state.basic_processed_outputs[db_output]
+                                        
+                                        # Save to database
+                                        result = db_handler.save_dataset(
+                                            output_data,
+                                            name=save_name,
+                                            description=save_desc,
+                                            data_type="processed"
+                                        )
+                                        
+                                        if result:
+                                            st.success(f"Successfully saved '{save_name}' to database with ID: {result}")
+                                        else:
+                                            st.error("Failed to save dataset to database")
+                                    
+                                    except Exception as e:
+                                        st.error(f"Error saving to database: {e}")
+                        else:
+                            st.info("No processed outputs available. Please perform processing operations in the other tabs first.")
             
             # ADVANCED PROCESSING TAB
             with processing_tabs[1]:

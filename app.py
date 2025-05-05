@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 from modules.data_processing import DataProcessor
+from modules.advanced_data_processing import AdvancedDataProcessor
 from modules.prediction import Predictor
 from modules.risk_assessment import RiskAssessor
 from utils.data_handler import DataHandler
@@ -44,6 +45,7 @@ if 'active_dataset' not in st.session_state:
 # Initialize modules
 data_handler = DataHandler()
 data_processor = DataProcessor()
+advanced_processor = AdvancedDataProcessor()
 predictor = Predictor()
 risk_assessor = RiskAssessor()
 visualizer = Visualizer()

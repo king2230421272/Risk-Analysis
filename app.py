@@ -1879,15 +1879,26 @@ with main_container:
                                                                 # Store regression results in dataset info if not original data
                                                                 if selected_ds != "Original Data":
                                                                     ds_id = int(selected_ds.split()[-1])
+                                                                    found_dataset = False
                                                                     for ds in st.session_state.convergence_datasets:
                                                                         if ds['id'] == ds_id:
+                                                                            # Initialize convergence_scores if it doesn't exist
+                                                                            if 'convergence_scores' not in ds:
+                                                                                ds['convergence_scores'] = {}
+                                                                            # Store regression results with proper keys
                                                                             ds['convergence_scores']['regression_test_r2'] = test_r2
                                                                             ds['convergence_scores']['regression_test_mse'] = test_mse
                                                                             ds['convergence_scores']['regression_coefficients'] = {
                                                                                 'intercept': float(model.intercept_),
                                                                                 'coef': {feat: float(coef) for feat, coef in zip(independent_vars, model.coef_)}
                                                                             }
+                                                                            found_dataset = True
                                                                             break
+                                                                    
+                                                                    if not found_dataset and consecutive_mode:
+                                                                        st.warning(f"Dataset {ds_id} not found when storing regression results.")
+                                                                    elif found_dataset and consecutive_mode:
+                                                                        st.success(f"Successfully stored regression results for Dataset {ds_id}.")
                                                                 
                                                                 # Store results for later display
                                                                 all_regression_results[curr_label] = {
@@ -2609,6 +2620,14 @@ with main_container:
                                                             relative_change = abs(r2_1 - r2_2) / abs(r2_1) if r2_1 != 0 else float('inf')
                                                             pair_conv['metrics']['regression'] = relative_change <= regression_r2_threshold
                                                         else:
+                                                            # Log the missing regression values for debugging
+                                                            if consecutive_mode:
+                                                                if 'regression_test_r2' not in ds1['convergence_scores']:
+                                                                    st.warning(f"Dataset {ds1['id']} is missing regression_test_r2 in convergence scores")
+                                                                if 'regression_test_r2' not in ds2['convergence_scores']:
+                                                                    st.warning(f"Dataset {ds2['id']} is missing regression_test_r2 in convergence scores")
+                                                                st.write(f"Dataset {ds1['id']} convergence scores: {list(ds1['convergence_scores'].keys())}")
+                                                                st.write(f"Dataset {ds2['id']} convergence scores: {list(ds2['convergence_scores'].keys())}")
                                                             pair_conv['metrics']['regression'] = False
                                                         
                                                         # PCA convergence

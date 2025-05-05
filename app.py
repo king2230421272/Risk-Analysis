@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 from modules.data_processing import DataProcessor
 from modules.prediction import Predictor
 from modules.risk_assessment import RiskAssessor
@@ -16,7 +19,11 @@ st.set_page_config(
 )
 
 # Initialize session state variables if they don't exist
-if 'data' not in st.session_state:
+if 'original_data' not in st.session_state:
+    st.session_state.original_data = None
+if 'interpolated_data' not in st.session_state:
+    st.session_state.interpolated_data = None
+if 'data' not in st.session_state:  # Active data for processing
     st.session_state.data = None
 if 'processed_data' not in st.session_state:
     st.session_state.processed_data = None
@@ -30,6 +37,8 @@ if 'target_column' not in st.session_state:
     st.session_state.target_column = None
 if 'visualization_type' not in st.session_state:
     st.session_state.visualization_type = None
+if 'active_dataset' not in st.session_state:
+    st.session_state.active_dataset = "None"
 
 # Initialize modules
 data_handler = DataHandler()
@@ -62,32 +71,110 @@ with main_container:
     with tab1:
         st.header("Data Import")
         
-        upload_method = st.radio(
-            "Select import method:",
-            ["Upload File", "Sample Dataset"]
-        )
+        # Data import section with two columns for original and interpolated data
+        st.subheader("Import Multiple Datasets")
+        st.markdown("""
+        Import both your original data and data to be interpolated to compare distributions and verify interpolation accuracy.
+        """)
         
-        if upload_method == "Upload File":
-            uploaded_file = st.file_uploader("Choose a CSV or Excel file", type=["csv", "xlsx", "xls"])
+        col1, col2 = st.columns(2)
+        
+        # ORIGINAL DATA IMPORT
+        with col1:
+            st.subheader("Original Data")
+            original_file = st.file_uploader("Upload Original Data (CSV/Excel)", type=["csv", "xlsx", "xls"], key="original_data_uploader")
             
-            if uploaded_file is not None:
+            if original_file is not None:
                 try:
-                    st.session_state.data = data_handler.import_data(uploaded_file)
-                    st.success(f"Successfully imported data with {st.session_state.data.shape[0]} rows and {st.session_state.data.shape[1]} columns.")
+                    st.session_state.original_data = data_handler.import_data(original_file)
+                    st.success(f"Original data imported: {st.session_state.original_data.shape[0]} rows, {st.session_state.original_data.shape[1]} columns")
                     
                     # Show data preview
-                    st.subheader("Data Preview")
-                    st.dataframe(st.session_state.data.head())
-                    
-                    # Display basic statistics
-                    st.subheader("Data Statistics")
-                    st.write(st.session_state.data.describe())
+                    st.write("Preview:")
+                    st.dataframe(st.session_state.original_data.head())
                     
                 except Exception as e:
-                    st.error(f"Error importing data: {e}")
+                    st.error(f"Error importing original data: {e}")
         
-        elif upload_method == "Sample Dataset":
-            st.info("Please upload your own data. No sample datasets are available.")
+        # INTERPOLATED DATA IMPORT
+        with col2:
+            st.subheader("Data to Interpolate")
+            interpolated_file = st.file_uploader("Upload Data for Interpolation (CSV/Excel)", type=["csv", "xlsx", "xls"], key="interpolated_data_uploader")
+            
+            if interpolated_file is not None:
+                try:
+                    st.session_state.interpolated_data = data_handler.import_data(interpolated_file)
+                    st.success(f"Interpolation data imported: {st.session_state.interpolated_data.shape[0]} rows, {st.session_state.interpolated_data.shape[1]} columns")
+                    
+                    # Show data preview
+                    st.write("Preview:")
+                    st.dataframe(st.session_state.interpolated_data.head())
+                    
+                except Exception as e:
+                    st.error(f"Error importing interpolation data: {e}")
+        
+        # Select active dataset for analysis
+        st.subheader("Select Active Dataset")
+        
+        dataset_options = ["None"]
+        if st.session_state.original_data is not None:
+            dataset_options.append("Original Data")
+        if st.session_state.interpolated_data is not None:
+            dataset_options.append("Interpolated Data")
+            
+        st.session_state.active_dataset = st.radio(
+            "Select which dataset to use for analysis:",
+            dataset_options
+        )
+        
+        # Set the active dataset
+        if st.session_state.active_dataset == "Original Data":
+            st.session_state.data = st.session_state.original_data
+            st.success("Original data set as active dataset for analysis.")
+        elif st.session_state.active_dataset == "Interpolated Data":
+            st.session_state.data = st.session_state.interpolated_data
+            st.success("Interpolated data set as active dataset for analysis.")
+        else:
+            st.session_state.data = None
+            
+        # Data Comparison (if both datasets are available)
+        if st.session_state.original_data is not None and st.session_state.interpolated_data is not None:
+            st.subheader("Dataset Comparison")
+            
+            with st.expander("Compare Dataset Statistics"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("Original Data Statistics")
+                    st.write(st.session_state.original_data.describe())
+                    
+                with col2:
+                    st.write("Interpolated Data Statistics")
+                    st.write(st.session_state.interpolated_data.describe())
+                    
+            # Basic comparison metrics can be added here
+            st.write("Shape Comparison:")
+            st.write(f"Original: {st.session_state.original_data.shape} | Interpolated: {st.session_state.interpolated_data.shape}")
+                
+            # If columns match, show correlation
+            if set(st.session_state.original_data.columns) == set(st.session_state.interpolated_data.columns):
+                common_cols = list(set(st.session_state.original_data.select_dtypes(include=np.number).columns) & 
+                                set(st.session_state.interpolated_data.select_dtypes(include=np.number).columns))
+                
+                if common_cols:
+                    st.write("Compare Distribution of a Column:")
+                    selected_col = st.selectbox("Select column to compare:", common_cols)
+                    
+                    if selected_col:
+                        # Create a comparison histogram
+                        fig = plt.figure(figsize=(10, 6))
+                        plt.hist(st.session_state.original_data[selected_col], alpha=0.5, label='Original')
+                        plt.hist(st.session_state.interpolated_data[selected_col], alpha=0.5, label='Interpolated')
+                        plt.legend()
+                        plt.title(f'Distribution Comparison: {selected_col}')
+                        plt.xlabel(selected_col)
+                        plt.ylabel('Frequency')
+                        st.pyplot(fig)
     
     # 2. DATA PROCESSING TAB
     with tab2:
@@ -367,32 +454,183 @@ with main_container:
     with tab5:
         st.header("Visualization")
         
-        if st.session_state.data is None:
+        if (st.session_state.original_data is None and st.session_state.interpolated_data is None and 
+            st.session_state.data is None):
             st.warning("No data available. Please import data in the Data Import tab.")
         else:
             # Data selection
             st.subheader("Select Data to Visualize")
             
-            data_options = ["Original Data"]
+            data_options = []
             
+            if st.session_state.original_data is not None:
+                data_options.append("Original Data")
+            if st.session_state.interpolated_data is not None:
+                data_options.append("Interpolated Data")
             if st.session_state.processed_data is not None:
                 data_options.append("Processed Data")
             if st.session_state.predictions is not None:
                 data_options.append("Predictions")
             if st.session_state.risk_assessment is not None:
                 data_options.append("Risk Assessment")
+                
+            if not data_options:
+                st.warning("No datasets available for visualization.")
+                
+            # Additional option for comparison mode
+            st.subheader("Visualization Mode")
+            viz_mode = st.radio(
+                "Select visualization mode:",
+                ["Single Dataset", "Compare Datasets"],
+                index=1 if (st.session_state.original_data is not None and 
+                            st.session_state.interpolated_data is not None) else 0
+            )
             
-            data_to_visualize = st.radio("Select dataset:", data_options)
-            
-            # Get the selected data
-            if data_to_visualize == "Original Data":
-                viz_data = st.session_state.data
-            elif data_to_visualize == "Processed Data":
-                viz_data = st.session_state.processed_data
-            elif data_to_visualize == "Predictions":
-                viz_data = st.session_state.predictions
-            elif data_to_visualize == "Risk Assessment":
-                viz_data = st.session_state.risk_assessment
+            if viz_mode == "Single Dataset":
+                # Single dataset visualization
+                data_to_visualize = st.selectbox("Select dataset:", data_options)
+                
+                # Get the selected data
+                if data_to_visualize == "Original Data":
+                    viz_data = st.session_state.original_data
+                elif data_to_visualize == "Interpolated Data":
+                    viz_data = st.session_state.interpolated_data
+                elif data_to_visualize == "Processed Data":
+                    viz_data = st.session_state.processed_data
+                elif data_to_visualize == "Predictions":
+                    viz_data = st.session_state.predictions
+                elif data_to_visualize == "Risk Assessment":
+                    viz_data = st.session_state.risk_assessment
+            else:
+                # Comparison visualization
+                st.subheader("Comparison Visualization")
+                
+                comparison_options = []
+                if st.session_state.original_data is not None and st.session_state.interpolated_data is not None:
+                    comparison_options.append("Original vs Interpolated")
+                if st.session_state.original_data is not None and st.session_state.processed_data is not None:
+                    comparison_options.append("Original vs Processed")
+                if st.session_state.interpolated_data is not None and st.session_state.processed_data is not None:
+                    comparison_options.append("Interpolated vs Processed")
+                
+                if not comparison_options:
+                    st.warning("Not enough datasets available for comparison. Please import or process more data.")
+                    viz_mode = "Single Dataset"
+                    data_to_visualize = st.selectbox("Select single dataset instead:", data_options)
+                    
+                    # Get the selected data for single mode
+                    if data_to_visualize == "Original Data":
+                        viz_data = st.session_state.original_data
+                    elif data_to_visualize == "Interpolated Data":
+                        viz_data = st.session_state.interpolated_data
+                    elif data_to_visualize == "Processed Data":
+                        viz_data = st.session_state.processed_data
+                    elif data_to_visualize == "Predictions":
+                        viz_data = st.session_state.predictions
+                    elif data_to_visualize == "Risk Assessment":
+                        viz_data = st.session_state.risk_assessment
+                else:
+                    # Continue with comparison mode
+                    comparison_selection = st.selectbox("Select datasets to compare:", comparison_options)
+                    
+                    # Set visualization data based on comparison selection
+                    if comparison_selection == "Original vs Interpolated":
+                        dataset1 = st.session_state.original_data
+                        dataset2 = st.session_state.interpolated_data
+                        dataset1_name = "Original"
+                        dataset2_name = "Interpolated"
+                    elif comparison_selection == "Original vs Processed":
+                        dataset1 = st.session_state.original_data
+                        dataset2 = st.session_state.processed_data
+                        dataset1_name = "Original"
+                        dataset2_name = "Processed"
+                    elif comparison_selection == "Interpolated vs Processed":
+                        dataset1 = st.session_state.interpolated_data
+                        dataset2 = st.session_state.processed_data
+                        dataset1_name = "Interpolated"
+                        dataset2_name = "Processed"
+                        
+                    # Find common numeric columns
+                    common_cols = list(set(dataset1.select_dtypes(include=np.number).columns) & 
+                                    set(dataset2.select_dtypes(include=np.number).columns))
+                    
+                    if not common_cols:
+                        st.warning("No common numeric columns found for comparison.")
+                    
+                    # Select column for comparison
+                    selected_col = st.selectbox("Select column to compare:", common_cols)
+                    
+                    # Create comparison visualizations
+                    st.subheader(f"Comparing: {selected_col}")
+                    
+                    # Statistical comparison
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"{dataset1_name} Statistics:")
+                        st.write(dataset1[selected_col].describe())
+                    with col2:
+                        st.write(f"{dataset2_name} Statistics:")
+                        st.write(dataset2[selected_col].describe())
+                    
+                    # Visualization types for comparison
+                    comparison_viz_type = st.selectbox(
+                        "Select comparison visualization type:",
+                        ["Histogram Overlay", "Box Plot Comparison", "Scatter Plot", "Q-Q Plot"]
+                    )
+                    
+                    if comparison_viz_type == "Histogram Overlay":
+                        fig = plt.figure(figsize=(10, 6))
+                        plt.hist(dataset1[selected_col], alpha=0.5, label=dataset1_name)
+                        plt.hist(dataset2[selected_col], alpha=0.5, label=dataset2_name)
+                        plt.legend()
+                        plt.title(f'Distribution Comparison: {selected_col}')
+                        plt.xlabel(selected_col)
+                        plt.ylabel('Frequency')
+                        st.pyplot(fig)
+                        
+                    elif comparison_viz_type == "Box Plot Comparison":
+                        fig = plt.figure(figsize=(10, 6))
+                        # Create combined dataframe for boxplot
+                        import pandas as pd
+                        combined_data = pd.DataFrame({
+                            dataset1_name: dataset1[selected_col],
+                            dataset2_name: dataset2[selected_col]
+                        })
+                        plt.boxplot([dataset1[selected_col], dataset2[selected_col]])
+                        plt.xticks([1, 2], [dataset1_name, dataset2_name])
+                        plt.title(f'Box Plot Comparison: {selected_col}')
+                        plt.ylabel(selected_col)
+                        st.pyplot(fig)
+                        
+                    elif comparison_viz_type == "Scatter Plot":
+                        # Only if datasets have same length and are sortable
+                        if len(dataset1) == len(dataset2):
+                            fig = plt.figure(figsize=(10, 6))
+                            plt.scatter(dataset1[selected_col], dataset2[selected_col], alpha=0.5)
+                            plt.plot([dataset1[selected_col].min(), dataset1[selected_col].max()], 
+                                     [dataset1[selected_col].min(), dataset1[selected_col].max()], 
+                                     'r--')
+                            plt.title(f'Scatter Plot: {dataset1_name} vs {dataset2_name} - {selected_col}')
+                            plt.xlabel(f'{dataset1_name} {selected_col}')
+                            plt.ylabel(f'{dataset2_name} {selected_col}')
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Scatter plot comparison requires datasets of equal length.")
+                            
+                    elif comparison_viz_type == "Q-Q Plot":
+                        import scipy.stats as stats
+                        fig = plt.figure(figsize=(10, 6))
+                        stats.probplot(dataset1[selected_col], dist="norm", plot=plt)
+                        plt.title(f'Q-Q Plot - {dataset1_name}: {selected_col}')
+                        st.pyplot(fig)
+                        
+                        fig = plt.figure(figsize=(10, 6))
+                        stats.probplot(dataset2[selected_col], dist="norm", plot=plt)
+                        plt.title(f'Q-Q Plot - {dataset2_name}: {selected_col}')
+                        st.pyplot(fig)
+                    
+                    # Skip regular visualization as we're in comparison mode
+                    viz_data = None
             
             if viz_data is not None:
                 # Visualization type
@@ -509,7 +747,7 @@ with col2:
         # Reset all session state variables
         for key in list(st.session_state.keys()):
             del st.session_state[key]
-        st.experimental_rerun()
+        st.rerun()
         
 with col1:
     st.markdown("💡 **Tip**: Use the tabs above to navigate between different steps of the analysis pipeline. You can move freely between tabs at any time.")

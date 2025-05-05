@@ -1459,10 +1459,14 @@ with main_container:
                                         with st.expander("Clustering Parameters", expanded=True):
                                             # Select features for clustering
                                             numeric_cols = analysis_data.select_dtypes(include=np.number).columns.tolist()
+                                            
+                                            # Set default features - all except first column
+                                            default_features = numeric_cols[1:] if len(numeric_cols) > 1 else numeric_cols
+                                            
                                             selected_features = st.multiselect(
                                                 "Select features for clustering:",
                                                 numeric_cols,
-                                                default=numeric_cols[:min(3, len(numeric_cols))]
+                                                default=default_features
                                             )
                                             
                                             # Number of clusters
@@ -1760,17 +1764,24 @@ with main_container:
                                             # Get all numeric columns
                                             numeric_cols = analysis_data.select_dtypes(include=np.number).columns.tolist()
                                             
+                                            # Set default dependent variable (last column)
+                                            default_dependent = numeric_cols[-1] if numeric_cols else None
+                                            
                                             # Select dependent variable (y)
                                             dependent_var = st.selectbox(
                                                 "Select dependent variable (y):",
-                                                numeric_cols
+                                                numeric_cols,
+                                                index=numeric_cols.index(default_dependent) if default_dependent in numeric_cols else 0
                                             )
+                                            
+                                            # Default independent variables (all except first and dependent)
+                                            default_independents = [col for col in numeric_cols[1:] if col != dependent_var] if len(numeric_cols) > 1 else []
                                             
                                             # Select independent variables (X)
                                             independent_vars = st.multiselect(
                                                 "Select independent variables (X):",
                                                 [col for col in numeric_cols if col != dependent_var],
-                                                default=[col for col in numeric_cols[:min(3, len(numeric_cols))] if col != dependent_var]
+                                                default=default_independents
                                             )
                                             
                                             # Test size
@@ -2177,11 +2188,14 @@ with main_container:
                                             # Get all numeric columns
                                             numeric_cols = analysis_data.select_dtypes(include=np.number).columns.tolist()
                                             
+                                            # Set default features - all except first column
+                                            default_features = numeric_cols[1:] if len(numeric_cols) > 1 else numeric_cols
+                                            
                                             # Select features for PCA
                                             selected_features = st.multiselect(
                                                 "Select features for PCA:",
                                                 numeric_cols,
-                                                default=numeric_cols[:min(5, len(numeric_cols))]
+                                                default=default_features
                                             )
                                             
                                             # Number of components

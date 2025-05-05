@@ -9,8 +9,18 @@ import json
 # Get PostgreSQL connection details from environment variables
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
-# Create SQLAlchemy engine
-engine = create_engine(DATABASE_URL)
+# Create the engine with explicit connection pool settings and timeout handling
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=5,
+    max_overflow=10,
+    pool_timeout=30,
+    pool_recycle=1800,  # Recycle connections after 30 minutes
+    connect_args={
+        'connect_timeout': 10,  # Connection timeout in seconds
+        'application_name': 'DataAnalysisPlatform',  # Identify the application in pg_stat_activity
+    }
+)
 
 # Create base class for declarative models
 Base = declarative_base()
@@ -49,7 +59,29 @@ class AnalysisResult(Base):
 # Create all tables
 def initialize_database():
     """Create all database tables if they don't exist."""
-    Base.metadata.create_all(engine)
+    import time
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            # Test connection first
+            with engine.connect() as connection:
+                connection.execute("SELECT 1")  # Simple test query
+            
+            # If connection successful, create tables
+            Base.metadata.create_all(engine)
+            print("Database connection successful, tables created.")
+            return True
+        except Exception as e:
+            print(f"Database connection attempt {attempt+1}/{max_retries} failed: {str(e)}")
+            if attempt < max_retries - 1:
+                print(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                print("Maximum connection attempts reached. Using application without database features.")
+                return False
     
 # Session factory
 Session = sessionmaker(bind=engine)
@@ -59,7 +91,16 @@ class DatabaseHandler:
     
     def __init__(self):
         """Initialize database handler and ensure tables exist."""
-        initialize_database()
+        self.db_available = initialize_database()
+        
+        # If database is not available, set a flag and print a warning
+        if not self.db_available:
+            print("WARNING: Database features are not available. The application will work but without database functionality.")
+            
+    def _check_db_available(self):
+        """Check if database is available and raise an appropriate exception if not."""
+        if not self.db_available:
+            raise Exception("Database is not available. Please check your database connection.")
         
     def save_dataset(self, dataset_df, name, description=None, data_type='original'):
         """
@@ -81,6 +122,9 @@ class DatabaseHandler:
         int
             ID of the saved dataset
         """
+        # Check if database is available
+        self._check_db_available()
+        
         if dataset_df is None or dataset_df.empty:
             raise ValueError("Cannot save empty dataset")
         
@@ -159,6 +203,9 @@ class DatabaseHandler:
         pandas.DataFrame
             The loaded dataset as a DataFrame
         """
+        # Check if database is available
+        self._check_db_available()
+        
         # Create a session
         session = Session()
         
@@ -210,6 +257,9 @@ class DatabaseHandler:
         int
             ID of the saved analysis result
         """
+        # Check if database is available
+        self._check_db_available()
+        
         # Create a session
         session = Session()
         
@@ -263,6 +313,9 @@ class DatabaseHandler:
         tuple
             (dataset_id, analysis_type, analysis_params, result_data)
         """
+        # Check if database is available
+        self._check_db_available()
+        
         # Create a session
         session = Session()
         
@@ -303,6 +356,9 @@ class DatabaseHandler:
         list
             List of dictionaries with dataset information
         """
+        # Check if database is available
+        self._check_db_available()
+        
         # Create a session
         session = Session()
         
@@ -352,6 +408,9 @@ class DatabaseHandler:
         list
             List of dictionaries with analysis result information
         """
+        # Check if database is available
+        self._check_db_available()
+        
         # Create a session
         session = Session()
         
@@ -398,6 +457,9 @@ class DatabaseHandler:
         bool
             True if successful, False otherwise
         """
+        # Check if database is available
+        self._check_db_available()
+        
         # Create a session
         session = Session()
         

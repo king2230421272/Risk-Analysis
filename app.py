@@ -2194,7 +2194,7 @@ with main_container:
                                     This analysis helps evaluate if the interpolated data maintains the same underlying factors.
                                     """)
                                     
-                                    # Select dataset to analyze
+                                    # Select datasets to analyze
                                     dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
                                     
                                     # In consecutive mode, analyze all selected datasets
@@ -2202,12 +2202,24 @@ with main_container:
                                         selected_datasets = st.session_state.datasets_to_analyze
                                         st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
                                         
-                                        # Process one dataset now, others will be processed in a loop
                                         # Default to first dataset for parameters
                                         selected_dataset = selected_datasets[0] if selected_datasets else dataset_options[0]
                                     else:
-                                        # Regular mode - select a single dataset
-                                        selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="pca_dataset")
+                                        # Regular mode - use checkboxes to select multiple datasets
+                                        st.write("### Select datasets to analyze:")
+                                        
+                                        # Create checkboxes for each dataset
+                                        selected_datasets = []
+                                        for ds_option in dataset_options:
+                                            if st.checkbox(ds_option, key=f"pca_dataset_{ds_option}"):
+                                                selected_datasets.append(ds_option)
+                                        
+                                        if not selected_datasets:
+                                            st.warning("Please select at least one dataset to analyze.")
+                                            selected_dataset = dataset_options[0]  # Default for parameters only
+                                        else:
+                                            st.success(f"Selected {len(selected_datasets)} datasets for analysis.")
+                                            selected_dataset = selected_datasets[0]  # Use first selected for parameters
                                     
                                     # Get the selected dataset for parameters
                                     if selected_dataset == "Original Data":
@@ -2277,9 +2289,10 @@ with main_container:
                                                         from sklearn.decomposition import PCA
                                                         from sklearn.preprocessing import StandardScaler
                                                         
-                                                        # Process multiple datasets in consecutive mode
-                                                        if consecutive_mode and st.session_state.datasets_to_analyze:
-                                                            datasets_to_process = st.session_state.datasets_to_analyze
+                                                        # Process multiple datasets in consecutive mode or normal mode with selections
+                                                        if (consecutive_mode and st.session_state.datasets_to_analyze) or \
+                                                           (not consecutive_mode and len(selected_datasets) > 0):
+                                                            datasets_to_process = st.session_state.datasets_to_analyze if consecutive_mode else selected_datasets
                                                             all_pca_results = {}
                                                             
                                                             for ds_label in datasets_to_process:

@@ -10,6 +10,7 @@ from modules.prediction import Predictor
 from modules.risk_assessment import RiskAssessor
 from utils.data_handler import DataHandler
 from utils.visualization import Visualizer
+from utils.database import DatabaseHandler
 
 # Set page configuration
 st.set_page_config(
@@ -46,6 +47,7 @@ data_processor = DataProcessor()
 predictor = Predictor()
 risk_assessor = RiskAssessor()
 visualizer = Visualizer()
+db_handler = DatabaseHandler()
 
 # Application title and description
 st.title("Integrated Data Analysis Platform")
@@ -59,12 +61,13 @@ main_container = st.container()
 
 with main_container:
     # Create tabs for each section of the workflow
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "1️⃣ Data Import", 
         "2️⃣ Data Processing", 
         "3️⃣ Prediction", 
         "4️⃣ Risk Assessment", 
-        "5️⃣ Visualization"
+        "5️⃣ Visualization",
+        "6️⃣ Database"
     ])
     
     # 1. DATA IMPORT TAB
@@ -738,6 +741,339 @@ with main_container:
                             st.error("Failed to export data.")
                     except Exception as e:
                         st.error(f"Error exporting data: {e}")
+
+# 6. DATABASE TAB
+    with tab6:
+        st.header("Database Management")
+        
+        # Database operations
+        db_operation = st.radio(
+            "Select Database Operation:",
+            ["Save Dataset", "Load Dataset", "List Saved Datasets", "Save Analysis Result", "View Analysis Results", "Delete Dataset"]
+        )
+        
+        if db_operation == "Save Dataset":
+            st.subheader("Save Dataset to Database")
+            
+            # Select dataset to save
+            save_data_options = []
+            if st.session_state.original_data is not None:
+                save_data_options.append("Original Data")
+            if st.session_state.interpolated_data is not None:
+                save_data_options.append("Interpolated Data")
+            if st.session_state.processed_data is not None:
+                save_data_options.append("Processed Data")
+            if st.session_state.predictions is not None:
+                save_data_options.append("Predictions")
+                
+            if not save_data_options:
+                st.warning("No datasets available to save. Please import or generate data first.")
+            else:
+                dataset_to_save = st.selectbox("Select dataset to save:", save_data_options)
+                
+                # Get selected dataset
+                if dataset_to_save == "Original Data":
+                    save_df = st.session_state.original_data
+                    data_type = "original"
+                elif dataset_to_save == "Interpolated Data":
+                    save_df = st.session_state.interpolated_data
+                    data_type = "interpolated"
+                elif dataset_to_save == "Processed Data":
+                    save_df = st.session_state.processed_data
+                    data_type = "processed"
+                elif dataset_to_save == "Predictions":
+                    save_df = st.session_state.predictions
+                    data_type = "predictions"
+                
+                # Dataset name and description
+                save_name = st.text_input("Dataset name:", f"{dataset_to_save} - {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}")
+                save_description = st.text_area("Description (optional):", f"Saved from {dataset_to_save} tab")
+                
+                # Save button
+                if st.button("Save to Database"):
+                    try:
+                        dataset_id = db_handler.save_dataset(
+                            save_df, 
+                            name=save_name,
+                            description=save_description,
+                            data_type=data_type
+                        )
+                        st.success(f"Dataset saved successfully with ID: {dataset_id}")
+                    except Exception as e:
+                        st.error(f"Error saving dataset: {e}")
+        
+        elif db_operation == "Load Dataset":
+            st.subheader("Load Dataset from Database")
+            
+            # List available datasets
+            try:
+                saved_datasets = db_handler.list_datasets()
+                
+                if not saved_datasets:
+                    st.info("No datasets found in the database.")
+                else:
+                    # Create a formatted dataframe for display
+                    datasets_df = pd.DataFrame(saved_datasets)
+                    datasets_df['created_at'] = datasets_df['created_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M'))
+                    if 'modified_at' in datasets_df.columns:
+                        datasets_df['modified_at'] = datasets_df['modified_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M') if x else "")
+                    
+                    st.write("Available Datasets:")
+                    st.dataframe(datasets_df)
+                    
+                    # Select dataset to load
+                    dataset_id = st.selectbox(
+                        "Select dataset to load:",
+                        [(ds['id'], ds['name']) for ds in saved_datasets],
+                        format_func=lambda x: f"{x[1]} (ID: {x[0]})"
+                    )
+                    
+                    # Select where to load
+                    load_target = st.radio(
+                        "Load as:",
+                        ["Original Data", "Interpolated Data"]
+                    )
+                    
+                    # Load button
+                    if st.button("Load Dataset"):
+                        try:
+                            loaded_df = db_handler.load_dataset(dataset_id=dataset_id[0])
+                            
+                            if load_target == "Original Data":
+                                st.session_state.original_data = loaded_df
+                                st.success(f"Dataset loaded as Original Data: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
+                            else:
+                                st.session_state.interpolated_data = loaded_df
+                                st.success(f"Dataset loaded as Interpolated Data: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
+                                
+                            # Preview
+                            st.subheader("Data Preview")
+                            st.dataframe(loaded_df.head())
+                            
+                        except Exception as e:
+                            st.error(f"Error loading dataset: {e}")
+            
+            except Exception as e:
+                st.error(f"Error accessing database: {e}")
+        
+        elif db_operation == "List Saved Datasets":
+            st.subheader("Saved Datasets")
+            
+            # Filter options
+            filter_type = st.radio(
+                "Filter by data type:",
+                ["All", "Original", "Interpolated", "Processed", "Predictions"]
+            )
+            
+            data_type_filter = None
+            if filter_type != "All":
+                data_type_filter = filter_type.lower()
+            
+            # Get and display datasets
+            try:
+                datasets = db_handler.list_datasets(data_type=data_type_filter)
+                
+                if not datasets:
+                    st.info(f"No {'datasets' if filter_type == 'All' else filter_type + ' datasets'} found in the database.")
+                else:
+                    # Convert to dataframe for display
+                    datasets_df = pd.DataFrame(datasets)
+                    datasets_df['created_at'] = datasets_df['created_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M'))
+                    if 'modified_at' in datasets_df.columns:
+                        datasets_df['modified_at'] = datasets_df['modified_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M') if x else "")
+                    
+                    st.write(f"Found {len(datasets)} datasets:")
+                    st.dataframe(datasets_df)
+            
+            except Exception as e:
+                st.error(f"Error listing datasets: {e}")
+        
+        elif db_operation == "Save Analysis Result":
+            st.subheader("Save Analysis Result to Database")
+            
+            # Check if we have results to save
+            if st.session_state.predictions is None and st.session_state.risk_assessment is None:
+                st.warning("No analysis results available to save. Please generate predictions or perform risk assessment first.")
+            else:
+                # Select result type
+                result_options = []
+                if st.session_state.predictions is not None:
+                    result_options.append("Prediction Results")
+                if st.session_state.risk_assessment is not None:
+                    result_options.append("Risk Assessment Results")
+                
+                result_type = st.selectbox("Select result type to save:", result_options)
+                
+                # Get datasets to choose from
+                try:
+                    datasets = db_handler.list_datasets()
+                    
+                    if not datasets:
+                        st.warning("No datasets found in the database. Please save a dataset first.")
+                    else:
+                        # Select related dataset
+                        dataset_id = st.selectbox(
+                            "Select related dataset:",
+                            [(ds['id'], ds['name']) for ds in datasets],
+                            format_func=lambda x: f"{x[1]} (ID: {x[0]})"
+                        )
+                        
+                        # Get result data
+                        if result_type == "Prediction Results":
+                            result_data = st.session_state.predictions
+                            analysis_type = "prediction"
+                        else:
+                            result_data = st.session_state.risk_assessment
+                            analysis_type = "risk_assessment"
+                        
+                        # Analysis parameters
+                        st.write("Analysis parameters (optional):")
+                        param_description = st.text_area("Description:", "")
+                        
+                        # Convert to parameters dict
+                        analysis_params = {"description": param_description}
+                        
+                        # Save button
+                        if st.button("Save Analysis Result"):
+                            try:
+                                result_id = db_handler.save_analysis_result(
+                                    dataset_id=dataset_id[0],
+                                    analysis_type=analysis_type,
+                                    analysis_params=analysis_params,
+                                    result_data=result_data
+                                )
+                                st.success(f"Analysis result saved successfully with ID: {result_id}")
+                            except Exception as e:
+                                st.error(f"Error saving analysis result: {e}")
+                        
+                except Exception as e:
+                    st.error(f"Error accessing database: {e}")
+        
+        elif db_operation == "View Analysis Results":
+            st.subheader("View Analysis Results")
+            
+            # Filter options
+            filter_type = st.radio(
+                "Filter by analysis type:",
+                ["All", "Prediction", "Risk Assessment"]
+            )
+            
+            analysis_type_filter = None
+            if filter_type != "All":
+                analysis_type_filter = filter_type.lower().replace(" ", "_")
+            
+            # Get datasets to filter by
+            try:
+                datasets = db_handler.list_datasets()
+                dataset_options = [("all", "All Datasets")] + [(ds['id'], ds['name']) for ds in datasets]
+                
+                dataset_filter = st.selectbox(
+                    "Filter by dataset:",
+                    dataset_options,
+                    format_func=lambda x: x[1]
+                )
+                
+                dataset_id_filter = None if dataset_filter[0] == "all" else dataset_filter[0]
+                
+                # Get and display analysis results
+                results = db_handler.list_analysis_results(
+                    dataset_id=dataset_id_filter,
+                    analysis_type=analysis_type_filter
+                )
+                
+                if not results:
+                    st.info("No analysis results found matching the selected filters.")
+                else:
+                    # Convert to dataframe for display
+                    results_df = pd.DataFrame(results)
+                    results_df['created_at'] = results_df['created_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M'))
+                    
+                    # Add dataset name
+                    if datasets:
+                        dataset_map = {ds['id']: ds['name'] for ds in datasets}
+                        results_df['dataset_name'] = results_df['dataset_id'].apply(lambda x: dataset_map.get(x, "Unknown"))
+                    
+                    # Format analysis type
+                    results_df['analysis_type'] = results_df['analysis_type'].apply(
+                        lambda x: "Prediction" if x == "prediction" else "Risk Assessment"
+                    )
+                    
+                    st.write(f"Found {len(results)} analysis results:")
+                    st.dataframe(results_df)
+                    
+                    # View specific result
+                    if not results_df.empty:
+                        result_id = st.selectbox(
+                            "Select result to view:",
+                            results_df['id'].tolist(),
+                            format_func=lambda x: f"Result ID: {x}"
+                        )
+                        
+                        if st.button("View Result"):
+                            try:
+                                dataset_id, analysis_type, analysis_params, result_data = db_handler.load_analysis_result(result_id)
+                                
+                                st.subheader("Analysis Result Details")
+                                st.write(f"Dataset ID: {dataset_id}")
+                                st.write(f"Analysis Type: {analysis_type}")
+                                
+                                if analysis_params:
+                                    st.write("Analysis Parameters:")
+                                    st.json(analysis_params)
+                                
+                                st.write("Result Data:")
+                                if isinstance(result_data, pd.DataFrame):
+                                    st.dataframe(result_data)
+                                else:
+                                    st.json(result_data)
+                                    
+                            except Exception as e:
+                                st.error(f"Error loading analysis result: {e}")
+            
+            except Exception as e:
+                st.error(f"Error accessing database: {e}")
+                
+        elif db_operation == "Delete Dataset":
+            st.subheader("Delete Dataset")
+            st.warning("⚠️ Warning: This will permanently delete the dataset and all associated analysis results!")
+            
+            # Get datasets to delete
+            try:
+                datasets = db_handler.list_datasets()
+                
+                if not datasets:
+                    st.info("No datasets found in the database.")
+                else:
+                    # Convert to dataframe for display
+                    datasets_df = pd.DataFrame(datasets)
+                    datasets_df['created_at'] = datasets_df['created_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M'))
+                    
+                    st.write("Available Datasets:")
+                    st.dataframe(datasets_df)
+                    
+                    # Select dataset to delete
+                    dataset_id = st.selectbox(
+                        "Select dataset to delete:",
+                        [(ds['id'], ds['name']) for ds in datasets],
+                        format_func=lambda x: f"{x[1]} (ID: {x[0]})"
+                    )
+                    
+                    # Confirmation
+                    confirm = st.checkbox("I understand this action cannot be undone")
+                    
+                    # Delete button
+                    if st.button("Delete Dataset", disabled=not confirm):
+                        try:
+                            success = db_handler.delete_dataset(dataset_id[0])
+                            if success:
+                                st.success(f"Dataset {dataset_id[1]} (ID: {dataset_id[0]}) deleted successfully")
+                            else:
+                                st.error("Dataset could not be deleted")
+                        except Exception as e:
+                            st.error(f"Error deleting dataset: {e}")
+            
+            except Exception as e:
+                st.error(f"Error accessing database: {e}")
 
 # Add a footer with reset option
 st.markdown("---")

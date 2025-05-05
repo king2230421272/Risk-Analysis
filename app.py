@@ -1051,6 +1051,15 @@ with main_container:
                         with st.expander("Interpolation Parameters", expanded=True):
                             num_samples = st.slider("Number of MCMC samples", min_value=100, max_value=1000, value=500, step=100)
                             chains = st.slider("Number of MCMC chains", min_value=1, max_value=4, value=2)
+                            
+                            # Add control for the number of datasets to fill
+                            st.write("#### Multiple Dataset Generation")
+                            st.write("Generate multiple interpolated datasets with identical parameters for convergence testing:")
+                            generate_multiple = st.checkbox("Generate multiple datasets", value=False)
+                            
+                            if generate_multiple:
+                                num_datasets = st.slider("Number of datasets to generate", min_value=1, max_value=10, value=3, step=1)
+                                dataset_prefix = st.text_input("Dataset name prefix", value="MCMC_Interpolation")
                         
                         # Run MCMC interpolation button
                         if st.button("Run MCMC Interpolation", key="mcmc_btn"):
@@ -1062,19 +1071,59 @@ with main_container:
                                 elif not interpolated_data.isna().any().any():
                                     st.warning("No missing values detected in the data. MCMC interpolation requires missing values.")
                                 else:
-                                    with st.spinner("Running MCMC interpolation... (this may take a while)"):
-                                        # Run MCMC interpolation
-                                        interpolated_result = advanced_processor.mcmc_interpolation(
-                                            interpolated_data,
-                                            num_samples=num_samples,
-                                            chains=chains
-                                        )
+                                    # Initialize datasets to store multiple results if needed
+                                    generated_datasets = []
+                                    
+                                    # Determine how many datasets to generate
+                                    iterations = num_datasets if generate_multiple else 1
+                                    
+                                    with st.spinner(f"Running MCMC interpolation for {iterations} dataset(s)... (this may take a while)"):
+                                        # Generate the requested number of datasets
+                                        for i in range(iterations):
+                                            # Show progress for multiple datasets
+                                            if generate_multiple:
+                                                st.text(f"Generating dataset {i+1} of {iterations}...")
+                                                
+                                            # Run MCMC interpolation
+                                            interpolated_result = advanced_processor.mcmc_interpolation(
+                                                interpolated_data,
+                                                num_samples=num_samples,
+                                                chains=chains
+                                            )
+                                            
+                                            # For the first dataset (or if only generating one), store as main result
+                                            if i == 0:
+                                                st.session_state.interpolated_result = interpolated_result
+                                            
+                                            # If generating multiple, add each to the results list with metadata
+                                            if generate_multiple:
+                                                dataset_info = {
+                                                    'id': len(st.session_state.convergence_datasets) + i + 1,
+                                                    'data': interpolated_result.copy(),
+                                                    'convergence_scores': {},
+                                                    'timestamp': pd.Timestamp.now(),
+                                                    'name': f"{dataset_prefix}_{i+1}"
+                                                }
+                                                generated_datasets.append(dataset_info)
                                         
-                                        # Store the result
-                                        st.session_state.interpolated_result = interpolated_result
+                                        # Show success message
+                                        if generate_multiple:
+                                            st.success(f"MCMC interpolation completed successfully for {iterations} datasets!")
+                                        else:
+                                            st.success("MCMC interpolation completed successfully!")
                                         
-                                        # Show results
-                                        st.success("MCMC interpolation completed successfully!")
+                                        # Add generated datasets to convergence analysis if requested
+                                        if generate_multiple:
+                                            if 'convergence_datasets' not in st.session_state:
+                                                st.session_state.convergence_datasets = []
+                                                st.session_state.convergence_iterations = 0
+                                            
+                                            # Add the datasets to the session state
+                                            for dataset in generated_datasets:
+                                                st.session_state.convergence_datasets.append(dataset)
+                                                st.session_state.convergence_iterations += 1
+                                            
+                                            st.info(f"Added {iterations} datasets to the Multiple Imputation Analysis. Please proceed to that tab for analysis.")
                                         
                                         # Display side-by-side comparison of before and after
                                         col1, col2 = st.columns(2)
@@ -1085,23 +1134,23 @@ with main_container:
                                             
                                         with col2:
                                             st.write("After Interpolation:")
-                                            st.dataframe(interpolated_result.head())
+                                            st.dataframe(st.session_state.interpolated_result.head())
                                         
                                         # Show missing value counts before and after
                                         missing_before = interpolated_data.isna().sum().sum()
-                                        missing_after = interpolated_result.isna().sum().sum()
+                                        missing_after = st.session_state.interpolated_result.isna().sum().sum()
                                         
                                         st.write(f"Missing values before: {missing_before}")
                                         st.write(f"Missing values after: {missing_after}")
                                         
                                         # Option to set as active dataset
                                         if st.button("Use Interpolated Result for Analysis", key="use_mcmc_result"):
-                                            st.session_state.data = interpolated_result
+                                            st.session_state.data = st.session_state.interpolated_result
                                             st.success("Interpolated result set as active dataset for analysis.")
                                         
                                         # Add download button for interpolated data
                                         try:
-                                            data_bytes = data_handler.export_data(interpolated_result, format='csv')
+                                            data_bytes = data_handler.export_data(st.session_state.interpolated_result, format='csv')
                                             st.download_button(
                                                 label="Download Interpolated Data as CSV",
                                                 data=data_bytes,
@@ -1177,10 +1226,77 @@ with main_container:
                             
                             # Only show analysis options if we have datasets to analyze
                             if st.session_state.convergence_datasets:
+                                # Add control module for consecutive analysis
+                                with st.expander("Consecutive Analysis Control", expanded=True):
+                                    st.write("""
+                                    ### Run All Analysis Steps
+                                    Use this control to run all analysis steps consecutively with a single click. 
+                                    This will perform K-Means clustering, Linear Regression, and PCA analysis on all datasets, 
+                                    followed by convergence evaluation.
+                                    """)
+                                    
+                                    run_all = st.checkbox("Enable consecutive analysis", value=False)
+                                    
+                                    if run_all:
+                                        datasets_to_analyze = st.multiselect(
+                                            "Select datasets to analyze",
+                                            options=[f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets],
+                                            default=[f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
+                                        )
+                                        
+                                        consecutive_btn = st.button("Run All Analysis Steps", key="run_all_btn")
+                                        if consecutive_btn:
+                                            st.session_state.consecutive_analysis = True
+                                            st.session_state.datasets_to_analyze = datasets_to_analyze
+                                            st.session_state.current_analysis_step = 0
+                                            st.info("Starting consecutive analysis. Please wait while all steps are executed...")
+                                    
                                 # Analysis methods in tabs
                                 analysis_tabs = st.tabs(["Dataset Selection", "Cluster Analysis (K-Means)", 
                                                         "Regression Analysis", "Factor Analysis (PCA)", 
                                                         "Convergence Evaluation"])
+                                
+                                # Initialize consecutive analysis if it doesn't exist
+                                if 'consecutive_analysis' not in st.session_state:
+                                    st.session_state.consecutive_analysis = False
+                                    st.session_state.current_analysis_step = 0
+                                    st.session_state.datasets_to_analyze = []
+                                
+                                # Handle consecutive analysis logic
+                                if st.session_state.consecutive_analysis:
+                                    # Get current step
+                                    current_step = st.session_state.current_analysis_step
+                                    
+                                    # Execute analysis steps in order
+                                    if current_step == 0:
+                                        # Start with cluster analysis
+                                        st.warning("Consecutive analysis: Running K-Means clustering analysis...")
+                                        # This will be executed in the Cluster Analysis tab, so increase step
+                                        st.session_state.current_analysis_step = 1
+                                        # Redirect to that tab
+                                        # Using rerun() here would be ideal but leads to an infinite loop
+                                        # Instead, we'll let each tab check the step to see if processing is needed
+                                    
+                                    elif current_step == 1:
+                                        # Move to regression analysis
+                                        st.warning("Consecutive analysis: Running Regression analysis...")
+                                        st.session_state.current_analysis_step = 2
+                                    
+                                    elif current_step == 2:
+                                        # Move to PCA analysis
+                                        st.warning("Consecutive analysis: Running PCA factor analysis...")
+                                        st.session_state.current_analysis_step = 3
+                                    
+                                    elif current_step == 3:
+                                        # Final step - convergence evaluation
+                                        st.warning("Consecutive analysis: Running convergence evaluation...")
+                                        st.session_state.current_analysis_step = 4
+                                    
+                                    elif current_step == 4:
+                                        # Analysis complete
+                                        st.success("Consecutive analysis completed successfully!")
+                                        st.session_state.consecutive_analysis = False
+                                        st.session_state.current_analysis_step = 0
                                 
                                 # 1. Dataset Selection Tab
                                 with analysis_tabs[0]:
@@ -1305,9 +1421,24 @@ with main_container:
                                     cluster structure of the original data.
                                     """)
                                     
+                                    # Check if we're in consecutive analysis mode
+                                    consecutive_mode = False
+                                    if ('consecutive_analysis' in st.session_state and 
+                                        st.session_state.consecutive_analysis and 
+                                        st.session_state.current_analysis_step == 1):
+                                        consecutive_mode = True
+                                        st.info("Running K-Means clustering as part of consecutive analysis...")
+                                    
                                     # Select dataset to analyze
                                     dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
-                                    selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="kmeans_dataset")
+                                    
+                                    # In consecutive mode, analyze all selected datasets
+                                    if consecutive_mode and st.session_state.datasets_to_analyze:
+                                        selected_datasets = st.session_state.datasets_to_analyze
+                                        st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
+                                    else:
+                                        # Regular mode - select a single dataset
+                                        selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="kmeans_dataset")
                                     
                                     # Get the selected dataset
                                     if selected_dataset == "Original Data":

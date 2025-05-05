@@ -882,22 +882,25 @@ with main_container:
                                 
                                 output_data = st.session_state.basic_processed_outputs[export_output]
                                 
-                                if export_format == "CSV":
-                                    csv = data_handler.export_data(output_data, format='csv')
-                                    st.download_button(
-                                        label=f"Download {export_output} as CSV",
-                                        data=csv,
-                                        file_name=f"{export_output}.csv",
-                                        mime="text/csv"
-                                    )
-                                else:  # Excel
-                                    excel = data_handler.export_data(output_data, format='excel')
-                                    st.download_button(
-                                        label=f"Download {export_output} as Excel",
-                                        data=excel,
-                                        file_name=f"{export_output}.xlsx",
-                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                    )
+                                try:
+                                    if export_format == "CSV":
+                                        data_bytes = data_handler.export_data(output_data, format='csv')
+                                        st.download_button(
+                                            label=f"Download {export_output} as CSV",
+                                            data=data_bytes,
+                                            file_name=f"{export_output}.csv",
+                                            mime="text/csv"
+                                        )
+                                    else:  # Excel
+                                        data_bytes = data_handler.export_data(output_data, format='excel')
+                                        st.download_button(
+                                            label=f"Download {export_output} as Excel",
+                                            data=data_bytes,
+                                            file_name=f"{export_output}.xlsx",
+                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                        )
+                                except Exception as e:
+                                    st.error(f"Error preparing download: {e}")
                             
                             # Save to database
                             st.write("#### Save to Database")
@@ -1074,13 +1077,16 @@ with main_container:
                                             st.success("Interpolated result set as active dataset for analysis.")
                                         
                                         # Add download button for interpolated data
-                                        csv = data_handler.export_data(interpolated_result, format='csv')
-                                        st.download_button(
-                                            label="Download Interpolated Data as CSV",
-                                            data=csv,
-                                            file_name="mcmc_interpolated_data.csv",
-                                            mime="text/csv"
-                                        )
+                                        try:
+                                            data_bytes = data_handler.export_data(interpolated_result, format='csv')
+                                            st.download_button(
+                                                label="Download Interpolated Data as CSV",
+                                                data=data_bytes,
+                                                file_name="mcmc_interpolated_data.csv",
+                                                mime="text/csv"
+                                            )
+                                        except Exception as e:
+                                            st.error(f"Error preparing download: {e}")
                             except Exception as e:
                                 st.error(f"Error during MCMC interpolation: {e}")
                     

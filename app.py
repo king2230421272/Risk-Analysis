@@ -166,7 +166,7 @@ with main_container:
                 
                 if common_cols:
                     st.write("Compare Distribution of a Column:")
-                    selected_col = st.selectbox("Select column to compare:", common_cols)
+                    selected_col = st.selectbox("Select column to compare:", common_cols, key="compare_column_select")
                     
                     if selected_col:
                         # Create a comparison histogram
@@ -204,10 +204,21 @@ with main_container:
             
             # Target variable selection
             st.write("Select target variable (for prediction):")
+            
+            # Handle target column selection
+            current_index = 0  # Default to 'None'
+            if st.session_state.target_column is not None and st.session_state.target_column != "None":
+                try:
+                    current_index = all_columns.index(st.session_state.target_column) + 1
+                except ValueError:
+                    # Target column not in the list, reset to None
+                    st.session_state.target_column = None
+                    
             st.session_state.target_column = st.selectbox(
                 "Target Variable",
                 ["None"] + all_columns,
-                index=0 if st.session_state.target_column is None else all_columns.index(st.session_state.target_column) + 1
+                index=current_index,
+                key="target_column_select"
             )
             
             col1, col2 = st.columns(2)
@@ -310,7 +321,8 @@ with main_container:
                     # Model selection
                     model_type = st.selectbox(
                         "Select prediction model:",
-                        ["Linear Regression", "Decision Tree", "Random Forest", "Gradient Boosting"]
+                        ["Linear Regression", "Decision Tree", "Random Forest", "Gradient Boosting"],
+                        key="model_type_select"
                     )
                     
                     # Train-test split
@@ -394,7 +406,8 @@ with main_container:
                 # Risk assessment method
                 assessment_method = st.selectbox(
                     "Select risk assessment method:",
-                    ["Prediction Intervals", "Error Distribution", "Outlier Detection"]
+                    ["Prediction Intervals", "Error Distribution", "Outlier Detection"],
+                    key="assessment_method_select"
                 )
             
             with col2:

@@ -1471,9 +1471,22 @@ with main_container:
                                             random_state = st.slider("Random state:", min_value=0, max_value=100, value=42)
                                         
                                         # Run clustering
-                                        if st.button("Run K-Means Clustering", key="run_kmeans_btn"):
+                                        run_button_clicked = False
+                                        if consecutive_mode:
+                                            # In consecutive mode, automatically trigger analysis
+                                            run_button_clicked = st.session_state.current_analysis_step == 1
+                                            if run_button_clicked:
+                                                st.success("Automatically running K-Means clustering for all selected datasets...")
+                                        else:
+                                            # In regular mode, user has to click button
+                                            run_button_clicked = st.button("Run K-Means Clustering", key="run_kmeans_btn")
+                                            
+                                        if run_button_clicked:
                                             if len(selected_features) < 2:
                                                 st.error("Please select at least 2 features for clustering.")
+                                                if consecutive_mode:
+                                                    # Even in error, move to next step in consecutive mode
+                                                    st.session_state.current_analysis_step = 2
                                             else:
                                                 try:
                                                     with st.spinner("Running K-Means clustering..."):
@@ -1563,9 +1576,19 @@ with main_container:
                                                                 ax.legend()
                                                                 plt.colorbar(scatter, label='Cluster')
                                                                 st.pyplot(fig)
+                                                            
+                                                            # If in consecutive mode, progress to next step
+                                                            if consecutive_mode:
+                                                                st.session_state.current_analysis_step = 2
+                                                                st.success("K-Means clustering complete. Moving to Regression Analysis...")
+                                                                # Force a rerun to update the UI for the next step
+                                                                st.rerun()
                                                 
                                                 except Exception as e:
                                                     st.error(f"Error during K-Means clustering: {e}")
+                                                    # Even on error, if in consecutive mode, move to next step
+                                                    if consecutive_mode:
+                                                        st.session_state.current_analysis_step = 2
                                     else:
                                         st.error(f"Dataset {selected_dataset} is not available.")
                                 
@@ -1616,10 +1639,31 @@ with main_container:
                                             # Random state for reproducibility
                                             random_state = st.slider("Random state:", min_value=0, max_value=100, value=42, key="reg_random_state")
                                         
+                                        # Check if we're in consecutive analysis mode
+                                        consecutive_mode = False
+                                        if ('consecutive_analysis' in st.session_state and 
+                                            st.session_state.consecutive_analysis and 
+                                            st.session_state.current_analysis_step == 2):
+                                            consecutive_mode = True
+                                            st.info("Running Regression Analysis as part of consecutive analysis...")
+                                        
                                         # Run regression
-                                        if st.button("Run Linear Regression", key="run_regression_btn"):
+                                        run_button_clicked = False
+                                        if consecutive_mode:
+                                            # In consecutive mode, automatically trigger analysis
+                                            run_button_clicked = st.session_state.current_analysis_step == 2
+                                            if run_button_clicked:
+                                                st.success("Automatically running Linear Regression for selected datasets...")
+                                        else:
+                                            # In regular mode, user has to click button
+                                            run_button_clicked = st.button("Run Linear Regression", key="run_regression_btn")
+                                            
+                                        if run_button_clicked:
                                             if not independent_vars:
                                                 st.error("Please select at least one independent variable.")
+                                                if consecutive_mode:
+                                                    # Even in error, move to next step
+                                                    st.session_state.current_analysis_step = 3
                                             else:
                                                 try:
                                                     with st.spinner("Running linear regression..."):
@@ -1717,9 +1761,19 @@ with main_container:
                                                             
                                                             st.write("### Regression Equation")
                                                             st.write(eq)
+                                                            
+                                                            # If in consecutive mode, progress to next step
+                                                            if consecutive_mode:
+                                                                st.session_state.current_analysis_step = 3
+                                                                st.success("Linear Regression complete. Moving to PCA Factor Analysis...")
+                                                                # Force a rerun to update the UI for the next step
+                                                                st.rerun()
                                                 
                                                 except Exception as e:
                                                     st.error(f"Error during linear regression: {e}")
+                                                    # Even on error, if in consecutive mode, move to next step
+                                                    if consecutive_mode:
+                                                        st.session_state.current_analysis_step = 3
                                     else:
                                         st.error(f"Dataset {selected_dataset} is not available.")
                                 
@@ -1769,10 +1823,31 @@ with main_container:
                                             # Random state
                                             random_state = st.slider("Random state:", min_value=0, max_value=100, value=42, key="pca_random_state")
                                         
+                                        # Check if we're in consecutive analysis mode
+                                        consecutive_mode = False
+                                        if ('consecutive_analysis' in st.session_state and 
+                                            st.session_state.consecutive_analysis and 
+                                            st.session_state.current_analysis_step == 3):
+                                            consecutive_mode = True
+                                            st.info("Running PCA Factor Analysis as part of consecutive analysis...")
+                                        
                                         # Run PCA
-                                        if st.button("Run PCA", key="run_pca_btn"):
+                                        run_button_clicked = False
+                                        if consecutive_mode:
+                                            # In consecutive mode, automatically trigger analysis
+                                            run_button_clicked = st.session_state.current_analysis_step == 3
+                                            if run_button_clicked:
+                                                st.success("Automatically running PCA for selected datasets...")
+                                        else:
+                                            # In regular mode, user has to click button
+                                            run_button_clicked = st.button("Run PCA", key="run_pca_btn")
+                                        
+                                        if run_button_clicked:
                                             if len(selected_features) < 2:
                                                 st.error("Please select at least 2 features for PCA.")
+                                                if consecutive_mode:
+                                                    # Even in error, move to next step
+                                                    st.session_state.current_analysis_step = 4
                                             else:
                                                 try:
                                                     with st.spinner("Running PCA..."):

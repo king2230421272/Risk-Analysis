@@ -995,20 +995,40 @@ with main_container:
                     original_data = st.session_state.original_data
                     
                     # Choose interpolated data source
-                    if 'interpolated_result' in st.session_state:
-                        interpolation_source = st.radio(
-                            "Interpolated Data Source",
-                            ["Use previously interpolated result", "Use imported data for interpolation"],
-                            index=0,
-                            key="interpolation_source"
-                        )
+                    interpolated_data = None
+                    
+                    # Get original data
+                    if original_data is None:
+                        st.warning("Original data is not available. Please import original data from the Data Import tab.")
+                    
+                    # Check if we have previously interpolated result
+                    has_previous_result = 'interpolated_result' in st.session_state and st.session_state.interpolated_result is not None
+                    has_interpolated_data = 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None
+                    
+                    if has_previous_result or has_interpolated_data:
+                        # Choose data source options based on availability
+                        source_options = []
+                        if has_previous_result:
+                            source_options.append("Use previously interpolated result")
+                        if has_interpolated_data:
+                            source_options.append("Use imported data for interpolation")
                         
-                        if interpolation_source == "Use previously interpolated result":
-                            interpolated_data = st.session_state.interpolated_result
-                        else:
-                            interpolated_data = st.session_state.interpolated_data
+                        if len(source_options) > 0:
+                            interpolation_source = st.radio(
+                                "Interpolated Data Source",
+                                source_options,
+                                index=0,
+                                key="interpolation_source"
+                            )
+                            
+                            if interpolation_source == "Use previously interpolated result" and has_previous_result:
+                                interpolated_data = st.session_state.interpolated_result
+                                st.success("Using previously interpolated result for analysis.")
+                            elif has_interpolated_data:
+                                interpolated_data = st.session_state.interpolated_data
+                                st.success("Using imported data with missing values for interpolation.")
                     else:
-                        interpolated_data = st.session_state.interpolated_data
+                        st.info("No data available for interpolation. Please import data with missing values in the Data Import tab or create artificial missing values below.")
                     
                     # Create advanced processing options with tabs
                     advanced_options = st.tabs([
@@ -1035,8 +1055,11 @@ with main_container:
                         # Run MCMC interpolation button
                         if st.button("Run MCMC Interpolation", key="mcmc_btn"):
                             try:
-                                # Check if we have missing values to interpolate
-                                if not interpolated_data.isna().any().any():
+                                # First check if interpolated_data is None
+                                if interpolated_data is None:
+                                    st.error("No data available for interpolation. Please import or create data with missing values first.")
+                                # Then check if we have missing values to interpolate
+                                elif not interpolated_data.isna().any().any():
                                     st.warning("No missing values detected in the data. MCMC interpolation requires missing values.")
                                 else:
                                     with st.spinner("Running MCMC interpolation... (this may take a while)"):

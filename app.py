@@ -486,10 +486,11 @@ with main_container:
                     
                     # Create advanced processing options with tabs
                     advanced_options = st.tabs([
-                        "MCMC Interpolation", 
-                        "CGAN Analysis", 
-                        "Distribution Testing", 
-                        "Outlier Detection"
+                        "Step 1: MCMC Interpolation", 
+                        "Step 2: Multiple Imputation Analysis",
+                        "Step 3: CGAN Analysis", 
+                        "Step 4: Distribution Testing", 
+                        "Step 5: Outlier Detection"
                     ])
                     
                     # 1. MCMC INTERPOLATION TAB
@@ -560,8 +561,162 @@ with main_container:
                             except Exception as e:
                                 st.error(f"Error during MCMC interpolation: {e}")
                     
-                    # 2. CGAN ANALYSIS TAB
+                    # 2. MULTIPLE IMPUTATION ANALYSIS TAB
                     with advanced_options[1]:
+                        st.write("### Multiple Imputation Analysis")
+                        st.write("""
+                        After MCMC interpolation, it's important to analyze the imputed data to ensure
+                        the statistical properties are preserved and the imputation is reliable.
+                        """)
+                        
+                        # Check if we have MCMC interpolated result
+                        if 'interpolated_result' not in st.session_state:
+                            st.info("Please run MCMC interpolation first before performing multiple imputation analysis.")
+                        else:
+                            st.write("#### Statistical Summary of Interpolated Data")
+                            
+                            # Display side-by-side comparison of original and interpolated data statistics
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write("Original Data Statistics")
+                                st.dataframe(original_data.describe())
+                                
+                            with col2:
+                                st.write("Interpolated Data Statistics")
+                                st.dataframe(st.session_state.interpolated_result.describe())
+                            
+                            # Compare distributions of original vs interpolated
+                            st.write("#### Distribution Comparison")
+                            st.write("Compare the distribution of a specific column before and after interpolation:")
+                            
+                            # Get common numeric columns
+                            numeric_cols = list(set(original_data.select_dtypes(include=np.number).columns) & 
+                                              set(st.session_state.interpolated_result.select_dtypes(include=np.number).columns))
+                            
+                            if numeric_cols:
+                                selected_col = st.selectbox("Select column:", numeric_cols, key="imputation_compare_col")
+                                
+                                if selected_col:
+                                    # Create a histogram comparison
+                                    fig = plt.figure(figsize=(10, 6))
+                                    plt.hist(original_data[selected_col].dropna(), alpha=0.5, label='Original Data')
+                                    plt.hist(st.session_state.interpolated_result[selected_col].dropna(), alpha=0.5, label='Interpolated Data')
+                                    plt.xlabel(selected_col)
+                                    plt.ylabel('Frequency')
+                                    plt.title(f'Distribution Comparison for {selected_col}')
+                                    plt.legend()
+                                    st.pyplot(fig)
+                                    
+                                    # Show statistical tests
+                                    st.write("#### Statistical Comparison")
+                                    
+                                    # Calculate basic statistics
+                                    orig_mean = original_data[selected_col].mean()
+                                    interp_mean = st.session_state.interpolated_result[selected_col].mean()
+                                    mean_diff = abs(orig_mean - interp_mean)
+                                    mean_pct_diff = (mean_diff / abs(orig_mean)) * 100 if orig_mean != 0 else 0
+                                    
+                                    orig_std = original_data[selected_col].std()
+                                    interp_std = st.session_state.interpolated_result[selected_col].std()
+                                    std_diff = abs(orig_std - interp_std)
+                                    std_pct_diff = (std_diff / abs(orig_std)) * 100 if orig_std != 0 else 0
+                                    
+                                    # Create a comparison dataframe
+                                    stats_df = pd.DataFrame({
+                                        'Statistic': ['Mean', 'Standard Deviation', 'Min', 'Max', 'Median'],
+                                        'Original': [
+                                            orig_mean,
+                                            orig_std,
+                                            original_data[selected_col].min(),
+                                            original_data[selected_col].max(),
+                                            original_data[selected_col].median()
+                                        ],
+                                        'Interpolated': [
+                                            interp_mean,
+                                            interp_std,
+                                            st.session_state.interpolated_result[selected_col].min(),
+                                            st.session_state.interpolated_result[selected_col].max(),
+                                            st.session_state.interpolated_result[selected_col].median()
+                                        ],
+                                        'Absolute Difference': [
+                                            mean_diff,
+                                            std_diff,
+                                            abs(original_data[selected_col].min() - st.session_state.interpolated_result[selected_col].min()),
+                                            abs(original_data[selected_col].max() - st.session_state.interpolated_result[selected_col].max()),
+                                            abs(original_data[selected_col].median() - st.session_state.interpolated_result[selected_col].median())
+                                        ],
+                                        'Percentage Difference': [
+                                            f"{mean_pct_diff:.2f}%",
+                                            f"{std_pct_diff:.2f}%",
+                                            f"{(abs(original_data[selected_col].min() - st.session_state.interpolated_result[selected_col].min()) / abs(original_data[selected_col].min())) * 100:.2f}%" if original_data[selected_col].min() != 0 else "N/A",
+                                            f"{(abs(original_data[selected_col].max() - st.session_state.interpolated_result[selected_col].max()) / abs(original_data[selected_col].max())) * 100:.2f}%" if original_data[selected_col].max() != 0 else "N/A",
+                                            f"{(abs(original_data[selected_col].median() - st.session_state.interpolated_result[selected_col].median()) / abs(original_data[selected_col].median())) * 100:.2f}%" if original_data[selected_col].median() != 0 else "N/A"
+                                        ]
+                                    })
+                                    
+                                    st.dataframe(stats_df)
+                                    
+                                    # Add quality assessment based on percentage differences
+                                    if mean_pct_diff < 5 and std_pct_diff < 10:
+                                        st.success("✅ The interpolation has preserved the statistical properties very well!")
+                                    elif mean_pct_diff < 10 and std_pct_diff < 20:
+                                        st.info("ℹ️ The interpolation has preserved the statistical properties reasonably well.")
+                                    else:
+                                        st.warning("⚠️ The interpolation has significant differences from the original data. Consider adjusting parameters.")
+                            
+                            # Scatter plot of original vs interpolated values (for non-missing values)
+                            st.write("#### Correlation of Non-Missing Values")
+                            st.write("This plot shows how well the interpolation preserved the original non-missing values:")
+                            
+                            if numeric_cols:
+                                selected_col_scatter = st.selectbox("Select column for correlation analysis:", numeric_cols, key="imputation_scatter_col")
+                                
+                                if selected_col_scatter:
+                                    # Get indices where both original and interpolated have non-null values
+                                    common_indices = original_data[selected_col_scatter].notna() & interpolated_data[selected_col_scatter].notna()
+                                    
+                                    if sum(common_indices) > 0:
+                                        # Create a scatter plot
+                                        fig = plt.figure(figsize=(10, 6))
+                                        plt.scatter(
+                                            original_data.loc[common_indices, selected_col_scatter],
+                                            st.session_state.interpolated_result.loc[common_indices, selected_col_scatter],
+                                            alpha=0.5
+                                        )
+                                        plt.xlabel(f'Original {selected_col_scatter}')
+                                        plt.ylabel(f'Interpolated {selected_col_scatter}')
+                                        plt.title(f'Original vs Interpolated Values: {selected_col_scatter}')
+                                        
+                                        # Add perfect correlation line
+                                        min_val = min(original_data.loc[common_indices, selected_col_scatter].min(),
+                                                   st.session_state.interpolated_result.loc[common_indices, selected_col_scatter].min())
+                                        max_val = max(original_data.loc[common_indices, selected_col_scatter].max(),
+                                                   st.session_state.interpolated_result.loc[common_indices, selected_col_scatter].max())
+                                        plt.plot([min_val, max_val], [min_val, max_val], 'r--')
+                                        
+                                        st.pyplot(fig)
+                                        
+                                        # Calculate correlation
+                                        corr = original_data.loc[common_indices, selected_col_scatter].corr(
+                                            st.session_state.interpolated_result.loc[common_indices, selected_col_scatter]
+                                        )
+                                        
+                                        st.metric("Correlation Coefficient", f"{corr:.4f}")
+                                        
+                                        if corr > 0.95:
+                                            st.success("✅ The interpolation has preserved the original values extremely well!")
+                                        elif corr > 0.9:
+                                            st.success("✅ The interpolation has preserved the original values very well.")
+                                        elif corr > 0.7:
+                                            st.info("ℹ️ The interpolation has preserved the original values reasonably well.")
+                                        else:
+                                            st.warning("⚠️ The interpolation shows notable differences from the original values.")
+                                    else:
+                                        st.warning("No common non-null values found for this column in both datasets.")
+                    
+                    # 3. CGAN ANALYSIS TAB
+                    with advanced_options[2]:
                         st.write("### Conditional Generative Adversarial Network (CGAN) Analysis")
                         st.write("""
                         CGAN analysis uses a generative model to learn patterns in the data and generate synthetic samples
@@ -682,8 +837,8 @@ with main_container:
                                     else:
                                         st.warning("Please select at least one condition column and one target column.")
                     
-                    # 3. DISTRIBUTION TESTING TAB
-                    with advanced_options[2]:
+                    # 4. DISTRIBUTION TESTING TAB
+                    with advanced_options[3]:
                         st.write("### Statistical Distribution Testing")
                         st.write("""
                         These tests compare the distributions of original and interpolated data to verify
@@ -863,8 +1018,8 @@ with main_container:
                             else:
                                 st.warning("Please select at least one test to perform.")
                     
-                    # 4. OUTLIER DETECTION TAB
-                    with advanced_options[3]:
+                    # 5. OUTLIER DETECTION TAB
+                    with advanced_options[4]:
                         st.write("### Isolated Forest Outlier Detection")
                         st.write("""
                         Isolated Forest is an algorithm that can detect anomalous data points that don't fit the expected pattern.

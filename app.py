@@ -1982,9 +1982,19 @@ with main_container:
                                                                 ax.add_patch(circle)
                                                                 
                                                                 st.pyplot(fig)
+                                                                
+                                                                # If in consecutive mode, progress to next step
+                                                                if consecutive_mode:
+                                                                    st.session_state.current_analysis_step = 4
+                                                                    st.success("PCA Factor Analysis complete. Moving to Convergence Evaluation...")
+                                                                    # Force a rerun to update the UI for the next step
+                                                                    st.rerun()
                                                 
                                                 except Exception as e:
                                                     st.error(f"Error during PCA: {e}")
+                                                    # Even on error, if in consecutive mode, move to next step
+                                                    if consecutive_mode:
+                                                        st.session_state.current_analysis_step = 4
                                     else:
                                         st.error(f"Dataset {selected_dataset} is not available.")
                                 
@@ -2010,8 +2020,26 @@ with main_container:
                                         st.write(f"Status: {st.session_state.convergence_status}")
                                         st.write(f"Iterations: {st.session_state.convergence_iterations}")
                                         
+                                        # Check if we're in consecutive analysis mode
+                                        consecutive_mode = False
+                                        if ('consecutive_analysis' in st.session_state and 
+                                            st.session_state.consecutive_analysis and 
+                                            st.session_state.current_analysis_step == 4):
+                                            consecutive_mode = True
+                                            st.info("Running Convergence Evaluation as part of consecutive analysis...")
+                                        
                                         # Evaluate convergence
-                                        if st.button("Evaluate Convergence", key="evaluate_convergence_btn"):
+                                        run_button_clicked = False
+                                        if consecutive_mode:
+                                            # In consecutive mode, automatically trigger analysis
+                                            run_button_clicked = st.session_state.current_analysis_step == 4
+                                            if run_button_clicked:
+                                                st.success("Automatically evaluating convergence for all datasets...")
+                                        else:
+                                            # In regular mode, user has to click button
+                                            run_button_clicked = st.button("Evaluate Convergence", key="evaluate_convergence_btn")
+                                            
+                                        if run_button_clicked:
                                             # Define convergence thresholds
                                             kmeans_inertia_threshold = 0.1  # 10% change
                                             regression_r2_threshold = 0.05  # 5% change
@@ -2150,6 +2178,11 @@ with main_container:
                                                     if best_dataset:
                                                         st.write(f"**Best converged dataset: Dataset {best_dataset_id}**")
                                                         st.session_state.closest_convergence_dataset = best_dataset
+                                                        
+                                                    # If in consecutive mode, mark the analysis as complete
+                                                    if consecutive_mode:
+                                                        st.session_state.current_analysis_step = 5  # Complete
+                                                        st.success("🎉 Consecutive analysis complete! All steps finished successfully with convergence achieved.")
                                                 else:
                                                     # Find closest to convergence
                                                     if pairwise_convergence:
@@ -2162,6 +2195,11 @@ with main_container:
                                                         # Find the latest dataset
                                                         latest_dataset_id = max(analyzed_datasets, key=lambda x: x['id'])['id']
                                                         latest_dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == latest_dataset_id), None)
+                                                        
+                                                        # If in consecutive mode, let the user know we need another iteration
+                                                        if consecutive_mode:
+                                                            st.session_state.current_analysis_step = 5  # Mark as complete even though not converged
+                                                            st.info("Consecutive analysis completed all steps, but convergence was not achieved. Additional iterations may be required.")
                                                         
                                                         if latest_dataset:
                                                             st.write(f"**Dataset to re-interpolate: Dataset {latest_dataset_id}**")
@@ -2176,8 +2214,16 @@ with main_container:
                                                                 st.info("Please go back to Step 1: MCMC Interpolation to continue the iteration.")
                                                     else:
                                                         st.error("Cannot evaluate convergence. Not enough analyzed pairs.")
+                                                        # Even if insufficient data, mark consecutive mode as complete
+                                                        if consecutive_mode:
+                                                            st.session_state.current_analysis_step = 5  # Complete
+                                                            st.warning("Consecutive analysis could not be fully completed due to insufficient analyzed pairs.")
                                             else:
                                                 st.warning("Not enough analyzed datasets to evaluate convergence.")
+                                                # Even if insufficient data, mark consecutive mode as complete
+                                                if consecutive_mode:
+                                                    st.session_state.current_analysis_step = 5  # Complete
+                                                    st.warning("Consecutive analysis could not be fully completed due to insufficient datasets.")
                                                 
                                         # Display convergence history
                                         if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:

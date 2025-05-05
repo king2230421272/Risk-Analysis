@@ -1,0 +1,419 @@
+import os
+import pandas as pd
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, MetaData, Table
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from datetime import datetime
+import json
+
+# Get PostgreSQL connection details from environment variables
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+# Create SQLAlchemy engine
+engine = create_engine(DATABASE_URL)
+
+# Create base class for declarative models
+Base = declarative_base()
+
+# Define metadata
+metadata = MetaData()
+
+# Define models
+class Dataset(Base):
+    """Model for storing datasets in the database."""
+    __tablename__ = 'datasets'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    data_type = Column(String(50), nullable=False)  # 'original' or 'interpolated'
+    created_at = Column(DateTime, default=datetime.now)
+    modified_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    columns_info = Column(Text, nullable=True)  # JSON string with column information
+    row_count = Column(Integer, nullable=False)
+    column_count = Column(Integer, nullable=False)
+    csv_data = Column(Text, nullable=False)  # CSV string of the entire dataset
+
+# Define models for analysis results
+class AnalysisResult(Base):
+    """Model for storing analysis results in the database."""
+    __tablename__ = 'analysis_results'
+    
+    id = Column(Integer, primary_key=True)
+    dataset_id = Column(Integer, nullable=False)
+    analysis_type = Column(String(50), nullable=False)  # 'prediction', 'risk_assessment', etc.
+    analysis_params = Column(Text, nullable=True)  # JSON string with parameters used
+    created_at = Column(DateTime, default=datetime.now)
+    result_data = Column(Text, nullable=False)  # JSON string of analysis results
+    
+# Create all tables
+def initialize_database():
+    """Create all database tables if they don't exist."""
+    Base.metadata.create_all(engine)
+    
+# Session factory
+Session = sessionmaker(bind=engine)
+
+class DatabaseHandler:
+    """Utility for handling database operations for the data analysis platform."""
+    
+    def __init__(self):
+        """Initialize database handler and ensure tables exist."""
+        initialize_database()
+        
+    def save_dataset(self, dataset_df, name, description=None, data_type='original'):
+        """
+        Save a pandas DataFrame to the database.
+        
+        Parameters:
+        -----------
+        dataset_df : pandas.DataFrame
+            The DataFrame to save
+        name : str
+            Name of the dataset
+        description : str, optional
+            Description of the dataset
+        data_type : str
+            Type of dataset ('original' or 'interpolated')
+            
+        Returns:
+        --------
+        int
+            ID of the saved dataset
+        """
+        if dataset_df is None or dataset_df.empty:
+            raise ValueError("Cannot save empty dataset")
+        
+        # Create a session
+        session = Session()
+        
+        try:
+            # Convert DataFrame to CSV string
+            csv_data = dataset_df.to_csv(index=False)
+            
+            # Create columns info as JSON
+            columns_info = {}
+            for col in dataset_df.columns:
+                dtype = str(dataset_df[col].dtype)
+                stats = {}
+                if pd.api.types.is_numeric_dtype(dataset_df[col]):
+                    stats = {
+                        'min': float(dataset_df[col].min()) if not dataset_df[col].isna().all() else None,
+                        'max': float(dataset_df[col].max()) if not dataset_df[col].isna().all() else None,
+                        'mean': float(dataset_df[col].mean()) if not dataset_df[col].isna().all() else None,
+                        'std': float(dataset_df[col].std()) if not dataset_df[col].isna().all() else None,
+                        'null_count': int(dataset_df[col].isna().sum()),
+                    }
+                else:
+                    stats = {
+                        'unique_count': int(dataset_df[col].nunique()),
+                        'null_count': int(dataset_df[col].isna().sum()),
+                    }
+                
+                columns_info[col] = {
+                    'dtype': dtype,
+                    'stats': stats
+                }
+            
+            # Create new dataset object
+            new_dataset = Dataset(
+                name=name,
+                description=description,
+                data_type=data_type,
+                row_count=len(dataset_df),
+                column_count=len(dataset_df.columns),
+                columns_info=json.dumps(columns_info),
+                csv_data=csv_data
+            )
+            
+            # Add to session and commit
+            session.add(new_dataset)
+            session.commit()
+            
+            # Get the ID of the new dataset
+            dataset_id = new_dataset.id
+            
+            return dataset_id
+            
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+    
+    def load_dataset(self, dataset_id=None, name=None, data_type=None):
+        """
+        Load a dataset from the database.
+        
+        Parameters:
+        -----------
+        dataset_id : int, optional
+            ID of the dataset to load
+        name : str, optional
+            Name of the dataset to load
+        data_type : str, optional
+            Type of dataset to load ('original' or 'interpolated')
+            
+        Returns:
+        --------
+        pandas.DataFrame
+            The loaded dataset as a DataFrame
+        """
+        # Create a session
+        session = Session()
+        
+        try:
+            # Query the dataset
+            query = session.query(Dataset)
+            
+            if dataset_id is not None:
+                query = query.filter(Dataset.id == dataset_id)
+            
+            if name is not None:
+                query = query.filter(Dataset.name == name)
+                
+            if data_type is not None:
+                query = query.filter(Dataset.data_type == data_type)
+            
+            dataset = query.first()
+            
+            if dataset is None:
+                raise ValueError("Dataset not found")
+            
+            # Convert CSV string back to DataFrame
+            df = pd.read_csv(pd.StringIO(dataset.csv_data))
+            
+            return df
+            
+        except Exception as e:
+            raise e
+        finally:
+            session.close()
+    
+    def save_analysis_result(self, dataset_id, analysis_type, analysis_params, result_data):
+        """
+        Save analysis results to the database.
+        
+        Parameters:
+        -----------
+        dataset_id : int
+            ID of the dataset used for analysis
+        analysis_type : str
+            Type of analysis ('prediction', 'risk_assessment', etc.)
+        analysis_params : dict
+            Parameters used for the analysis
+        result_data : dict or pandas.DataFrame
+            Results of the analysis
+            
+        Returns:
+        --------
+        int
+            ID of the saved analysis result
+        """
+        # Create a session
+        session = Session()
+        
+        try:
+            # Convert result data to JSON if it's a DataFrame
+            if isinstance(result_data, pd.DataFrame):
+                result_data_json = result_data.to_json(orient='split')
+            else:
+                result_data_json = json.dumps(result_data)
+            
+            # Convert analysis params to JSON
+            if analysis_params is not None:
+                analysis_params_json = json.dumps(analysis_params)
+            else:
+                analysis_params_json = None
+            
+            # Create new analysis result object
+            new_result = AnalysisResult(
+                dataset_id=dataset_id,
+                analysis_type=analysis_type,
+                analysis_params=analysis_params_json,
+                result_data=result_data_json
+            )
+            
+            # Add to session and commit
+            session.add(new_result)
+            session.commit()
+            
+            # Get the ID of the new analysis result
+            result_id = new_result.id
+            
+            return result_id
+            
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+    
+    def load_analysis_result(self, result_id):
+        """
+        Load analysis results from the database.
+        
+        Parameters:
+        -----------
+        result_id : int
+            ID of the analysis result to load
+            
+        Returns:
+        --------
+        tuple
+            (dataset_id, analysis_type, analysis_params, result_data)
+        """
+        # Create a session
+        session = Session()
+        
+        try:
+            # Query the analysis result
+            result = session.query(AnalysisResult).filter(AnalysisResult.id == result_id).first()
+            
+            if result is None:
+                raise ValueError("Analysis result not found")
+            
+            # Parse JSON strings
+            analysis_params = json.loads(result.analysis_params) if result.analysis_params else None
+            
+            # Check if result data is a DataFrame
+            try:
+                result_data = pd.read_json(result.result_data, orient='split')
+            except:
+                result_data = json.loads(result.result_data)
+            
+            return (result.dataset_id, result.analysis_type, analysis_params, result_data)
+            
+        except Exception as e:
+            raise e
+        finally:
+            session.close()
+    
+    def list_datasets(self, data_type=None):
+        """
+        List all datasets in the database.
+        
+        Parameters:
+        -----------
+        data_type : str, optional
+            Filter by dataset type ('original' or 'interpolated')
+            
+        Returns:
+        --------
+        list
+            List of dictionaries with dataset information
+        """
+        # Create a session
+        session = Session()
+        
+        try:
+            # Query all datasets
+            query = session.query(Dataset)
+            
+            if data_type is not None:
+                query = query.filter(Dataset.data_type == data_type)
+            
+            datasets = query.all()
+            
+            # Convert to list of dictionaries
+            dataset_list = []
+            for ds in datasets:
+                dataset_list.append({
+                    'id': ds.id,
+                    'name': ds.name,
+                    'description': ds.description,
+                    'data_type': ds.data_type,
+                    'created_at': ds.created_at,
+                    'modified_at': ds.modified_at,
+                    'row_count': ds.row_count,
+                    'column_count': ds.column_count
+                })
+            
+            return dataset_list
+            
+        except Exception as e:
+            raise e
+        finally:
+            session.close()
+            
+    def list_analysis_results(self, dataset_id=None, analysis_type=None):
+        """
+        List analysis results in the database.
+        
+        Parameters:
+        -----------
+        dataset_id : int, optional
+            Filter by dataset ID
+        analysis_type : str, optional
+            Filter by analysis type
+            
+        Returns:
+        --------
+        list
+            List of dictionaries with analysis result information
+        """
+        # Create a session
+        session = Session()
+        
+        try:
+            # Query analysis results
+            query = session.query(AnalysisResult)
+            
+            if dataset_id is not None:
+                query = query.filter(AnalysisResult.dataset_id == dataset_id)
+            
+            if analysis_type is not None:
+                query = query.filter(AnalysisResult.analysis_type == analysis_type)
+            
+            results = query.all()
+            
+            # Convert to list of dictionaries
+            result_list = []
+            for res in results:
+                result_list.append({
+                    'id': res.id,
+                    'dataset_id': res.dataset_id,
+                    'analysis_type': res.analysis_type,
+                    'created_at': res.created_at,
+                })
+            
+            return result_list
+            
+        except Exception as e:
+            raise e
+        finally:
+            session.close()
+            
+    def delete_dataset(self, dataset_id):
+        """
+        Delete a dataset from the database.
+        
+        Parameters:
+        -----------
+        dataset_id : int
+            ID of the dataset to delete
+            
+        Returns:
+        --------
+        bool
+            True if successful, False otherwise
+        """
+        # Create a session
+        session = Session()
+        
+        try:
+            # Delete associated analysis results first
+            session.query(AnalysisResult).filter(AnalysisResult.dataset_id == dataset_id).delete()
+            
+            # Delete the dataset
+            result = session.query(Dataset).filter(Dataset.id == dataset_id).delete()
+            
+            session.commit()
+            
+            return result > 0
+            
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()

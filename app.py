@@ -2080,9 +2080,20 @@ with main_container:
                                     
                                     # Select dataset to analyze
                                     dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
-                                    selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="pca_dataset")
                                     
-                                    # Get the selected dataset
+                                    # In consecutive mode, analyze all selected datasets
+                                    if consecutive_mode and st.session_state.datasets_to_analyze:
+                                        selected_datasets = st.session_state.datasets_to_analyze
+                                        st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
+                                        
+                                        # Process one dataset now, others will be processed in a loop
+                                        # Default to first dataset for parameters
+                                        selected_dataset = selected_datasets[0] if selected_datasets else dataset_options[0]
+                                    else:
+                                        # Regular mode - select a single dataset
+                                        selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="pca_dataset")
+                                    
+                                    # Get the selected dataset for parameters
                                     if selected_dataset == "Original Data":
                                         analysis_data = original_data
                                         dataset_label = "Original Data"
@@ -2147,60 +2158,166 @@ with main_container:
                                                         from sklearn.decomposition import PCA
                                                         from sklearn.preprocessing import StandardScaler
                                                         
-                                                        # Prepare data
-                                                        pca_data = analysis_data[selected_features].dropna()
-                                                        
-                                                        if len(pca_data) < n_components:
-                                                            st.error(f"Not enough data points ({len(pca_data)}) for {n_components} components after removing missing values.")
+                                                        # Process multiple datasets in consecutive mode
+                                                        if consecutive_mode and st.session_state.datasets_to_analyze:
+                                                            datasets_to_process = st.session_state.datasets_to_analyze
+                                                            all_pca_results = {}
+                                                            
+                                                            for ds_label in datasets_to_process:
+                                                                # Get dataset to analyze
+                                                                if ds_label == "Original Data":
+                                                                    curr_data = original_data
+                                                                    curr_label = "Original Data"
+                                                                else:
+                                                                    ds_id = int(ds_label.split()[-1])
+                                                                    curr_dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
+                                                                    if not curr_dataset:
+                                                                        st.warning(f"Dataset {ds_label} not found. Skipping.")
+                                                                        continue
+                                                                    curr_data = curr_dataset['data']
+                                                                    curr_label = f"Dataset {ds_id}"
+                                                                
+                                                                # Prepare data for this dataset
+                                                                pca_data = curr_data[selected_features].dropna()
+                                                                
+                                                                if len(pca_data) < n_components:
+                                                                    st.warning(f"{curr_label}: Not enough data points ({len(pca_data)}) after removing missing values.")
+                                                                    continue
+                                                                
+                                                                # Scale the data
+                                                                scaler = StandardScaler()
+                                                                scaled_data = scaler.fit_transform(pca_data)
+                                                                
+                                                                # Run PCA
+                                                                pca = PCA(n_components=n_components, random_state=random_state)
+                                                                principal_components = pca.fit_transform(scaled_data)
+                                                                
+                                                                # Create DataFrame with principal components
+                                                                pca_df = pd.DataFrame(
+                                                                    data=principal_components,
+                                                                    columns=[f'PC{i+1}' for i in range(n_components)]
+                                                                )
+                                                                
+                                                                # Store results for this dataset
+                                                                explained_variance = pca.explained_variance_ratio_ * 100
+                                                                cumulative_variance = np.cumsum(explained_variance)
+                                                                
+                                                                # Store PCA results in dataset info if not original data
+                                                                if ds_label != "Original Data":
+                                                                    ds_id = int(ds_label.split()[-1])
+                                                                    for ds in st.session_state.convergence_datasets:
+                                                                        if ds['id'] == ds_id:
+                                                                            ds['convergence_scores']['pca_explained_variance'] = explained_variance.tolist()
+                                                                            ds['convergence_scores']['pca_cumulative_variance'] = cumulative_variance.tolist()
+                                                                            break
+                                                                
+                                                                # Store results for later display
+                                                                all_pca_results[curr_label] = {
+                                                                    'pca': pca,
+                                                                    'explained_variance': explained_variance,
+                                                                    'cumulative_variance': cumulative_variance,
+                                                                    'principal_components': principal_components,
+                                                                    'loadings': pca.components_.T
+                                                                }
+                                                            
+                                                            # Report completion
+                                                            if all_pca_results:
+                                                                st.success(f"PCA completed for {len(all_pca_results)} datasets.")
+                                                                
+                                                                # Show summary of results
+                                                                st.write("### PCA Results Summary")
+                                                                summary_data = {
+                                                                    label: {
+                                                                        'Explained Variance (1st PC)': f"{results['explained_variance'][0]:.2f}%",
+                                                                        'Cumulative Variance (3 PCs)': f"{results['cumulative_variance'][min(2, len(results['cumulative_variance'])-1)]:.2f}%"
+                                                                    }
+                                                                    for label, results in all_pca_results.items()
+                                                                }
+                                                                
+                                                                summary_df = pd.DataFrame.from_dict(summary_data, orient='index')
+                                                                st.dataframe(summary_df)
+                                                                
+                                                                # Show the first dataset's visualization as an example
+                                                                example_label = list(all_pca_results.keys())[0]
+                                                                example_results = all_pca_results[example_label]
+                                                                
+                                                                st.write(f"#### Example Visualization: {example_label}")
+                                                                
+                                                                # Explained variance for example dataset
+                                                                st.write("##### Explained Variance")
+                                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                                ax.bar(range(1, n_components + 1), example_results['explained_variance'], alpha=0.7, label='Individual')
+                                                                ax.step(range(1, n_components + 1), example_results['cumulative_variance'], where='mid', label='Cumulative')
+                                                                ax.set_xlabel('Principal Components')
+                                                                ax.set_ylabel('Explained Variance (%)')
+                                                                ax.set_title('Explained Variance by Principal Components')
+                                                                ax.set_xticks(range(1, n_components + 1))
+                                                                ax.legend()
+                                                                st.pyplot(fig)
+                                                                
+                                                                # If in consecutive mode, progress to next step
+                                                                if consecutive_mode:
+                                                                    st.session_state.current_analysis_step = 4
+                                                                    st.success("PCA analysis complete for all datasets. Moving to Distribution Analysis...")
+                                                                    # Force a rerun to update the UI for the next step
+                                                                    st.rerun()
+                                                                
                                                         else:
-                                                            # Scale the data
-                                                            scaler = StandardScaler()
-                                                            scaled_data = scaler.fit_transform(pca_data)
+                                                            # Regular mode - process single dataset
+                                                            # Prepare data
+                                                            pca_data = analysis_data[selected_features].dropna()
                                                             
-                                                            # Run PCA
-                                                            pca = PCA(n_components=n_components, random_state=random_state)
-                                                            principal_components = pca.fit_transform(scaled_data)
-                                                            
-                                                            # Create DataFrame with principal components
-                                                            pca_df = pd.DataFrame(
-                                                                data=principal_components,
-                                                                columns=[f'PC{i+1}' for i in range(n_components)]
-                                                            )
-                                                            
-                                                            # Display results
-                                                            st.success(f"PCA completed successfully for {dataset_label}.")
-                                                            
-                                                            # Explained variance
-                                                            st.write("### Explained Variance")
-                                                            explained_variance = pca.explained_variance_ratio_ * 100
-                                                            cumulative_variance = np.cumsum(explained_variance)
-                                                            
-                                                            variance_df = pd.DataFrame({
-                                                                'Principal Component': [f'PC{i+1}' for i in range(n_components)],
-                                                                'Explained Variance (%)': explained_variance,
-                                                                'Cumulative Variance (%)': cumulative_variance
-                                                            })
-                                                            st.dataframe(variance_df)
-                                                            
-                                                            # Visualization of explained variance
-                                                            fig, ax = plt.subplots(figsize=(10, 6))
-                                                            ax.bar(range(1, n_components + 1), explained_variance, alpha=0.7, label='Individual')
-                                                            ax.step(range(1, n_components + 1), cumulative_variance, where='mid', label='Cumulative')
-                                                            ax.set_xlabel('Principal Components')
-                                                            ax.set_ylabel('Explained Variance (%)')
-                                                            ax.set_title('Explained Variance by Principal Components')
-                                                            ax.set_xticks(range(1, n_components + 1))
-                                                            ax.legend()
-                                                            st.pyplot(fig)
-                                                            
-                                                            # Store PCA results
-                                                            if selected_dataset != "Original Data":
-                                                                dataset_id = int(selected_dataset.split()[-1])
-                                                                for ds in st.session_state.convergence_datasets:
-                                                                    if ds['id'] == dataset_id:
-                                                                        ds['convergence_scores']['pca_explained_variance'] = explained_variance.tolist()
-                                                                        ds['convergence_scores']['pca_cumulative_variance'] = cumulative_variance.tolist()
-                                                                        break
+                                                            if len(pca_data) < n_components:
+                                                                st.error(f"Not enough data points ({len(pca_data)}) for {n_components} components after removing missing values.")
+                                                            else:
+                                                                # Scale the data
+                                                                scaler = StandardScaler()
+                                                                scaled_data = scaler.fit_transform(pca_data)
+                                                                
+                                                                # Run PCA
+                                                                pca = PCA(n_components=n_components, random_state=random_state)
+                                                                principal_components = pca.fit_transform(scaled_data)
+                                                                
+                                                                # Create DataFrame with principal components
+                                                                pca_df = pd.DataFrame(
+                                                                    data=principal_components,
+                                                                    columns=[f'PC{i+1}' for i in range(n_components)]
+                                                                )
+                                                                
+                                                                # Display results
+                                                                st.success(f"PCA completed successfully for {dataset_label}.")
+                                                                
+                                                                # Explained variance
+                                                                st.write("### Explained Variance")
+                                                                explained_variance = pca.explained_variance_ratio_ * 100
+                                                                cumulative_variance = np.cumsum(explained_variance)
+                                                                
+                                                                variance_df = pd.DataFrame({
+                                                                    'Principal Component': [f'PC{i+1}' for i in range(n_components)],
+                                                                    'Explained Variance (%)': explained_variance,
+                                                                    'Cumulative Variance (%)': cumulative_variance
+                                                                })
+                                                                st.dataframe(variance_df)
+                                                                
+                                                                # Visualization of explained variance
+                                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                                ax.bar(range(1, n_components + 1), explained_variance, alpha=0.7, label='Individual')
+                                                                ax.step(range(1, n_components + 1), cumulative_variance, where='mid', label='Cumulative')
+                                                                ax.set_xlabel('Principal Components')
+                                                                ax.set_ylabel('Explained Variance (%)')
+                                                                ax.set_title('Explained Variance by Principal Components')
+                                                                ax.set_xticks(range(1, n_components + 1))
+                                                                ax.legend()
+                                                                st.pyplot(fig)
+                                                                
+                                                                # Store PCA results
+                                                                if selected_dataset != "Original Data":
+                                                                    dataset_id = int(selected_dataset.split()[-1])
+                                                                    for ds in st.session_state.convergence_datasets:
+                                                                        if ds['id'] == dataset_id:
+                                                                            ds['convergence_scores']['pca_explained_variance'] = explained_variance.tolist()
+                                                                            ds['convergence_scores']['pca_cumulative_variance'] = cumulative_variance.tolist()
+                                                                            break
                                                             
                                                             # Component loadings
                                                             st.write("### Component Loadings")

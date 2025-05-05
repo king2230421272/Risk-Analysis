@@ -67,7 +67,8 @@ def initialize_database():
         try:
             # Test connection first
             with engine.connect() as connection:
-                connection.execute("SELECT 1")  # Simple test query
+                from sqlalchemy import text
+                connection.execute(text("SELECT 1"))  # Simple test query with proper SQLAlchemy text construct
             
             # If connection successful, create tables
             Base.metadata.create_all(engine)

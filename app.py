@@ -2368,8 +2368,19 @@ with main_container:
                                                                     ds_id = int(ds_label.split()[-1])
                                                                     for ds in st.session_state.convergence_datasets:
                                                                         if ds['id'] == ds_id:
-                                                                            ds['convergence_scores']['pca_explained_variance'] = explained_variance.tolist()
-                                                                            ds['convergence_scores']['pca_cumulative_variance'] = cumulative_variance.tolist()
+                                                                            # Initialize convergence_scores if it doesn't exist
+                                                                            if 'convergence_scores' not in ds:
+                                                                                ds['convergence_scores'] = {}
+                                                                            
+                                                                            # Create a copy of the existing scores
+                                                                            convergence_scores = ds['convergence_scores']
+                                                                            
+                                                                            # Update with new scores
+                                                                            convergence_scores['pca_explained_variance'] = explained_variance.tolist()
+                                                                            convergence_scores['pca_cumulative_variance'] = cumulative_variance.tolist()
+                                                                            
+                                                                            # Update the scores in the dataset
+                                                                            ds['convergence_scores'] = convergence_scores
                                                                             break
                                                                 
                                                                 # Store results for later display

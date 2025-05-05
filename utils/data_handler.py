@@ -40,7 +40,7 @@ class DataHandler:
     
     def export_data(self, data, format='csv'):
         """
-        Export data to a file and generate a download link.
+        Export data to a file format suitable for download.
         
         Parameters:
         -----------
@@ -51,8 +51,8 @@ class DataHandler:
             
         Returns:
         --------
-        tuple
-            (success, download_link)
+        bytes
+            Data in the requested format ready for download
         """
         try:
             # Create a buffer for the data
@@ -61,26 +61,17 @@ class DataHandler:
             # Write data to the buffer based on format
             if format == 'csv':
                 data.to_csv(buffer, index=False)
-                mime_type = 'text/csv'
-                file_ext = 'csv'
             elif format == 'excel':
-                data.to_excel(buffer, index=False)
-                mime_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                file_ext = 'xlsx'
+                data.to_excel(buffer, index=False, engine='openpyxl')
             else:
-                return False, None
+                raise ValueError(f"Unsupported format: {format}")
             
             # Reset buffer position
             buffer.seek(0)
             
-            # Convert buffer to base64
-            b64 = base64.b64encode(buffer.read()).decode()
-            
-            # Generate download link
-            href = f'<a href="data:{mime_type};base64,{b64}" download="exported_data.{file_ext}">Download {file_ext.upper()} File</a>'
-            
-            return True, href
+            # Return the buffer value
+            return buffer.getvalue()
         
         except Exception as e:
             print(f"Error exporting data: {e}")
-            return False, None
+            raise

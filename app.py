@@ -76,45 +76,144 @@ with main_container:
         
         # Data import section with two columns for original and interpolated data
         st.subheader("Import Multiple Datasets")
-        st.markdown("""
-        Import both your original data and data to be interpolated to compare distributions and verify interpolation accuracy.
-        """)
         
-        col1, col2 = st.columns(2)
+        # Import methods tabs
+        import_tabs = st.tabs(["Upload Files", "Load from Database"])
         
-        # ORIGINAL DATA IMPORT
-        with col1:
-            st.subheader("Original Data")
-            original_file = st.file_uploader("Upload Original Data (CSV/Excel)", type=["csv", "xlsx", "xls"], key="original_data_uploader")
+        # TAB: UPLOAD FILES
+        with import_tabs[0]:
+            st.markdown("""
+            Import both your original data and data to be interpolated to compare distributions and verify interpolation accuracy.
+            """)
             
-            if original_file is not None:
-                try:
-                    st.session_state.original_data = data_handler.import_data(original_file)
-                    st.success(f"Original data imported: {st.session_state.original_data.shape[0]} rows, {st.session_state.original_data.shape[1]} columns")
-                    
-                    # Show data preview
-                    st.write("Preview:")
-                    st.dataframe(st.session_state.original_data.head())
-                    
-                except Exception as e:
-                    st.error(f"Error importing original data: {e}")
-        
-        # INTERPOLATED DATA IMPORT
-        with col2:
-            st.subheader("Data to Interpolate")
-            interpolated_file = st.file_uploader("Upload Data for Interpolation (CSV/Excel)", type=["csv", "xlsx", "xls"], key="interpolated_data_uploader")
+            col1, col2 = st.columns(2)
             
-            if interpolated_file is not None:
-                try:
-                    st.session_state.interpolated_data = data_handler.import_data(interpolated_file)
-                    st.success(f"Interpolation data imported: {st.session_state.interpolated_data.shape[0]} rows, {st.session_state.interpolated_data.shape[1]} columns")
+            # ORIGINAL DATA IMPORT
+            with col1:
+                st.subheader("Original Data")
+                original_file = st.file_uploader("Upload Original Data (CSV/Excel)", type=["csv", "xlsx", "xls"], key="original_data_uploader")
+                
+                if original_file is not None:
+                    try:
+                        st.session_state.original_data = data_handler.import_data(original_file)
+                        st.success(f"Original data imported: {st.session_state.original_data.shape[0]} rows, {st.session_state.original_data.shape[1]} columns")
+                        
+                        # Show data preview
+                        st.write("Preview:")
+                        st.dataframe(st.session_state.original_data.head())
+                        
+                    except Exception as e:
+                        st.error(f"Error importing original data: {e}")
+            
+            # INTERPOLATED DATA IMPORT
+            with col2:
+                st.subheader("Data to Interpolate")
+                interpolated_file = st.file_uploader("Upload Data for Interpolation (CSV/Excel)", type=["csv", "xlsx", "xls"], key="interpolated_data_uploader")
+                
+                if interpolated_file is not None:
+                    try:
+                        st.session_state.interpolated_data = data_handler.import_data(interpolated_file)
+                        st.success(f"Interpolation data imported: {st.session_state.interpolated_data.shape[0]} rows, {st.session_state.interpolated_data.shape[1]} columns")
+                        
+                        # Show data preview
+                        st.write("Preview:")
+                        st.dataframe(st.session_state.interpolated_data.head())
+                        
+                    except Exception as e:
+                        st.error(f"Error importing interpolation data: {e}")
+        
+        # TAB: LOAD FROM DATABASE
+        with import_tabs[1]:
+            st.markdown("""
+            Load saved datasets from the database to continue your analysis.
+            """)
+            
+            # Check if database is available
+            if not hasattr(db_handler, 'db_available') or not db_handler.db_available:
+                st.error("⚠️ Database connection is not available. Cannot load data from database.")
+                st.info("Please check your database connection settings or continue using file upload.")
+            else:
+                col1, col2 = st.columns(2)
+                
+                # LOAD AS ORIGINAL DATA
+                with col1:
+                    st.subheader("Load as Original Data")
                     
-                    # Show data preview
-                    st.write("Preview:")
-                    st.dataframe(st.session_state.interpolated_data.head())
+                    try:
+                        # Get list of datasets from database
+                        all_datasets = db_handler.list_datasets()
+                        
+                        if not all_datasets:
+                            st.info("No datasets found in the database. Please save some datasets first.")
+                        else:
+                            # Create a formatted selectbox for datasets
+                            dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']}x{ds['column_count']})") 
+                                              for ds in all_datasets]
+                            
+                            selected_dataset = st.selectbox(
+                                "Select dataset to load as Original Data:",
+                                options=dataset_options,
+                                format_func=lambda x: x[1],
+                                key="original_data_db_select"
+                            )
+                            
+                            if st.button("Load as Original Data", key="load_original_btn"):
+                                try:
+                                    # Load the selected dataset
+                                    loaded_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
+                                    st.session_state.original_data = loaded_df
+                                    
+                                    st.success(f"Dataset loaded as Original Data: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
+                                    
+                                    # Show data preview
+                                    st.write("Preview:")
+                                    st.dataframe(loaded_df.head())
+                                    
+                                except Exception as e:
+                                    st.error(f"Error loading dataset: {e}")
                     
-                except Exception as e:
-                    st.error(f"Error importing interpolation data: {e}")
+                    except Exception as e:
+                        st.error(f"Error accessing database: {e}")
+                
+                # LOAD AS INTERPOLATED DATA
+                with col2:
+                    st.subheader("Load as Data to Interpolate")
+                    
+                    try:
+                        # Get list of datasets from database
+                        all_datasets = db_handler.list_datasets()
+                        
+                        if not all_datasets:
+                            st.info("No datasets found in the database. Please save some datasets first.")
+                        else:
+                            # Create a formatted selectbox for datasets
+                            dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']}x{ds['column_count']})") 
+                                              for ds in all_datasets]
+                            
+                            selected_dataset = st.selectbox(
+                                "Select dataset to load as Data to Interpolate:",
+                                options=dataset_options,
+                                format_func=lambda x: x[1],
+                                key="interpolated_data_db_select"
+                            )
+                            
+                            if st.button("Load as Data to Interpolate", key="load_interpolated_btn"):
+                                try:
+                                    # Load the selected dataset
+                                    loaded_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
+                                    st.session_state.interpolated_data = loaded_df
+                                    
+                                    st.success(f"Dataset loaded as Data to Interpolate: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
+                                    
+                                    # Show data preview
+                                    st.write("Preview:")
+                                    st.dataframe(loaded_df.head())
+                                    
+                                except Exception as e:
+                                    st.error(f"Error loading dataset: {e}")
+                    
+                    except Exception as e:
+                        st.error(f"Error accessing database: {e}")
         
         # Select active dataset for analysis
         st.subheader("Select Active Dataset")

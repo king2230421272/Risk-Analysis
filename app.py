@@ -1950,6 +1950,74 @@ with main_container:
                                                                 
                                                                 plt.tight_layout()
                                                                 st.pyplot(fig)
+                                                                
+                                                                # Compare coefficients across datasets
+                                                                st.write("### Coefficient Comparison Across Datasets")
+                                                                coef_comparison = {}
+                                                                
+                                                                for label, results in all_regression_results.items():
+                                                                    coefs = {var: coef for var, coef in zip(results['independent_vars'], results['coef'])}
+                                                                    coef_comparison[label] = coefs
+                                                                
+                                                                # Create a DataFrame for coefficient comparison
+                                                                coef_df = pd.DataFrame.from_dict(coef_comparison)
+                                                                st.dataframe(coef_df)
+                                                                
+                                                                # Create coefficient visualization
+                                                                long_data = []
+                                                                for label, coefs in coef_comparison.items():
+                                                                    for var, coef in coefs.items():
+                                                                        long_data.append({
+                                                                            'Dataset': label,
+                                                                            'Variable': var,
+                                                                            'Coefficient': coef
+                                                                        })
+                                                                
+                                                                if long_data:
+                                                                    long_df = pd.DataFrame(long_data)
+                                                                    
+                                                                    # Plot each variable's coefficient across datasets
+                                                                    variables = list(set(long_df['Variable']))
+                                                                    num_vars = len(variables)
+                                                                    
+                                                                    if num_vars > 0:
+                                                                        # Figure size grows with number of variables, but with a maximum
+                                                                        fig_height = min(12, 3 + num_vars * 0.5)
+                                                                        fig_width = min(14, 8 + num_vars * 0.5)
+                                                                        
+                                                                        fig, axes = plt.subplots(1, num_vars, figsize=(fig_width, fig_height))
+                                                                        if num_vars == 1:
+                                                                            axes = [axes]  # Handle single subplot case
+                                                                            
+                                                                        for i, var in enumerate(variables):
+                                                                            var_data = long_df[long_df['Variable'] == var]
+                                                                            axes[i].bar(var_data['Dataset'], var_data['Coefficient'])
+                                                                            axes[i].set_title(var)
+                                                                            axes[i].tick_params(axis='x', rotation=45)
+                                                                            if i == 0:
+                                                                                axes[i].set_ylabel('Coefficient Value')
+                                                                                
+                                                                        plt.tight_layout()
+                                                                        st.pyplot(fig)
+                                                                
+                                                                # Allow download of regression results
+                                                                csv_data = summary_df.to_csv()
+                                                                st.download_button(
+                                                                    label="Download Regression Summary as CSV",
+                                                                    data=csv_data,
+                                                                    file_name="regression_summary.csv",
+                                                                    mime="text/csv"
+                                                                )
+                                                                
+                                                                # Also allow download of coefficient comparison
+                                                                coef_csv = coef_df.to_csv()
+                                                                st.download_button(
+                                                                    label="Download Coefficient Comparison as CSV",
+                                                                    data=coef_csv,
+                                                                    file_name="coefficient_comparison.csv",
+                                                                    mime="text/csv",
+                                                                    key="coef_download"
+                                                                )
                                                             
                                                             # Progress to next step
                                                             if consecutive_mode:

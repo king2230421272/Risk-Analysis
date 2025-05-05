@@ -565,155 +565,957 @@ with main_container:
                     with advanced_options[1]:
                         st.write("### Multiple Imputation Analysis")
                         st.write("""
-                        After MCMC interpolation, it's important to analyze the imputed data to ensure
-                        the statistical properties are preserved and the imputation is reliable.
+                        This tab performs advanced analysis on the interpolated dataset to evaluate convergence and 
+                        statistical properties. The analysis includes three core methods:
+                        1. Cluster Analysis (K-Means)
+                        2. Regression Analysis (Linear Regression)
+                        3. Factor Analysis (Principal Component Analysis - PCA)
                         """)
                         
                         # Check if we have MCMC interpolated result
                         if 'interpolated_result' not in st.session_state:
                             st.info("Please run MCMC interpolation first before performing multiple imputation analysis.")
                         else:
-                            st.write("#### Statistical Summary of Interpolated Data")
-                            
-                            # Display side-by-side comparison of original and interpolated data statistics
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.write("Original Data Statistics")
-                                st.dataframe(original_data.describe())
+                            # Initialize convergence status
+                            if 'convergence_status' not in st.session_state:
+                                st.session_state.convergence_status = "Not evaluated"
+                                st.session_state.convergence_iterations = 0
+                                st.session_state.convergence_datasets = []
+                                st.session_state.closest_convergence_dataset = None
                                 
-                            with col2:
-                                st.write("Interpolated Data Statistics")
-                                st.dataframe(st.session_state.interpolated_result.describe())
+                            # Show current status
+                            status_col1, status_col2 = st.columns(2)
+                            with status_col1:
+                                st.write("**Current Analysis Status**")
+                                st.write(f"Convergence Status: {st.session_state.convergence_status}")
+                                st.write(f"Iterations Completed: {st.session_state.convergence_iterations}")
                             
-                            # Compare distributions of original vs interpolated
-                            st.write("#### Distribution Comparison")
-                            st.write("Compare the distribution of a specific column before and after interpolation:")
-                            
-                            # Get common numeric columns
-                            numeric_cols = list(set(original_data.select_dtypes(include=np.number).columns) & 
-                                              set(st.session_state.interpolated_result.select_dtypes(include=np.number).columns))
-                            
-                            if numeric_cols:
-                                selected_col = st.selectbox("Select column:", numeric_cols, key="imputation_compare_col")
-                                
-                                if selected_col:
-                                    # Create a histogram comparison
-                                    fig = plt.figure(figsize=(10, 6))
-                                    plt.hist(original_data[selected_col].dropna(), alpha=0.5, label='Original Data')
-                                    plt.hist(st.session_state.interpolated_result[selected_col].dropna(), alpha=0.5, label='Interpolated Data')
-                                    plt.xlabel(selected_col)
-                                    plt.ylabel('Frequency')
-                                    plt.title(f'Distribution Comparison for {selected_col}')
-                                    plt.legend()
-                                    st.pyplot(fig)
-                                    
-                                    # Show statistical tests
-                                    st.write("#### Statistical Comparison")
-                                    
-                                    # Calculate basic statistics
-                                    orig_mean = original_data[selected_col].mean()
-                                    interp_mean = st.session_state.interpolated_result[selected_col].mean()
-                                    mean_diff = abs(orig_mean - interp_mean)
-                                    mean_pct_diff = (mean_diff / abs(orig_mean)) * 100 if orig_mean != 0 else 0
-                                    
-                                    orig_std = original_data[selected_col].std()
-                                    interp_std = st.session_state.interpolated_result[selected_col].std()
-                                    std_diff = abs(orig_std - interp_std)
-                                    std_pct_diff = (std_diff / abs(orig_std)) * 100 if orig_std != 0 else 0
-                                    
-                                    # Create a comparison dataframe
-                                    stats_df = pd.DataFrame({
-                                        'Statistic': ['Mean', 'Standard Deviation', 'Min', 'Max', 'Median'],
-                                        'Original': [
-                                            orig_mean,
-                                            orig_std,
-                                            original_data[selected_col].min(),
-                                            original_data[selected_col].max(),
-                                            original_data[selected_col].median()
-                                        ],
-                                        'Interpolated': [
-                                            interp_mean,
-                                            interp_std,
-                                            st.session_state.interpolated_result[selected_col].min(),
-                                            st.session_state.interpolated_result[selected_col].max(),
-                                            st.session_state.interpolated_result[selected_col].median()
-                                        ],
-                                        'Absolute Difference': [
-                                            mean_diff,
-                                            std_diff,
-                                            abs(original_data[selected_col].min() - st.session_state.interpolated_result[selected_col].min()),
-                                            abs(original_data[selected_col].max() - st.session_state.interpolated_result[selected_col].max()),
-                                            abs(original_data[selected_col].median() - st.session_state.interpolated_result[selected_col].median())
-                                        ],
-                                        'Percentage Difference': [
-                                            f"{mean_pct_diff:.2f}%",
-                                            f"{std_pct_diff:.2f}%",
-                                            f"{(abs(original_data[selected_col].min() - st.session_state.interpolated_result[selected_col].min()) / abs(original_data[selected_col].min())) * 100:.2f}%" if original_data[selected_col].min() != 0 else "N/A",
-                                            f"{(abs(original_data[selected_col].max() - st.session_state.interpolated_result[selected_col].max()) / abs(original_data[selected_col].max())) * 100:.2f}%" if original_data[selected_col].max() != 0 else "N/A",
-                                            f"{(abs(original_data[selected_col].median() - st.session_state.interpolated_result[selected_col].median()) / abs(original_data[selected_col].median())) * 100:.2f}%" if original_data[selected_col].median() != 0 else "N/A"
-                                        ]
-                                    })
-                                    
-                                    st.dataframe(stats_df)
-                                    
-                                    # Add quality assessment based on percentage differences
-                                    if mean_pct_diff < 5 and std_pct_diff < 10:
-                                        st.success("✅ The interpolation has preserved the statistical properties very well!")
-                                    elif mean_pct_diff < 10 and std_pct_diff < 20:
-                                        st.info("ℹ️ The interpolation has preserved the statistical properties reasonably well.")
+                            with status_col2:
+                                st.write("**Datasets Information**")
+                                if st.session_state.convergence_datasets:
+                                    st.write(f"Number of Analyzed Datasets: {len(st.session_state.convergence_datasets)}")
+                                    if st.session_state.closest_convergence_dataset is not None:
+                                        st.write("Closest to Convergence: Dataset Available")
                                     else:
-                                        st.warning("⚠️ The interpolation has significant differences from the original data. Consider adjusting parameters.")
-                            
-                            # Scatter plot of original vs interpolated values (for non-missing values)
-                            st.write("#### Correlation of Non-Missing Values")
-                            st.write("This plot shows how well the interpolation preserved the original non-missing values:")
-                            
-                            if numeric_cols:
-                                selected_col_scatter = st.selectbox("Select column for correlation analysis:", numeric_cols, key="imputation_scatter_col")
-                                
-                                if selected_col_scatter:
-                                    # Get indices where both original and interpolated have non-null values
-                                    common_indices = original_data[selected_col_scatter].notna() & interpolated_data[selected_col_scatter].notna()
+                                        st.write("Closest to Convergence: None Identified Yet")
+                                else:
+                                    st.write("No datasets analyzed yet.")
+
+                            # Add current dataset to analysis
+                            if st.button("Add Current Interpolated Dataset to Analysis", key="add_dataset_btn"):
+                                if st.session_state.interpolated_result is not None:
+                                    # Create a copy to avoid reference issues
+                                    dataset_copy = st.session_state.interpolated_result.copy()
                                     
-                                    if sum(common_indices) > 0:
-                                        # Create a scatter plot
-                                        fig = plt.figure(figsize=(10, 6))
-                                        plt.scatter(
-                                            original_data.loc[common_indices, selected_col_scatter],
-                                            st.session_state.interpolated_result.loc[common_indices, selected_col_scatter],
-                                            alpha=0.5
-                                        )
-                                        plt.xlabel(f'Original {selected_col_scatter}')
-                                        plt.ylabel(f'Interpolated {selected_col_scatter}')
-                                        plt.title(f'Original vs Interpolated Values: {selected_col_scatter}')
-                                        
-                                        # Add perfect correlation line
-                                        min_val = min(original_data.loc[common_indices, selected_col_scatter].min(),
-                                                   st.session_state.interpolated_result.loc[common_indices, selected_col_scatter].min())
-                                        max_val = max(original_data.loc[common_indices, selected_col_scatter].max(),
-                                                   st.session_state.interpolated_result.loc[common_indices, selected_col_scatter].max())
-                                        plt.plot([min_val, max_val], [min_val, max_val], 'r--')
-                                        
-                                        st.pyplot(fig)
-                                        
-                                        # Calculate correlation
-                                        corr = original_data.loc[common_indices, selected_col_scatter].corr(
-                                            st.session_state.interpolated_result.loc[common_indices, selected_col_scatter]
-                                        )
-                                        
-                                        st.metric("Correlation Coefficient", f"{corr:.4f}")
-                                        
-                                        if corr > 0.95:
-                                            st.success("✅ The interpolation has preserved the original values extremely well!")
-                                        elif corr > 0.9:
-                                            st.success("✅ The interpolation has preserved the original values very well.")
-                                        elif corr > 0.7:
-                                            st.info("ℹ️ The interpolation has preserved the original values reasonably well.")
+                                    # Add dataset to convergence analysis list
+                                    dataset_info = {
+                                        'id': len(st.session_state.convergence_datasets) + 1,
+                                        'data': dataset_copy,
+                                        'convergence_scores': {},
+                                        'timestamp': pd.Timestamp.now()
+                                    }
+                                    
+                                    st.session_state.convergence_datasets.append(dataset_info)
+                                    st.session_state.convergence_iterations += 1
+                                    
+                                    st.success(f"Dataset {dataset_info['id']} added to analysis.")
+                                    st.info("Please proceed with analysis methods below.")
+                                else:
+                                    st.error("No interpolated dataset available to add.")
+                            
+                            # Only show analysis options if we have datasets to analyze
+                            if st.session_state.convergence_datasets:
+                                # Analysis methods in tabs
+                                analysis_tabs = st.tabs(["Dataset Selection", "Cluster Analysis (K-Means)", 
+                                                        "Regression Analysis", "Factor Analysis (PCA)", 
+                                                        "Convergence Evaluation"])
+                                
+                                # 1. Dataset Selection Tab
+                                with analysis_tabs[0]:
+                                    st.write("### Dataset Selection and Comparison")
+                                    st.write("Select datasets to analyze or compare:")
+                                    
+                                    # Create radio buttons to select dataset
+                                    dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
+                                    selected_dataset = st.radio("Select dataset to view:", dataset_options)
+                                    
+                                    # Display selected dataset
+                                    if selected_dataset == "Original Data":
+                                        if original_data is not None:
+                                            st.write("**Original Data Statistics**")
+                                            st.dataframe(original_data.describe())
+                                            
+                                            # Show sample of data
+                                            st.write("**Sample Data**")
+                                            st.dataframe(original_data.head())
                                         else:
-                                            st.warning("⚠️ The interpolation shows notable differences from the original values.")
+                                            st.warning("Original data not available.")
                                     else:
-                                        st.warning("No common non-null values found for this column in both datasets.")
+                                        # Extract dataset ID and find the corresponding dataset
+                                        dataset_id = int(selected_dataset.split()[-1])
+                                        dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == dataset_id), None)
+                                        
+                                        if dataset:
+                                            st.write(f"**Interpolated Dataset {dataset_id} Statistics**")
+                                            st.dataframe(dataset['data'].describe())
+                                            
+                                            # Show sample of data
+                                            st.write("**Sample Data**")
+                                            st.dataframe(dataset['data'].head())
+                                            
+                                            # Show timestamp
+                                            st.write(f"Added on: {dataset['timestamp']}")
+                                        else:
+                                            st.error(f"Dataset {dataset_id} not found.")
+                                    
+                                    # Dataset comparison
+                                    st.write("### Dataset Comparison")
+                                    
+                                    # Select datasets to compare
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        compare_ds1 = st.selectbox("First dataset:", dataset_options, key="compare_ds1")
+                                    with col2:
+                                        compare_ds2 = st.selectbox("Second dataset:", dataset_options, index=min(1, len(dataset_options)-1), key="compare_ds2")
+                                    
+                                    if st.button("Compare Datasets"):
+                                        # Get data for the first dataset
+                                        if compare_ds1 == "Original Data":
+                                            data1 = original_data
+                                            label1 = "Original Data"
+                                        else:
+                                            ds1_id = int(compare_ds1.split()[-1])
+                                            ds1 = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds1_id), None)
+                                            data1 = ds1['data'] if ds1 else None
+                                            label1 = f"Dataset {ds1_id}"
+                                        
+                                        # Get data for the second dataset
+                                        if compare_ds2 == "Original Data":
+                                            data2 = original_data
+                                            label2 = "Original Data"
+                                        else:
+                                            ds2_id = int(compare_ds2.split()[-1])
+                                            ds2 = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds2_id), None)
+                                            data2 = ds2['data'] if ds2 else None
+                                            label2 = f"Dataset {ds2_id}"
+                                        
+                                        # Perform comparison if both datasets are available
+                                        if data1 is not None and data2 is not None:
+                                            # Common numeric columns
+                                            numeric_cols = list(set(data1.select_dtypes(include=np.number).columns) & 
+                                                            set(data2.select_dtypes(include=np.number).columns))
+                                            
+                                            if numeric_cols:
+                                                # Let user select a column to compare
+                                                selected_col = st.selectbox("Select column to compare:", numeric_cols)
+                                                
+                                                # Create histogram comparison
+                                                fig = plt.figure(figsize=(10, 6))
+                                                plt.hist(data1[selected_col].dropna(), alpha=0.5, label=label1)
+                                                plt.hist(data2[selected_col].dropna(), alpha=0.5, label=label2)
+                                                plt.xlabel(selected_col)
+                                                plt.ylabel('Frequency')
+                                                plt.title(f'Distribution Comparison for {selected_col}')
+                                                plt.legend()
+                                                st.pyplot(fig)
+                                                
+                                                # Calculate statistics for comparison
+                                                if selected_col:
+                                                    stats_df = pd.DataFrame({
+                                                        'Statistic': ['Mean', 'Std Dev', 'Min', 'Max', 'Median'],
+                                                        label1: [
+                                                            data1[selected_col].mean(),
+                                                            data1[selected_col].std(),
+                                                            data1[selected_col].min(),
+                                                            data1[selected_col].max(),
+                                                            data1[selected_col].median()
+                                                        ],
+                                                        label2: [
+                                                            data2[selected_col].mean(),
+                                                            data2[selected_col].std(),
+                                                            data2[selected_col].min(),
+                                                            data2[selected_col].max(),
+                                                            data2[selected_col].median()
+                                                        ]
+                                                    })
+                                                    st.dataframe(stats_df)
+                                            else:
+                                                st.warning("No common numeric columns found between the selected datasets.")
+                                        else:
+                                            st.error("One or both of the selected datasets are not available.")
+                                
+                                # 2. Cluster Analysis (K-Means) Tab
+                                with analysis_tabs[1]:
+                                    st.write("### Cluster Analysis (K-Means)")
+                                    st.write("""
+                                    K-Means clustering groups data points into k clusters based on similarity.
+                                    This analysis helps evaluate if the interpolated data preserves the 
+                                    cluster structure of the original data.
+                                    """)
+                                    
+                                    # Select dataset to analyze
+                                    dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
+                                    selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="kmeans_dataset")
+                                    
+                                    # Get the selected dataset
+                                    if selected_dataset == "Original Data":
+                                        analysis_data = original_data
+                                        dataset_label = "Original Data"
+                                    else:
+                                        dataset_id = int(selected_dataset.split()[-1])
+                                        dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == dataset_id), None)
+                                        analysis_data = dataset['data'] if dataset else None
+                                        dataset_label = f"Dataset {dataset_id}"
+                                    
+                                    if analysis_data is not None:
+                                        # Parameters for K-Means
+                                        with st.expander("Clustering Parameters", expanded=True):
+                                            # Select features for clustering
+                                            numeric_cols = analysis_data.select_dtypes(include=np.number).columns.tolist()
+                                            selected_features = st.multiselect(
+                                                "Select features for clustering:",
+                                                numeric_cols,
+                                                default=numeric_cols[:min(3, len(numeric_cols))]
+                                            )
+                                            
+                                            # Number of clusters
+                                            k_clusters = st.slider("Number of clusters (k):", min_value=2, max_value=10, value=3)
+                                            
+                                            # Max iterations
+                                            max_iter = st.slider("Maximum iterations:", min_value=100, max_value=1000, value=300, step=100)
+                                            
+                                            # Random state for reproducibility
+                                            random_state = st.slider("Random state:", min_value=0, max_value=100, value=42)
+                                        
+                                        # Run clustering
+                                        if st.button("Run K-Means Clustering", key="run_kmeans_btn"):
+                                            if len(selected_features) < 2:
+                                                st.error("Please select at least 2 features for clustering.")
+                                            else:
+                                                try:
+                                                    with st.spinner("Running K-Means clustering..."):
+                                                        # Prepare data for clustering
+                                                        from sklearn.cluster import KMeans
+                                                        from sklearn.preprocessing import StandardScaler
+                                                        
+                                                        # Get data without missing values
+                                                        cluster_data = analysis_data[selected_features].dropna()
+                                                        
+                                                        if len(cluster_data) < k_clusters:
+                                                            st.error(f"Not enough data points ({len(cluster_data)}) for {k_clusters} clusters after removing missing values.")
+                                                        else:
+                                                            # Scale the data
+                                                            scaler = StandardScaler()
+                                                            scaled_data = scaler.fit_transform(cluster_data)
+                                                            
+                                                            # Run K-Means
+                                                            kmeans = KMeans(n_clusters=k_clusters, max_iter=max_iter, random_state=random_state)
+                                                            clusters = kmeans.fit_predict(scaled_data)
+                                                            
+                                                            # Add cluster labels to the data
+                                                            cluster_data['Cluster'] = clusters
+                                                            
+                                                            # Calculate convergence metrics
+                                                            inertia = kmeans.inertia_  # Sum of squared distances to the nearest centroid
+                                                            
+                                                            # Display results
+                                                            st.success(f"K-Means clustering completed successfully for {dataset_label}.")
+                                                            
+                                                            # Visualization
+                                                            st.write("### Clustering Results")
+                                                            st.write(f"Inertia (Sum of squared distances): {inertia:.2f}")
+                                                            
+                                                            # Display cluster distribution
+                                                            st.write("#### Cluster Distribution")
+                                                            cluster_counts = cluster_data['Cluster'].value_counts().sort_index()
+                                                            fig = plt.figure(figsize=(10, 6))
+                                                            plt.bar(cluster_counts.index, cluster_counts.values)
+                                                            plt.xlabel('Cluster')
+                                                            plt.ylabel('Number of Data Points')
+                                                            plt.title('Distribution of Data Points Across Clusters')
+                                                            plt.xticks(range(k_clusters))
+                                                            st.pyplot(fig)
+                                                            
+                                                            # Store clustering results in dataset info
+                                                            if selected_dataset != "Original Data":
+                                                                dataset_id = int(selected_dataset.split()[-1])
+                                                                for ds in st.session_state.convergence_datasets:
+                                                                    if ds['id'] == dataset_id:
+                                                                        ds['convergence_scores']['kmeans_inertia'] = inertia
+                                                                        ds['convergence_scores']['kmeans_cluster_counts'] = cluster_counts.to_dict()
+                                                                        break
+                                                            
+                                                            # Create a 2D visualization if possible
+                                                            if len(selected_features) >= 2:
+                                                                st.write("#### 2D Visualization of Clusters")
+                                                                
+                                                                # Select two features for visualization
+                                                                viz_features = selected_features[:2]
+                                                                
+                                                                fig, ax = plt.subplots(figsize=(10, 8))
+                                                                scatter = ax.scatter(
+                                                                    cluster_data[viz_features[0]], 
+                                                                    cluster_data[viz_features[1]], 
+                                                                    c=cluster_data['Cluster'], 
+                                                                    cmap='viridis', 
+                                                                    alpha=0.6,
+                                                                    s=50
+                                                                )
+                                                                
+                                                                # Plot centroids
+                                                                centroids = scaler.inverse_transform(kmeans.cluster_centers_)
+                                                                ax.scatter(
+                                                                    centroids[:, 0], 
+                                                                    centroids[:, 1],
+                                                                    marker='X',
+                                                                    s=200,
+                                                                    linewidths=2,
+                                                                    color='red',
+                                                                    label='Centroids'
+                                                                )
+                                                                
+                                                                ax.set_xlabel(viz_features[0])
+                                                                ax.set_ylabel(viz_features[1])
+                                                                ax.set_title(f'K-Means Clustering ({k_clusters} clusters)')
+                                                                ax.legend()
+                                                                plt.colorbar(scatter, label='Cluster')
+                                                                st.pyplot(fig)
+                                                
+                                                except Exception as e:
+                                                    st.error(f"Error during K-Means clustering: {e}")
+                                    else:
+                                        st.error(f"Dataset {selected_dataset} is not available.")
+                                
+                                # 3. Regression Analysis Tab
+                                with analysis_tabs[2]:
+                                    st.write("### Regression Analysis")
+                                    st.write("""
+                                    Linear regression analyzes the relationship between variables.
+                                    We'll use it to evaluate if interpolated data maintains the same variable relationships as the original data.
+                                    """)
+                                    
+                                    # Select dataset to analyze
+                                    dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
+                                    selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="regression_dataset")
+                                    
+                                    # Get the selected dataset
+                                    if selected_dataset == "Original Data":
+                                        analysis_data = original_data
+                                        dataset_label = "Original Data"
+                                    else:
+                                        dataset_id = int(selected_dataset.split()[-1])
+                                        dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == dataset_id), None)
+                                        analysis_data = dataset['data'] if dataset else None
+                                        dataset_label = f"Dataset {dataset_id}"
+                                    
+                                    if analysis_data is not None:
+                                        # Parameters for regression
+                                        with st.expander("Regression Parameters", expanded=True):
+                                            # Get all numeric columns
+                                            numeric_cols = analysis_data.select_dtypes(include=np.number).columns.tolist()
+                                            
+                                            # Select dependent variable (y)
+                                            dependent_var = st.selectbox(
+                                                "Select dependent variable (y):",
+                                                numeric_cols
+                                            )
+                                            
+                                            # Select independent variables (X)
+                                            independent_vars = st.multiselect(
+                                                "Select independent variables (X):",
+                                                [col for col in numeric_cols if col != dependent_var],
+                                                default=[col for col in numeric_cols[:min(3, len(numeric_cols))] if col != dependent_var]
+                                            )
+                                            
+                                            # Test size
+                                            test_size = st.slider("Test set size (%):", min_value=10, max_value=50, value=20) / 100
+                                            
+                                            # Random state for reproducibility
+                                            random_state = st.slider("Random state:", min_value=0, max_value=100, value=42, key="reg_random_state")
+                                        
+                                        # Run regression
+                                        if st.button("Run Linear Regression", key="run_regression_btn"):
+                                            if not independent_vars:
+                                                st.error("Please select at least one independent variable.")
+                                            else:
+                                                try:
+                                                    with st.spinner("Running linear regression..."):
+                                                        from sklearn.linear_model import LinearRegression
+                                                        from sklearn.metrics import mean_squared_error, r2_score
+                                                        from sklearn.model_selection import train_test_split
+                                                        
+                                                        # Prepare data
+                                                        reg_data = analysis_data[independent_vars + [dependent_var]].dropna()
+                                                        
+                                                        if len(reg_data) < 10:  # Minimum sample size
+                                                            st.error(f"Not enough data points ({len(reg_data)}) after removing missing values.")
+                                                        else:
+                                                            # Split data
+                                                            X = reg_data[independent_vars]
+                                                            y = reg_data[dependent_var]
+                                                            
+                                                            X_train, X_test, y_train, y_test = train_test_split(
+                                                                X, y, test_size=test_size, random_state=random_state
+                                                            )
+                                                            
+                                                            # Fit model
+                                                            model = LinearRegression()
+                                                            model.fit(X_train, y_train)
+                                                            
+                                                            # Predictions
+                                                            y_train_pred = model.predict(X_train)
+                                                            y_test_pred = model.predict(X_test)
+                                                            
+                                                            # Metrics
+                                                            train_mse = mean_squared_error(y_train, y_train_pred)
+                                                            test_mse = mean_squared_error(y_test, y_test_pred)
+                                                            train_r2 = r2_score(y_train, y_train_pred)
+                                                            test_r2 = r2_score(y_test, y_test_pred)
+                                                            
+                                                            # Display results
+                                                            st.success(f"Linear regression completed successfully for {dataset_label}.")
+                                                            
+                                                            # Model coefficients
+                                                            st.write("### Model Coefficients")
+                                                            coef_df = pd.DataFrame({
+                                                                'Feature': independent_vars,
+                                                                'Coefficient': model.coef_
+                                                            })
+                                                            st.dataframe(coef_df)
+                                                            st.write(f"Intercept: {model.intercept_:.4f}")
+                                                            
+                                                            # Model performance
+                                                            st.write("### Model Performance")
+                                                            metrics_df = pd.DataFrame({
+                                                                'Metric': ['Mean Squared Error (MSE)', 'R² Score'],
+                                                                'Training Set': [train_mse, train_r2],
+                                                                'Test Set': [test_mse, test_r2]
+                                                            })
+                                                            st.dataframe(metrics_df)
+                                                            
+                                                            # Store regression results in dataset info
+                                                            if selected_dataset != "Original Data":
+                                                                dataset_id = int(selected_dataset.split()[-1])
+                                                                for ds in st.session_state.convergence_datasets:
+                                                                    if ds['id'] == dataset_id:
+                                                                        ds['convergence_scores']['regression_test_r2'] = test_r2
+                                                                        ds['convergence_scores']['regression_test_mse'] = test_mse
+                                                                        ds['convergence_scores']['regression_coefficients'] = {
+                                                                            'intercept': float(model.intercept_),
+                                                                            'coef': {feat: float(coef) for feat, coef in zip(independent_vars, model.coef_)}
+                                                                        }
+                                                                        break
+                                                            
+                                                            # Visualize predictions vs actual
+                                                            st.write("### Predictions vs Actual")
+                                                            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+                                                            
+                                                            # Training set
+                                                            ax1.scatter(y_train, y_train_pred, alpha=0.5)
+                                                            ax1.plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--')
+                                                            ax1.set_xlabel('Actual')
+                                                            ax1.set_ylabel('Predicted')
+                                                            ax1.set_title('Training Set')
+                                                            
+                                                            # Test set
+                                                            ax2.scatter(y_test, y_test_pred, alpha=0.5)
+                                                            ax2.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+                                                            ax2.set_xlabel('Actual')
+                                                            ax2.set_ylabel('Predicted')
+                                                            ax2.set_title('Test Set')
+                                                            
+                                                            plt.tight_layout()
+                                                            st.pyplot(fig)
+                                                            
+                                                            # Display regression equation
+                                                            eq = f"y = {model.intercept_:.4f}"
+                                                            for i, var in enumerate(independent_vars):
+                                                                eq += f" + ({model.coef_[i]:.4f} × {var})"
+                                                            
+                                                            st.write("### Regression Equation")
+                                                            st.write(eq)
+                                                
+                                                except Exception as e:
+                                                    st.error(f"Error during linear regression: {e}")
+                                    else:
+                                        st.error(f"Dataset {selected_dataset} is not available.")
+                                
+                                # 4. Factor Analysis (PCA) Tab
+                                with analysis_tabs[3]:
+                                    st.write("### Factor Analysis (PCA)")
+                                    st.write("""
+                                    Principal Component Analysis (PCA) reduces dimensionality while preserving variance.
+                                    This analysis helps evaluate if the interpolated data maintains the same underlying factors.
+                                    """)
+                                    
+                                    # Select dataset to analyze
+                                    dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
+                                    selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="pca_dataset")
+                                    
+                                    # Get the selected dataset
+                                    if selected_dataset == "Original Data":
+                                        analysis_data = original_data
+                                        dataset_label = "Original Data"
+                                    else:
+                                        dataset_id = int(selected_dataset.split()[-1])
+                                        dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == dataset_id), None)
+                                        analysis_data = dataset['data'] if dataset else None
+                                        dataset_label = f"Dataset {dataset_id}"
+                                    
+                                    if analysis_data is not None:
+                                        # Parameters for PCA
+                                        with st.expander("PCA Parameters", expanded=True):
+                                            # Get all numeric columns
+                                            numeric_cols = analysis_data.select_dtypes(include=np.number).columns.tolist()
+                                            
+                                            # Select features for PCA
+                                            selected_features = st.multiselect(
+                                                "Select features for PCA:",
+                                                numeric_cols,
+                                                default=numeric_cols[:min(5, len(numeric_cols))]
+                                            )
+                                            
+                                            # Number of components
+                                            n_components = st.slider(
+                                                "Number of principal components:",
+                                                min_value=2,
+                                                max_value=min(len(selected_features), 10),
+                                                value=min(3, len(selected_features))
+                                            )
+                                            
+                                            # Random state
+                                            random_state = st.slider("Random state:", min_value=0, max_value=100, value=42, key="pca_random_state")
+                                        
+                                        # Run PCA
+                                        if st.button("Run PCA", key="run_pca_btn"):
+                                            if len(selected_features) < 2:
+                                                st.error("Please select at least 2 features for PCA.")
+                                            else:
+                                                try:
+                                                    with st.spinner("Running PCA..."):
+                                                        from sklearn.decomposition import PCA
+                                                        from sklearn.preprocessing import StandardScaler
+                                                        
+                                                        # Prepare data
+                                                        pca_data = analysis_data[selected_features].dropna()
+                                                        
+                                                        if len(pca_data) < n_components:
+                                                            st.error(f"Not enough data points ({len(pca_data)}) for {n_components} components after removing missing values.")
+                                                        else:
+                                                            # Scale the data
+                                                            scaler = StandardScaler()
+                                                            scaled_data = scaler.fit_transform(pca_data)
+                                                            
+                                                            # Run PCA
+                                                            pca = PCA(n_components=n_components, random_state=random_state)
+                                                            principal_components = pca.fit_transform(scaled_data)
+                                                            
+                                                            # Create DataFrame with principal components
+                                                            pca_df = pd.DataFrame(
+                                                                data=principal_components,
+                                                                columns=[f'PC{i+1}' for i in range(n_components)]
+                                                            )
+                                                            
+                                                            # Display results
+                                                            st.success(f"PCA completed successfully for {dataset_label}.")
+                                                            
+                                                            # Explained variance
+                                                            st.write("### Explained Variance")
+                                                            explained_variance = pca.explained_variance_ratio_ * 100
+                                                            cumulative_variance = np.cumsum(explained_variance)
+                                                            
+                                                            variance_df = pd.DataFrame({
+                                                                'Principal Component': [f'PC{i+1}' for i in range(n_components)],
+                                                                'Explained Variance (%)': explained_variance,
+                                                                'Cumulative Variance (%)': cumulative_variance
+                                                            })
+                                                            st.dataframe(variance_df)
+                                                            
+                                                            # Visualization of explained variance
+                                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                                            ax.bar(range(1, n_components + 1), explained_variance, alpha=0.7, label='Individual')
+                                                            ax.step(range(1, n_components + 1), cumulative_variance, where='mid', label='Cumulative')
+                                                            ax.set_xlabel('Principal Components')
+                                                            ax.set_ylabel('Explained Variance (%)')
+                                                            ax.set_title('Explained Variance by Principal Components')
+                                                            ax.set_xticks(range(1, n_components + 1))
+                                                            ax.legend()
+                                                            st.pyplot(fig)
+                                                            
+                                                            # Store PCA results
+                                                            if selected_dataset != "Original Data":
+                                                                dataset_id = int(selected_dataset.split()[-1])
+                                                                for ds in st.session_state.convergence_datasets:
+                                                                    if ds['id'] == dataset_id:
+                                                                        ds['convergence_scores']['pca_explained_variance'] = explained_variance.tolist()
+                                                                        ds['convergence_scores']['pca_cumulative_variance'] = cumulative_variance.tolist()
+                                                                        break
+                                                            
+                                                            # Component loadings
+                                                            st.write("### Component Loadings")
+                                                            loadings = pca.components_.T
+                                                            loadings_df = pd.DataFrame(
+                                                                data=loadings,
+                                                                columns=[f'PC{i+1}' for i in range(n_components)],
+                                                                index=selected_features
+                                                            )
+                                                            st.dataframe(loadings_df)
+                                                            
+                                                            # Visualization of first two principal components
+                                                            if n_components >= 2:
+                                                                st.write("### PCA Scatter Plot (First Two Components)")
+                                                                fig, ax = plt.subplots(figsize=(10, 8))
+                                                                scatter = ax.scatter(pca_df['PC1'], pca_df['PC2'], alpha=0.7)
+                                                                ax.set_xlabel(f'PC1 ({explained_variance[0]:.2f}%)')
+                                                                ax.set_ylabel(f'PC2 ({explained_variance[1]:.2f}%)')
+                                                                ax.set_title('PCA: First Two Principal Components')
+                                                                
+                                                                # Add a grid
+                                                                ax.grid(True, linestyle='--', alpha=0.7)
+                                                                
+                                                                # If there are enough data points, add density contours
+                                                                if len(pca_df) > 20:
+                                                                    from scipy.stats import gaussian_kde
+                                                                    
+                                                                    # Calculate the point density
+                                                                    xy = np.vstack([pca_df['PC1'], pca_df['PC2']])
+                                                                    z = gaussian_kde(xy)(xy)
+                                                                    
+                                                                    # Sort the points by density, so that the densest points are plotted last
+                                                                    idx = z.argsort()
+                                                                    x, y, z = pca_df['PC1'][idx], pca_df['PC2'][idx], z[idx]
+                                                                    
+                                                                    plt.scatter(x, y, c=z, s=50, alpha=0.8, cmap='viridis')
+                                                                    plt.colorbar(label='Density')
+                                                                
+                                                                st.pyplot(fig)
+                                                                
+                                                                # Biplot
+                                                                st.write("### PCA Biplot")
+                                                                fig, ax = plt.subplots(figsize=(12, 10))
+                                                                
+                                                                # Plot data points
+                                                                ax.scatter(principal_components[:, 0], principal_components[:, 1], alpha=0.5)
+                                                                
+                                                                # Plot feature vectors
+                                                                for i, feature in enumerate(selected_features):
+                                                                    ax.arrow(0, 0, loadings[i, 0] * max(principal_components[:, 0]), 
+                                                                            loadings[i, 1] * max(principal_components[:, 1]),
+                                                                            head_width=0.05, head_length=0.05, fc='red', ec='red')
+                                                                    plt.text(loadings[i, 0] * max(principal_components[:, 0]) * 1.15, 
+                                                                            loadings[i, 1] * max(principal_components[:, 1]) * 1.15, 
+                                                                            feature, color='red')
+                                                                
+                                                                ax.set_xlabel(f'PC1 ({explained_variance[0]:.2f}%)')
+                                                                ax.set_ylabel(f'PC2 ({explained_variance[1]:.2f}%)')
+                                                                ax.set_title('PCA Biplot')
+                                                                
+                                                                # Set axis limits
+                                                                xlim = np.max(np.abs(principal_components[:, 0])) * 1.2
+                                                                ylim = np.max(np.abs(principal_components[:, 1])) * 1.2
+                                                                ax.set_xlim(-xlim, xlim)
+                                                                ax.set_ylim(-ylim, ylim)
+                                                                
+                                                                # Add a grid
+                                                                ax.grid(True, linestyle='--', alpha=0.7)
+                                                                
+                                                                # Add a unit circle
+                                                                circle = plt.Circle((0, 0), 1, facecolor='none', edgecolor='grey', alpha=0.5)
+                                                                ax.add_patch(circle)
+                                                                
+                                                                st.pyplot(fig)
+                                                
+                                                except Exception as e:
+                                                    st.error(f"Error during PCA: {e}")
+                                    else:
+                                        st.error(f"Dataset {selected_dataset} is not available.")
+                                
+                                # 5. Convergence Evaluation Tab
+                                with analysis_tabs[4]:
+                                    st.write("### Convergence Evaluation")
+                                    st.write("""
+                                    This tab evaluates convergence across all analyzed datasets based on the three analysis methods.
+                                    When results converge, it indicates that the interpolation has stabilized.
+                                    """)
+                                    
+                                    # Check if we have enough datasets analyzed
+                                    analyzed_datasets = [ds for ds in st.session_state.convergence_datasets 
+                                                        if 'convergence_scores' in ds and ds['convergence_scores']]
+                                    
+                                    if not analyzed_datasets:
+                                        st.warning("No analyzed datasets found. Please perform analysis on at least one dataset.")
+                                    elif len(analyzed_datasets) < 2:
+                                        st.info("Only one dataset has been analyzed. Please analyze at least one more dataset to evaluate convergence.")
+                                    else:
+                                        # Show convergence status
+                                        st.write("#### Current Convergence Status")
+                                        st.write(f"Status: {st.session_state.convergence_status}")
+                                        st.write(f"Iterations: {st.session_state.convergence_iterations}")
+                                        
+                                        # Evaluate convergence
+                                        if st.button("Evaluate Convergence", key="evaluate_convergence_btn"):
+                                            # Define convergence thresholds
+                                            kmeans_inertia_threshold = 0.1  # 10% change
+                                            regression_r2_threshold = 0.05  # 5% change
+                                            pca_variance_threshold = 0.05  # 5% change
+                                            
+                                            # Track convergence metrics for each dataset
+                                            convergence_metrics = []
+                                            
+                                            # Evaluate each dataset
+                                            for ds in analyzed_datasets:
+                                                dataset_convergence = {
+                                                    'id': ds['id'],
+                                                    'metrics': {}
+                                                }
+                                                
+                                                scores = ds['convergence_scores']
+                                                
+                                                # Check K-Means convergence
+                                                if 'kmeans_inertia' in scores:
+                                                    dataset_convergence['metrics']['kmeans'] = True
+                                                else:
+                                                    dataset_convergence['metrics']['kmeans'] = False
+                                                
+                                                # Check Regression convergence
+                                                if 'regression_test_r2' in scores:
+                                                    dataset_convergence['metrics']['regression'] = True
+                                                else:
+                                                    dataset_convergence['metrics']['regression'] = False
+                                                
+                                                # Check PCA convergence
+                                                if 'pca_explained_variance' in scores:
+                                                    dataset_convergence['metrics']['pca'] = True
+                                                else:
+                                                    dataset_convergence['metrics']['pca'] = False
+                                                
+                                                # Overall dataset convergence
+                                                methods_present = sum(dataset_convergence['metrics'].values())
+                                                methods_total = len(dataset_convergence['metrics'])
+                                                dataset_convergence['convergence_score'] = methods_present / methods_total if methods_total > 0 else 0
+                                                
+                                                convergence_metrics.append(dataset_convergence)
+                                            
+                                            # Compare datasets for stability (convergence)
+                                            if len(convergence_metrics) >= 2:
+                                                # Sort by ID (iteration order)
+                                                convergence_metrics.sort(key=lambda x: x['id'])
+                                                
+                                                # Check pairwise convergence between consecutive datasets
+                                                pairwise_convergence = []
+                                                for i in range(len(convergence_metrics) - 1):
+                                                    ds1 = next((ds for ds in analyzed_datasets if ds['id'] == convergence_metrics[i]['id']), None)
+                                                    ds2 = next((ds for ds in analyzed_datasets if ds['id'] == convergence_metrics[i+1]['id']), None)
+                                                    
+                                                    if ds1 and ds2:
+                                                        pair_conv = {
+                                                            'pair': f"{ds1['id']} and {ds2['id']}",
+                                                            'metrics': {}
+                                                        }
+                                                        
+                                                        # K-Means convergence
+                                                        if ('kmeans_inertia' in ds1['convergence_scores'] and 
+                                                            'kmeans_inertia' in ds2['convergence_scores']):
+                                                            inertia1 = ds1['convergence_scores']['kmeans_inertia']
+                                                            inertia2 = ds2['convergence_scores']['kmeans_inertia']
+                                                            relative_change = abs(inertia1 - inertia2) / abs(inertia1) if inertia1 != 0 else float('inf')
+                                                            pair_conv['metrics']['kmeans'] = relative_change <= kmeans_inertia_threshold
+                                                        else:
+                                                            pair_conv['metrics']['kmeans'] = False
+                                                        
+                                                        # Regression convergence
+                                                        if ('regression_test_r2' in ds1['convergence_scores'] and 
+                                                            'regression_test_r2' in ds2['convergence_scores']):
+                                                            r2_1 = ds1['convergence_scores']['regression_test_r2']
+                                                            r2_2 = ds2['convergence_scores']['regression_test_r2']
+                                                            relative_change = abs(r2_1 - r2_2) / abs(r2_1) if r2_1 != 0 else float('inf')
+                                                            pair_conv['metrics']['regression'] = relative_change <= regression_r2_threshold
+                                                        else:
+                                                            pair_conv['metrics']['regression'] = False
+                                                        
+                                                        # PCA convergence
+                                                        if ('pca_explained_variance' in ds1['convergence_scores'] and 
+                                                            'pca_explained_variance' in ds2['convergence_scores']):
+                                                            var1 = ds1['convergence_scores']['pca_explained_variance']
+                                                            var2 = ds2['convergence_scores']['pca_explained_variance']
+                                                            if len(var1) == len(var2):
+                                                                # Calculate average change in explained variance
+                                                                changes = [abs(v1 - v2) / abs(v1) if v1 != 0 else float('inf') 
+                                                                        for v1, v2 in zip(var1, var2)]
+                                                                avg_change = sum(changes) / len(changes) if changes else float('inf')
+                                                                pair_conv['metrics']['pca'] = avg_change <= pca_variance_threshold
+                                                            else:
+                                                                pair_conv['metrics']['pca'] = False
+                                                        else:
+                                                            pair_conv['metrics']['pca'] = False
+                                                        
+                                                        # Overall pair convergence
+                                                        methods_converged = sum(pair_conv['metrics'].values())
+                                                        methods_total = len(pair_conv['metrics'])
+                                                        pair_conv['convergence_score'] = methods_converged / methods_total if methods_total > 0 else 0
+                                                        
+                                                        pairwise_convergence.append(pair_conv)
+                                                
+                                                # Display pairwise convergence results
+                                                st.write("#### Pairwise Convergence Analysis")
+                                                
+                                                for pair in pairwise_convergence:
+                                                    st.write(f"**Datasets {pair['pair']}**")
+                                                    
+                                                    metrics_df = pd.DataFrame({
+                                                        'Analysis Method': ['K-Means Clustering', 'Linear Regression', 'PCA'],
+                                                        'Converged': [
+                                                            '✅ Yes' if pair['metrics'].get('kmeans', False) else '❌ No',
+                                                            '✅ Yes' if pair['metrics'].get('regression', False) else '❌ No',
+                                                            '✅ Yes' if pair['metrics'].get('pca', False) else '❌ No'
+                                                        ]
+                                                    })
+                                                    st.dataframe(metrics_df)
+                                                    
+                                                    # Show convergence percentage
+                                                    st.metric("Convergence Score", f"{pair['convergence_score']*100:.1f}%")
+                                                    st.write("---")
+                                                
+                                                # Overall convergence decision
+                                                # If any pair has converged on all methods, we consider the process converged
+                                                converged_pairs = [p for p in pairwise_convergence if p['convergence_score'] >= 0.8]
+                                                
+                                                if converged_pairs:
+                                                    st.success("✅ **CONVERGENCE ACHIEVED!** The interpolation process has stabilized.")
+                                                    st.session_state.convergence_status = "Converged"
+                                                    
+                                                    # Identify the best converged pair and dataset
+                                                    best_pair = max(converged_pairs, key=lambda x: x['convergence_score'])
+                                                    best_dataset_id = int(best_pair['pair'].split(' and ')[1])
+                                                    best_dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == best_dataset_id), None)
+                                                    
+                                                    if best_dataset:
+                                                        st.write(f"**Best converged dataset: Dataset {best_dataset_id}**")
+                                                        st.session_state.closest_convergence_dataset = best_dataset
+                                                else:
+                                                    # Find closest to convergence
+                                                    if pairwise_convergence:
+                                                        closest_pair = max(pairwise_convergence, key=lambda x: x['convergence_score'])
+                                                        closest_score = closest_pair['convergence_score']
+                                                        
+                                                        st.warning(f"⚠️ Not yet converged. Closest pair has convergence score of {closest_score*100:.1f}%")
+                                                        st.info("Continue iteration by taking the last dataset and re-interpolating it.")
+                                                        
+                                                        # Find the latest dataset
+                                                        latest_dataset_id = max(analyzed_datasets, key=lambda x: x['id'])['id']
+                                                        latest_dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == latest_dataset_id), None)
+                                                        
+                                                        if latest_dataset:
+                                                            st.write(f"**Dataset to re-interpolate: Dataset {latest_dataset_id}**")
+                                                            st.session_state.closest_convergence_dataset = latest_dataset
+                                                            st.session_state.convergence_status = "Iterating"
+                                                        
+                                                        # Option to set last dataset for re-interpolation
+                                                        if st.button("Set Latest Dataset for Re-interpolation"):
+                                                            if latest_dataset:
+                                                                st.session_state.interpolated_data = latest_dataset['data'].copy()
+                                                                st.success(f"Dataset {latest_dataset_id} set as data to be re-interpolated.")
+                                                                st.info("Please go back to Step 1: MCMC Interpolation to continue the iteration.")
+                                                    else:
+                                                        st.error("Cannot evaluate convergence. Not enough analyzed pairs.")
+                                            else:
+                                                st.warning("Not enough analyzed datasets to evaluate convergence.")
+                                                
+                                        # Display convergence history
+                                        if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
+                                            st.write("#### Convergence Metrics History")
+                                            
+                                            # Create metrics tracking for visualization
+                                            datasets = [ds for ds in st.session_state.convergence_datasets if 'convergence_scores' in ds]
+                                            
+                                            if datasets:
+                                                # Track metrics across iterations
+                                                iteration_data = {
+                                                    'Dataset ID': [],
+                                                    'K-Means Inertia': [],
+                                                    'Regression R²': [],
+                                                    'PCA Explained Variance (PC1)': []
+                                                }
+                                                
+                                                for ds in sorted(datasets, key=lambda x: x['id']):
+                                                    scores = ds['convergence_scores']
+                                                    iteration_data['Dataset ID'].append(ds['id'])
+                                                    
+                                                    # K-Means
+                                                    if 'kmeans_inertia' in scores:
+                                                        iteration_data['K-Means Inertia'].append(scores['kmeans_inertia'])
+                                                    else:
+                                                        iteration_data['K-Means Inertia'].append(None)
+                                                    
+                                                    # Regression
+                                                    if 'regression_test_r2' in scores:
+                                                        iteration_data['Regression R²'].append(scores['regression_test_r2'])
+                                                    else:
+                                                        iteration_data['Regression R²'].append(None)
+                                                    
+                                                    # PCA
+                                                    if 'pca_explained_variance' in scores and len(scores['pca_explained_variance']) > 0:
+                                                        iteration_data['PCA Explained Variance (PC1)'].append(scores['pca_explained_variance'][0])
+                                                    else:
+                                                        iteration_data['PCA Explained Variance (PC1)'].append(None)
+                                                
+                                                # Plot convergence metrics
+                                                if len(iteration_data['Dataset ID']) > 1:
+                                                    # Create subplots
+                                                    fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
+                                                    
+                                                    # K-Means Inertia
+                                                    valid_kmeans = [i for i, v in enumerate(iteration_data['K-Means Inertia']) if v is not None]
+                                                    if valid_kmeans:
+                                                        axes[0].plot([iteration_data['Dataset ID'][i] for i in valid_kmeans], 
+                                                                    [iteration_data['K-Means Inertia'][i] for i in valid_kmeans], 
+                                                                    'o-', color='blue')
+                                                        axes[0].set_ylabel('Inertia')
+                                                        axes[0].set_title('K-Means Inertia (lower is better)')
+                                                        axes[0].grid(True, linestyle='--', alpha=0.7)
+                                                    else:
+                                                        axes[0].text(0.5, 0.5, 'No K-Means data available', 
+                                                                    horizontalalignment='center', verticalalignment='center',
+                                                                    transform=axes[0].transAxes)
+                                                    
+                                                    # Regression R²
+                                                    valid_reg = [i for i, v in enumerate(iteration_data['Regression R²']) if v is not None]
+                                                    if valid_reg:
+                                                        axes[1].plot([iteration_data['Dataset ID'][i] for i in valid_reg], 
+                                                                    [iteration_data['Regression R²'][i] for i in valid_reg], 
+                                                                    'o-', color='green')
+                                                        axes[1].set_ylabel('R² Score')
+                                                        axes[1].set_title('Regression R² Score (higher is better)')
+                                                        axes[1].grid(True, linestyle='--', alpha=0.7)
+                                                    else:
+                                                        axes[1].text(0.5, 0.5, 'No Regression data available', 
+                                                                    horizontalalignment='center', verticalalignment='center',
+                                                                    transform=axes[1].transAxes)
+                                                    
+                                                    # PCA Explained Variance
+                                                    valid_pca = [i for i, v in enumerate(iteration_data['PCA Explained Variance (PC1)']) if v is not None]
+                                                    if valid_pca:
+                                                        axes[2].plot([iteration_data['Dataset ID'][i] for i in valid_pca], 
+                                                                    [iteration_data['PCA Explained Variance (PC1)'][i] for i in valid_pca], 
+                                                                    'o-', color='purple')
+                                                        axes[2].set_ylabel('Explained Variance (%)')
+                                                        axes[2].set_title('PCA First Component Explained Variance (stability is better)')
+                                                        axes[2].grid(True, linestyle='--', alpha=0.7)
+                                                    else:
+                                                        axes[2].text(0.5, 0.5, 'No PCA data available', 
+                                                                    horizontalalignment='center', verticalalignment='center',
+                                                                    transform=axes[2].transAxes)
+                                                    
+                                                    # X-axis label
+                                                    axes[2].set_xlabel('Dataset ID (Iteration)')
+                                                    
+                                                    plt.tight_layout()
+                                                    st.pyplot(fig)
+                                                
+                                                # Create table of metrics
+                                                st.write("#### Metrics Table")
+                                                metrics_df = pd.DataFrame(iteration_data)
+                                                st.dataframe(metrics_df)
                     
                     # 3. CGAN ANALYSIS TAB
                     with advanced_options[2]:

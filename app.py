@@ -1429,7 +1429,7 @@ with main_container:
                                         consecutive_mode = True
                                         st.info("Running K-Means clustering as part of consecutive analysis...")
                                     
-                                    # Select dataset to analyze
+                                    # Select datasets to analyze
                                     dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
                                     
                                     # In consecutive mode, analyze all selected datasets
@@ -1437,12 +1437,24 @@ with main_container:
                                         selected_datasets = st.session_state.datasets_to_analyze
                                         st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
                                         
-                                        # Process one dataset now, others will be processed in a loop
                                         # Default to first dataset for parameters
                                         selected_dataset = selected_datasets[0] if selected_datasets else dataset_options[0]
                                     else:
-                                        # Regular mode - select a single dataset
-                                        selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="kmeans_dataset")
+                                        # Regular mode - use checkboxes to select multiple datasets
+                                        st.write("### Select datasets to analyze:")
+                                        
+                                        # Create checkboxes for each dataset
+                                        selected_datasets = []
+                                        for ds_option in dataset_options:
+                                            if st.checkbox(ds_option, key=f"kmeans_dataset_{ds_option}"):
+                                                selected_datasets.append(ds_option)
+                                        
+                                        if not selected_datasets:
+                                            st.warning("Please select at least one dataset to analyze.")
+                                            selected_dataset = dataset_options[0]  # Default for parameters only
+                                        else:
+                                            st.success(f"Selected {len(selected_datasets)} datasets for analysis.")
+                                            selected_dataset = selected_datasets[0]  # Use first selected for parameters
                                     
                                     # Get the selected dataset for parameters
                                     if selected_dataset == "Original Data":
@@ -1497,10 +1509,11 @@ with main_container:
                                                     st.session_state.current_analysis_step = 2
                                             else:
                                                 try:
-                                                    # In consecutive mode with multiple datasets selected
-                                                    if consecutive_mode and st.session_state.datasets_to_analyze and len(st.session_state.datasets_to_analyze) > 0:
+                                                    # Either in consecutive mode or with multiple datasets selected in normal mode
+                                                    if (consecutive_mode and st.session_state.datasets_to_analyze and len(st.session_state.datasets_to_analyze) > 0) or \
+                                                       (not consecutive_mode and len(selected_datasets) > 0):
                                                         # Process each selected dataset in turn
-                                                        datasets_to_process = st.session_state.datasets_to_analyze
+                                                        datasets_to_process = st.session_state.datasets_to_analyze if consecutive_mode else selected_datasets
                                                         
                                                         # Create dictionary to store results for all datasets
                                                         all_kmeans_results = {}
@@ -1733,7 +1746,7 @@ with main_container:
                                     We'll use it to evaluate if interpolated data maintains the same variable relationships as the original data.
                                     """)
                                     
-                                    # Select dataset to analyze
+                                    # Select datasets to analyze
                                     dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
                                     
                                     # In consecutive mode, analyze all selected datasets
@@ -1741,12 +1754,24 @@ with main_container:
                                         selected_datasets = st.session_state.datasets_to_analyze
                                         st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
                                         
-                                        # Process one dataset now, others will be processed in a loop
                                         # Default to first dataset for parameters
                                         selected_dataset = selected_datasets[0] if selected_datasets else dataset_options[0]
                                     else:
-                                        # Regular mode - select a single dataset
-                                        selected_dataset = st.selectbox("Select dataset to analyze:", dataset_options, key="regression_dataset")
+                                        # Regular mode - use checkboxes to select multiple datasets
+                                        st.write("### Select datasets to analyze:")
+                                        
+                                        # Create checkboxes for each dataset
+                                        selected_datasets = []
+                                        for ds_option in dataset_options:
+                                            if st.checkbox(ds_option, key=f"regression_dataset_{ds_option}"):
+                                                selected_datasets.append(ds_option)
+                                        
+                                        if not selected_datasets:
+                                            st.warning("Please select at least one dataset to analyze.")
+                                            selected_dataset = dataset_options[0]  # Default for parameters only
+                                        else:
+                                            st.success(f"Selected {len(selected_datasets)} datasets for analysis.")
+                                            selected_dataset = selected_datasets[0]  # Use first selected for parameters
                                     
                                     # Get the selected dataset for parameters
                                     if selected_dataset == "Original Data":
@@ -1817,10 +1842,11 @@ with main_container:
                                                     st.session_state.current_analysis_step = 3
                                             else:
                                                 try:
-                                                    # In consecutive mode with multiple datasets selected
-                                                    if consecutive_mode and st.session_state.datasets_to_analyze and len(st.session_state.datasets_to_analyze) > 0:
+                                                    # Either in consecutive mode or with multiple datasets selected in normal mode
+                                                    if (consecutive_mode and st.session_state.datasets_to_analyze and len(st.session_state.datasets_to_analyze) > 0) or \
+                                                       (not consecutive_mode and len(selected_datasets) > 0):
                                                         # Process each selected dataset in turn
-                                                        datasets_to_process = st.session_state.datasets_to_analyze
+                                                        datasets_to_process = st.session_state.datasets_to_analyze if consecutive_mode else selected_datasets
                                                         
                                                         # Create dictionary to store results for all datasets
                                                         all_regression_results = {}

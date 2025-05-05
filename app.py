@@ -1566,8 +1566,19 @@ with main_container:
                                                                     ds_id = int(selected_ds.split()[-1])
                                                                     for ds in st.session_state.convergence_datasets:
                                                                         if ds['id'] == ds_id:
-                                                                            ds['convergence_scores']['kmeans_inertia'] = inertia
-                                                                            ds['convergence_scores']['kmeans_cluster_counts'] = cluster_data['Cluster'].value_counts().sort_index().to_dict()
+                                                                            # Initialize convergence_scores if it doesn't exist
+                                                                            if 'convergence_scores' not in ds:
+                                                                                ds['convergence_scores'] = {}
+                                                                            
+                                                                            # Create a copy of the existing scores
+                                                                            convergence_scores = ds['convergence_scores']
+                                                                            
+                                                                            # Update with new scores
+                                                                            convergence_scores['kmeans_inertia'] = inertia
+                                                                            convergence_scores['kmeans_cluster_counts'] = cluster_data['Cluster'].value_counts().sort_index().to_dict()
+                                                                            
+                                                                            # Update the scores in the dataset
+                                                                            ds['convergence_scores'] = convergence_scores
                                                                             break
                                                                 
                                                                 # Store results for later display if needed
@@ -1683,8 +1694,19 @@ with main_container:
                                                                     dataset_id = int(selected_dataset.split()[-1])
                                                                     for ds in st.session_state.convergence_datasets:
                                                                         if ds['id'] == dataset_id:
-                                                                            ds['convergence_scores']['kmeans_inertia'] = inertia
-                                                                            ds['convergence_scores']['kmeans_cluster_counts'] = cluster_counts.to_dict()
+                                                                            # Initialize convergence_scores if it doesn't exist
+                                                                            if 'convergence_scores' not in ds:
+                                                                                ds['convergence_scores'] = {}
+                                                                            
+                                                                            # Create a copy of the existing scores
+                                                                            convergence_scores = ds['convergence_scores']
+                                                                            
+                                                                            # Update with new scores
+                                                                            convergence_scores['kmeans_inertia'] = inertia
+                                                                            convergence_scores['kmeans_cluster_counts'] = cluster_counts.to_dict()
+                                                                            
+                                                                            # Update the scores in the dataset
+                                                                            ds['convergence_scores'] = convergence_scores
                                                                             break
                                                                 
                                                                 # Create a 2D visualization if possible
@@ -1911,13 +1933,20 @@ with main_container:
                                                                             # Initialize convergence_scores if it doesn't exist
                                                                             if 'convergence_scores' not in ds:
                                                                                 ds['convergence_scores'] = {}
+                                                                            
+                                                                            # Create a copy of the existing scores
+                                                                            convergence_scores = ds['convergence_scores']
+                                                                            
                                                                             # Store regression results with proper keys
-                                                                            ds['convergence_scores']['regression_test_r2'] = test_r2
-                                                                            ds['convergence_scores']['regression_test_mse'] = test_mse
-                                                                            ds['convergence_scores']['regression_coefficients'] = {
+                                                                            convergence_scores['regression_test_r2'] = test_r2
+                                                                            convergence_scores['regression_test_mse'] = test_mse
+                                                                            convergence_scores['regression_coefficients'] = {
                                                                                 'intercept': float(model.intercept_),
                                                                                 'coef': {feat: float(coef) for feat, coef in zip(independent_vars, model.coef_)}
                                                                             }
+                                                                            
+                                                                            # Update the convergence_scores in the dataset
+                                                                            ds['convergence_scores'] = convergence_scores
                                                                             found_dataset = True
                                                                             break
                                                                     
@@ -2447,8 +2476,19 @@ with main_container:
                                                                     dataset_id = int(selected_dataset.split()[-1])
                                                                     for ds in st.session_state.convergence_datasets:
                                                                         if ds['id'] == dataset_id:
-                                                                            ds['convergence_scores']['pca_explained_variance'] = explained_variance.tolist()
-                                                                            ds['convergence_scores']['pca_cumulative_variance'] = cumulative_variance.tolist()
+                                                                            # Initialize convergence_scores if it doesn't exist
+                                                                            if 'convergence_scores' not in ds:
+                                                                                ds['convergence_scores'] = {}
+                                                                            
+                                                                            # Create a copy of the existing scores
+                                                                            convergence_scores = ds['convergence_scores']
+                                                                            
+                                                                            # Update with new scores
+                                                                            convergence_scores['pca_explained_variance'] = explained_variance.tolist()
+                                                                            convergence_scores['pca_cumulative_variance'] = cumulative_variance.tolist()
+                                                                            
+                                                                            # Update the scores in the dataset
+                                                                            ds['convergence_scores'] = convergence_scores
                                                                             break
                                                             
                                                             # Component loadings

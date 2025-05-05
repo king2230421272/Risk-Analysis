@@ -5,6 +5,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import json
+from io import StringIO  # Import StringIO from io module
 
 # Get PostgreSQL connection details from environment variables
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -229,7 +230,7 @@ class DatabaseHandler:
                 raise ValueError("Dataset not found")
             
             # Convert CSV string back to DataFrame
-            df = pd.read_csv(pd.StringIO(dataset.csv_data))
+            df = pd.read_csv(StringIO(dataset.csv_data))
             
             return df
             

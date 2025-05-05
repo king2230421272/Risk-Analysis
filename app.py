@@ -2867,7 +2867,27 @@ with main_container:
                         if not interpolation_data_available:
                             st.info("Please run MCMC interpolation or import interpolated data before performing distribution testing.")
                         else:
-                            # Determine which interpolated data to use
+                            # Check if we're in consecutive analysis mode
+                            consecutive_mode = False
+                            if ('consecutive_analysis' in st.session_state and 
+                                st.session_state.consecutive_analysis and 
+                                st.session_state.current_analysis_step == 4):
+                                consecutive_mode = True
+                                st.info("Running Distribution Testing as part of consecutive analysis...")
+                            
+                            # In consecutive mode, analyze all selected datasets
+                            if consecutive_mode and st.session_state.datasets_to_analyze:
+                                selected_datasets = st.session_state.datasets_to_analyze
+                                st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
+                                
+                                # Process one dataset now, others will be processed in a loop
+                                # Default to first dataset for parameters
+                                selected_dataset = selected_datasets[0] if selected_datasets else "Original Data"
+                            else:
+                                # Regular mode - use single dataset
+                                selected_dataset = "Original Data"
+                            
+                            # Determine which interpolated data to use (for parameters)
                             if 'interpolated_result' in st.session_state:
                                 test_data = st.session_state.interpolated_result
                             else:
@@ -2887,20 +2907,52 @@ with main_container:
                             
                             # Run tests button
                             if len(test_options) > 0:
-                                if st.button("Run Distribution Tests", key="dist_test_btn"):
+                                button_clicked = st.button("Run Distribution Tests", key="dist_test_btn")
+                                
+                                # Either manual click or consecutive mode trigger
+                                if button_clicked or (consecutive_mode and st.session_state.datasets_to_analyze):
                                     try:
-                                        # Store results
-                                        test_results = {}
+                                        # Store results for all datasets
+                                        all_datasets_results = {}
                                         
                                         with st.spinner("Running statistical tests..."):
-                                            # Run selected tests
-                                            if "Kolmogorov-Smirnov Test" in test_options:
-                                                ks_results = advanced_processor.ks_distribution_test(
-                                                    original_data, 
-                                                    test_data,
-                                                    alpha=alpha
-                                                )
-                                                test_results["ks_test"] = ks_results
+                                            # Determine which datasets to process
+                                            datasets_to_process = []
+                                            if consecutive_mode and st.session_state.datasets_to_analyze:
+                                                datasets_to_process = st.session_state.datasets_to_analyze
+                                                st.info(f"Processing {len(datasets_to_process)} datasets for distribution testing...")
+                                            else:
+                                                # Just process the selected dataset in regular mode
+                                                datasets_to_process = [selected_dataset]
+                                            
+                                            # Process each dataset
+                                            for ds_label in datasets_to_process:
+                                                # Get the interpolated dataset
+                                                if ds_label == "Original Data":
+                                                    curr_data = test_data  # Use whatever was last set
+                                                    curr_label = "Original Data"
+                                                else:
+                                                    ds_id = int(ds_label.split()[-1])
+                                                    curr_dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
+                                                    if not curr_dataset:
+                                                        st.warning(f"Dataset {ds_label} not found. Skipping.")
+                                                        continue
+                                                    curr_data = curr_dataset['data']
+                                                    curr_label = f"Dataset {ds_id}"
+                                                
+                                                # Store results for this dataset
+                                                test_results = {}
+                                                
+                                                st.write(f"#### Processing {curr_label}")
+                                                
+                                                # Run selected tests
+                                                if "Kolmogorov-Smirnov Test" in test_options:
+                                                    ks_results = advanced_processor.ks_distribution_test(
+                                                        original_data, 
+                                                        curr_data,
+                                                        alpha=alpha
+                                                    )
+                                                    test_results["ks_test"] = ks_results
                                                 
                                                 st.subheader("Kolmogorov-Smirnov Test Results")
                                                 st.write("""

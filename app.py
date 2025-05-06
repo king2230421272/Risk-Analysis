@@ -1126,10 +1126,10 @@ with main_container:
                             # Add control for the number of datasets to fill
                             st.write("#### Multiple Dataset Generation")
                             st.write("Generate multiple interpolated datasets with identical parameters for convergence testing:")
-                            generate_multiple = st.checkbox("Generate multiple datasets", value=False)
+                            generate_multiple = st.checkbox("Generate multiple datasets", value=True)
                             
                             if generate_multiple:
-                                num_datasets = st.slider("Number of datasets to generate", min_value=1, max_value=10, value=3, step=1)
+                                num_datasets = st.slider("Number of datasets to generate", min_value=1, max_value=10, value=5, step=1)
                                 dataset_prefix = st.text_input("Dataset name prefix", value="MCMC_Interpolation")
                         
                         # Run MCMC interpolation button
@@ -1311,6 +1311,14 @@ with main_container:
                             This analysis uses the MCMC-interpolated dataset from the previous step to run multiple analytical 
                             methods and evaluate the reliability of imputed values.
                             """)
+                            
+                            # Create tabs for multiple imputation analysis sections
+                            multiple_imputation_tabs = st.tabs([
+                                "Dataset Selection",
+                                "Analyze Imputed Data",
+                                "Evaluate Convergence",
+                                "Save Analysis Results"
+                            ])
                             
                             # Reference the dataset from MCMC interpolation
                             if 'interpolated_result' in st.session_state and st.session_state.interpolated_result is not None:

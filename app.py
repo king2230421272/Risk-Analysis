@@ -12,6 +12,8 @@ from modules.risk_assessment import RiskAssessor
 from utils.data_handler import DataHandler
 from utils.visualization import Visualizer
 from utils.database import DatabaseHandler
+from cgan_analysis_tab import cgan_analysis_tab
+from multiple_imputation_analysis_tab import multiple_imputation_analysis_tab
 
 # Set page configuration
 st.set_page_config(

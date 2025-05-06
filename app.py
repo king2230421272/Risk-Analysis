@@ -1393,25 +1393,15 @@ with main_container:
                                     # Execute button
                                     if st.button("Run Selected Analytical Methods"):
                                         with st.spinner("Running analytical methods on all MCMC-generated datasets..."):
-                                            # Check if we have multiple datasets from MCMC
+                                            # Only analyze datasets from MCMC-based Interpolation
                                             datasets_to_analyze = []
                                             
-                                            # First add the current interpolated result
+                                            # Only add the MCMC interpolated result - this is the dataset we want to analyze
                                             if 'interpolated_result' in st.session_state and st.session_state.interpolated_result is not None:
                                                 datasets_to_analyze.append({
-                                                    'name': 'Current Interpolated Dataset',
+                                                    'name': 'MCMC_Interpolated_Dataset',
                                                     'data': st.session_state.interpolated_result
                                                 })
-                                                
-                                            # Then add all datasets from convergence_datasets (if any)
-                                            if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
-                                                for ds in st.session_state.convergence_datasets:
-                                                    if 'data' in ds and ds['data'] is not None:
-                                                        datasets_to_analyze.append({
-                                                            'name': ds.get('name', f"Dataset {ds.get('id', 'unknown')}"),
-                                                            'data': ds['data'],
-                                                            'id': ds.get('id')
-                                                        })
                                             
                                             # Check if we have datasets to analyze
                                             if not datasets_to_analyze:
@@ -1428,11 +1418,13 @@ with main_container:
                                                     data = dataset_info['data']
                                                     dataset_name = dataset_info['name']
                                                     
-                                                    st.subheader(f"Analysis for {dataset_name}")
-                                                    
-                                                    # Placeholder for results
-                                                    method_results = {}
-                                                    convergence_scores = {}
+                                                    # Make Analysis for MCMC_Interpolation collapsible and hidden by default
+                                                    with st.expander(f"Analysis for {dataset_name}", expanded=False):
+                                                        st.info("This section contains detailed analysis results for the MCMC-interpolated dataset")
+                                                        
+                                                        # Placeholder for results
+                                                        method_results = {}
+                                                        convergence_scores = {}
                                                     
                                                     # Run each selected method for this dataset
                                                     for method in selected_methods:

@@ -3030,10 +3030,18 @@ with main_container:
                                         noise_samples = st.slider("Number of synthetic samples per condition:", 
                                                                 min_value=10, max_value=500, value=100, step=10)
                                         
+                                        # Use custom condition values if selected earlier
+                                        custom_conditions = None
+                                        if 'condition_input_mode' in st.session_state and 'condition_values' in st.session_state:
+                                            if st.session_state.condition_input_mode == "Define specific values":
+                                                custom_conditions = st.session_state.condition_values
+                                                st.success(f"Using custom condition values: {custom_conditions}")
+                                        
                                         # Analyze using the trained model and the selected evaluation data
                                         analysis_results = advanced_processor.cgan_analysis(
                                             eval_data,  # Use the selected evaluation data
-                                            noise_samples=noise_samples
+                                            noise_samples=noise_samples,
+                                            custom_conditions=custom_conditions
                                         )
                                         
                                         st.success("CGAN analysis completed successfully!")

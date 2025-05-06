@@ -1412,13 +1412,13 @@ with main_container:
                                         else:
                                             st.error("One or both of the selected datasets are not available.")
                                 
-                                # 2. Cluster Analysis (K-Means) Tab
+                                # 2. Regression Analysis Tab
                                 with analysis_tabs[1]:
-                                    st.write("### Cluster Analysis (K-Means)")
+                                    st.write("### Regression Analysis")
                                     st.write("""
-                                    K-Means clustering groups data points into k clusters based on similarity.
-                                    This analysis helps evaluate if the interpolated data preserves the 
-                                    cluster structure of the original data.
+                                    Linear Regression analysis evaluates relationships between variables.
+                                    This helps determine if interpolated data preserves the statistical 
+                                    relationships present in the original data.
                                     """)
                                     
                                     # Check if we're in consecutive analysis mode
@@ -1427,7 +1427,7 @@ with main_container:
                                         st.session_state.consecutive_analysis and 
                                         st.session_state.current_analysis_step == 1):
                                         consecutive_mode = True
-                                        st.info("Running K-Means clustering as part of consecutive analysis...")
+                                        st.info("Running Linear Regression analysis as part of consecutive analysis...")
                                     
                                     # Select datasets to analyze
                                     dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
@@ -1496,7 +1496,7 @@ with main_container:
                                             # In consecutive mode, automatically trigger analysis
                                             run_button_clicked = st.session_state.current_analysis_step == 1
                                             if run_button_clicked:
-                                                st.success("Automatically running K-Means clustering for all selected datasets...")
+                                                st.success("Automatically running Linear Regression for all selected datasets...")
                                         else:
                                             # In regular mode, user has to click button
                                             run_button_clicked = st.button("Run K-Means Clustering", key="run_kmeans_btn")
@@ -1760,7 +1760,7 @@ with main_container:
                                     else:
                                         st.error(f"Dataset {selected_dataset} is not available.")
                                 
-                                # 3. Regression Analysis Tab
+                                # 3. Cluster Analysis (K-Means) Tab
                                 with analysis_tabs[2]:
                                     st.write("### Regression Analysis")
                                     st.write("""

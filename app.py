@@ -1106,7 +1106,7 @@ with main_container:
                     # Create advanced processing options with tabs
                     advanced_options = st.tabs([
                         "Step 1: MCMC Interpolation", 
-                        "Step 2: Multiple Imputation Analysis",
+                        "Step 2: Modules Analysis",
                         "Step 3: CGAN Analysis", 
                         "Step 4: Distribution Testing", 
                         "Step 5: Outlier Detection"
@@ -1306,21 +1306,13 @@ with main_container:
                                 else:
                                     st.write("Single imputed dataset available")
                             
-                            # Add multiple fill analysis section (clean implementation)
-                            st.subheader("Multiple Fill Analysis")
+                            # Add modules analysis section
+                            st.subheader("Modules Analysis")
                             
                             st.write("""
                             This analysis uses the MCMC-interpolated dataset from the previous step to run multiple analytical 
                             methods and evaluate the reliability of imputed values.
                             """)
-                            
-                            # Create tabs for multiple imputation analysis sections
-                            multiple_imputation_tabs = st.tabs([
-                                "Dataset Selection",
-                                "Analyze Imputed Data",
-                                "Evaluate Convergence",
-                                "Save Analysis Results"
-                            ])
                             
                             # Reference the dataset from MCMC interpolation
                             if 'interpolated_result' in st.session_state and st.session_state.interpolated_result is not None:
@@ -1890,136 +1882,134 @@ with main_container:
                                 else:
                                     st.warning("Please select at least one analytical method to continue.")
                                 
-                            with multiple_imputation_tabs[2]:
-                                # Evaluate Convergence tab
-                                if 'convergence_datasets' not in st.session_state:
-                                    st.session_state.convergence_datasets = []
+                            # Evaluate Convergence section
+                            if 'convergence_datasets' not in st.session_state:
+                                st.session_state.convergence_datasets = []
+                                
+                            if not st.session_state.convergence_datasets:
+                                st.warning("No analysis results available. Please run analysis in the Analyze Imputed Data tab.")
+                            else:
+                                st.write("### Convergence Evaluation")
+                                st.write("Evaluate the convergence of multiple imputations.")
+                                
+                                # Show available datasets
+                                st.write("#### Available Analysis Results")
+                                results_df = pd.DataFrame([
+                                    {
+                                        'ID': a['id'],
+                                        'Dataset': a['name'],
+                                        'Methods': ", ".join(a.get('methods', [])),
+                                        'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
+                                    }
+                                    for a in st.session_state.convergence_datasets
+                                ])
+                                
+                                st.dataframe(results_df)
+                                
+                                # Select datasets to compare
+                                selected_ids = st.multiselect(
+                                    "Select analysis results to compare:",
+                                    options=[a['id'] for a in st.session_state.convergence_datasets],
+                                    default=[]
+                                )
+                                
+                                if selected_ids:
+                                    # Get selected analyses
+                                    selected_analyses = [a for a in st.session_state.convergence_datasets if a['id'] in selected_ids]
                                     
-                                if not st.session_state.convergence_datasets:
-                                    st.warning("No analysis results available. Please run analysis in the Analyze Imputed Data tab.")
-                                else:
-                                    st.write("### Convergence Evaluation")
-                                    st.write("Evaluate the convergence of multiple imputations.")
-                                    
-                                    # Show available datasets
-                                    st.write("#### Available Analysis Results")
-                                    results_df = pd.DataFrame([
-                                        {
-                                            'ID': a['id'],
-                                            'Dataset': a['name'],
-                                            'Methods': ", ".join(a.get('methods', [])),
-                                            'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
-                                        }
-                                        for a in st.session_state.convergence_datasets
-                                    ])
-                                    
-                                    st.dataframe(results_df)
-                                    
-                                    # Select datasets to compare
-                                    selected_ids = st.multiselect(
-                                        "Select analysis results to compare:",
-                                        options=[a['id'] for a in st.session_state.convergence_datasets],
-                                        default=[]
-                                    )
-                                    
-                                    if selected_ids:
-                                        # Get selected analyses
-                                        selected_analyses = [a for a in st.session_state.convergence_datasets if a['id'] in selected_ids]
+                                    if len(selected_analyses) > 1:
+                                        st.write("### Convergence Statistics")
                                         
-                                        if len(selected_analyses) > 1:
-                                            st.write("### Convergence Statistics")
+                                        # Prepare data for comparison
+                                        comparison_data = []
+                                        
+                                        for analysis in selected_analyses:
+                                            # Extract relevant metrics from each analysis result
+                                            metrics = {
+                                                'ID': analysis['id'],
+                                                'Dataset': analysis['name']
+                                            }
                                             
-                                            # Prepare data for comparison
-                                            comparison_data = []
+                                            # Add convergence scores
+                                            for key, value in analysis.get('convergence_scores', {}).items():
+                                                metrics[key] = value
                                             
-                                            for analysis in selected_analyses:
-                                                # Extract relevant metrics from each analysis result
-                                                metrics = {
-                                                    'ID': analysis['id'],
-                                                    'Dataset': analysis['name']
-                                                }
+                                            comparison_data.append(metrics)
+                                        
+                                        # Display comparison table
+                                        comparison_df = pd.DataFrame(comparison_data)
+                                        st.dataframe(comparison_df)
+                                        
+                                        # Calculate variation statistics
+                                        if len(comparison_data) > 1:
+                                            st.write("#### Variation Between Imputations")
+                                            
+                                            numeric_cols = comparison_df.select_dtypes(include=np.number).columns
+                                            if len(numeric_cols) > 0:
+                                                # Calculate coefficient of variation (CV) for each metric
+                                                variation_stats = {}
                                                 
-                                                # Add convergence scores
-                                                for key, value in analysis.get('convergence_scores', {}).items():
-                                                    metrics[key] = value
-                                                
-                                                comparison_data.append(metrics)
-                                            
-                                            # Display comparison table
-                                            comparison_df = pd.DataFrame(comparison_data)
-                                            st.dataframe(comparison_df)
-                                            
-                                            # Calculate variation statistics
-                                            if len(comparison_data) > 1:
-                                                st.write("#### Variation Between Imputations")
-                                                
-                                                numeric_cols = comparison_df.select_dtypes(include=np.number).columns
-                                                if len(numeric_cols) > 0:
-                                                    # Calculate coefficient of variation (CV) for each metric
-                                                    variation_stats = {}
-                                                    
-                                                    for col in numeric_cols:
-                                                        values = comparison_df[col].dropna()
-                                                        if len(values) > 1:
-                                                            mean = values.mean()
-                                                            std = values.std()
-                                                            cv = (std / mean) * 100 if mean != 0 else float('nan')
-                                                            
-                                                            variation_stats[col] = {
-                                                                'Mean': mean,
-                                                                'Std': std,
-                                                                'CV (%)': cv
-                                                            }
-                                                    
-                                                    if variation_stats:
-                                                        var_df = pd.DataFrame(variation_stats).T
-                                                        st.dataframe(var_df)
+                                                for col in numeric_cols:
+                                                    values = comparison_df[col].dropna()
+                                                    if len(values) > 1:
+                                                        mean = values.mean()
+                                                        std = values.std()
+                                                        cv = (std / mean) * 100 if mean != 0 else float('nan')
                                                         
-                                                        # Interpret convergence
-                                                        st.write("#### Convergence Interpretation")
+                                                        variation_stats[col] = {
+                                                            'Mean': mean,
+                                                            'Std': std,
+                                                            'CV (%)': cv
+                                                        }
+                                                
+                                                if variation_stats:
+                                                    var_df = pd.DataFrame(variation_stats).T
+                                                    st.dataframe(var_df)
+                                                    
+                                                    # Interpret convergence
+                                                    st.write("#### Convergence Interpretation")
+                                                    
+                                                    cv_values = var_df['CV (%)'].dropna()
+                                                    if len(cv_values) > 0:
+                                                        avg_cv = cv_values.mean()
                                                         
-                                                        cv_values = var_df['CV (%)'].dropna()
-                                                        if len(cv_values) > 0:
-                                                            avg_cv = cv_values.mean()
-                                                            
-                                                            if avg_cv < 5:
-                                                                st.success(f"Good convergence (Average CV: {avg_cv:.2f}%). The multiple imputations have converged well.")
-                                                            elif avg_cv < 10:
-                                                                st.info(f"Acceptable convergence (Average CV: {avg_cv:.2f}%). The multiple imputations show reasonable consistency.")
-                                                            else:
-                                                                st.warning(f"Poor convergence (Average CV: {avg_cv:.2f}%). Consider running more imputations or reviewing the imputation model.")
-                                                    else:
-                                                        st.warning("No comparable numeric metrics found across the selected analyses.")
+                                                        if avg_cv < 5:
+                                                            st.success(f"Good convergence (Average CV: {avg_cv:.2f}%). The multiple imputations have converged well.")
+                                                        elif avg_cv < 10:
+                                                            st.info(f"Acceptable convergence (Average CV: {avg_cv:.2f}%). The multiple imputations show reasonable consistency.")
+                                                        else:
+                                                            st.warning(f"Poor convergence (Average CV: {avg_cv:.2f}%). Consider running more imputations or reviewing the imputation model.")
                                                 else:
-                                                    st.warning("No numeric metrics available for convergence evaluation.")
-                                        else:
-                                            st.warning("Please select at least two analysis results to compare convergence.")
-                                
-                            # Add database tab for storing and retrieving analysis results
-                            with multiple_imputation_tabs[3]:
-                                st.write("### Save and Load Analysis Results")
-                                
-                                # Save current results
-                                if st.button("Save Current Analysis Results to Database"):
-                                    if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
-                                        try:
-                                            # Use SQLAlchemy to save to database
-                                            # This is a placeholder - actual implementation would depend on your database schema
-                                            st.success("Analysis results saved to database.")
-                                        except Exception as e:
-                                            st.error(f"Error saving to database: {str(e)}")
+                                                    st.warning("No comparable numeric metrics found across the selected analyses.")
+                                            else:
+                                                st.warning("No numeric metrics available for convergence evaluation.")
                                     else:
-                                        st.warning("No analysis results available to save.")
+                                        st.warning("Please select at least two analysis results to compare convergence.")
                                 
-                                # Load previous results
-                                st.write("#### Load Previous Analysis Results")
-                                if st.button("Load Analysis Results from Database"):
+                            # Add database section for storing and retrieving analysis results
+                            st.write("### Save and Load Analysis Results")
+                            
+                            # Save current results
+                            if st.button("Save Current Analysis Results to Database"):
+                                if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
                                     try:
-                                        # Use SQLAlchemy to load from database
+                                        # Use SQLAlchemy to save to database
                                         # This is a placeholder - actual implementation would depend on your database schema
-                                        st.info("This would load previous analysis results from the database.")
+                                        st.success("Analysis results saved to database.")
                                     except Exception as e:
-                                        st.error(f"Error loading from database: {str(e)}")
+                                        st.error(f"Error saving to database: {str(e)}")
+                                else:
+                                    st.warning("No analysis results available to save.")
+                            
+                            # Load previous results
+                            st.write("#### Load Previous Analysis Results")
+                            if st.button("Load Analysis Results from Database"):
+                                try:
+                                    # Use SQLAlchemy to load from database
+                                    # This is a placeholder - actual implementation would depend on your database schema
+                                    st.info("This would load previous analysis results from the database.")
+                                except Exception as e:
+                                    st.error(f"Error loading from database: {str(e)}")
                             
                     # End of the Multiple Imputation Analysis module
 

@@ -219,24 +219,51 @@ with main_container:
         # Select active dataset for analysis
         st.subheader("Select Active Dataset")
         
-        dataset_options = ["None"]
-        if st.session_state.original_data is not None:
-            dataset_options.append("Original Data")
-        if st.session_state.interpolated_data is not None:
-            dataset_options.append("Interpolated Data")
+        # Always show two options, default to Interpolated Data
+        dataset_options = ["Original Data", "Interpolated Data"]
+        
+        # Check if data is available
+        original_data_available = st.session_state.original_data is not None
+        interpolated_data_available = st.session_state.interpolated_data is not None
+        
+        # Show warning if no data is available
+        if not original_data_available and not interpolated_data_available:
+            st.warning("No datasets available. Please import or generate data first.")
+        
+        # Show dataset status
+        status_col1, status_col2 = st.columns(2)
+        with status_col1:
+            status_text = "✅ Available" if original_data_available else "❌ Not loaded"
+            st.write(f"Original Data: {status_text}")
+        
+        with status_col2:
+            status_text = "✅ Available" if interpolated_data_available else "❌ Not loaded"
+            st.write(f"Interpolated Data: {status_text}")
+        
+        # Default to Interpolated Data if available, otherwise Original Data
+        default_index = 1 if interpolated_data_available else 0
             
         st.session_state.active_dataset = st.radio(
-            "Select which dataset to use for analysis:",
-            dataset_options
+            "Select dataset for analysis:",
+            dataset_options,
+            index=default_index
         )
         
         # Set the active dataset
         if st.session_state.active_dataset == "Original Data":
-            st.session_state.data = st.session_state.original_data
-            st.success("Original data set as active dataset for analysis.")
+            if original_data_available:
+                st.session_state.data = st.session_state.original_data
+                st.success("Original data set as active dataset for analysis.")
+            else:
+                st.warning("Original data not loaded. Please import data first.")
+                st.session_state.data = None
         elif st.session_state.active_dataset == "Interpolated Data":
-            st.session_state.data = st.session_state.interpolated_data
-            st.success("Interpolated data set as active dataset for analysis.")
+            if interpolated_data_available:
+                st.session_state.data = st.session_state.interpolated_data
+                st.success("Interpolated data set as active dataset for analysis.")
+            else:
+                st.warning("Interpolated data not loaded. Please run MCMC interpolation first.")
+                st.session_state.data = None
         else:
             st.session_state.data = None
             

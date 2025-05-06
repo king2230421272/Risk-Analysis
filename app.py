@@ -1531,9 +1531,8 @@ with main_container:
                                                             }
                                                         
                                                         elif method == "K-Means Clustering" and method in method_params:
+                                                            # Get parameters outside the expander
                                                             params = method_params[method]
-                                                            
-                                                            # Get features for clustering
                                                             features = params["features"]
                                                             n_clusters = params["n_clusters"]
                                                             
@@ -1541,7 +1540,7 @@ with main_container:
                                                             if len(features) < 2:
                                                                 st.error(f"Need at least two features for {method}.")
                                                                 continue
-                                                                
+                                                            
                                                             # Prepare the data
                                                             from sklearn.preprocessing import StandardScaler
                                                             from sklearn.cluster import KMeans
@@ -1560,46 +1559,48 @@ with main_container:
                                                             clustered_data = X.copy()
                                                             clustered_data['Cluster'] = clusters
                                                             
-                                                            # Display clustered data
-                                                            st.write("#### Sample of Clustered Data")
-                                                            st.dataframe(clustered_data.head(10))
-                                                            
-                                                            # Display cluster statistics
-                                                            st.write("#### Cluster Statistics")
-                                                            cluster_stats = clustered_data.groupby('Cluster').agg(['mean', 'std'])
-                                                            st.dataframe(cluster_stats)
-                                                            
                                                             # Store inertia for convergence analysis
                                                             convergence_scores['kmeans_inertia'] = kmeans.inertia_
                                                             
-                                                            # Visualize clusters (first two dimensions)
-                                                            if len(features) >= 2:
-                                                                fig, ax = plt.subplots(figsize=(10, 6))
-                                                                scatter = ax.scatter(
-                                                                    X_scaled[:, 0], 
-                                                                    X_scaled[:, 1], 
-                                                                    c=clusters, 
-                                                                    cmap='viridis', 
-                                                                    alpha=0.6
-                                                                )
+                                                            # Display results in an expander (collapsed by default)
+                                                            with st.expander(f"Results for {method}", expanded=False):
+                                                                # Display clustered data
+                                                                st.write("#### Sample of Clustered Data")
+                                                                st.dataframe(clustered_data.head(10))
                                                                 
-                                                                # Add cluster centers
-                                                                centers = kmeans.cluster_centers_
-                                                                ax.scatter(
-                                                                    centers[:, 0], 
-                                                                    centers[:, 1], 
-                                                                    s=200, 
-                                                                    marker='X', 
-                                                                    c='red', 
-                                                                    alpha=0.8
-                                                                )
+                                                                # Display cluster statistics
+                                                                st.write("#### Cluster Statistics")
+                                                                cluster_stats = clustered_data.groupby('Cluster').agg(['mean', 'std'])
+                                                                st.dataframe(cluster_stats)
                                                                 
-                                                                ax.set_title('K-Means Clustering Results (Standardized Features)')
-                                                                ax.set_xlabel(f'Feature 1: {features[0]}')
-                                                                ax.set_ylabel(f'Feature 2: {features[1]}')
-                                                                plt.colorbar(scatter, label='Cluster')
-                                                                plt.tight_layout()
-                                                                st.pyplot(fig)
+                                                                # Visualize clusters (first two dimensions)
+                                                                if len(features) >= 2:
+                                                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                                                    scatter = ax.scatter(
+                                                                        X_scaled[:, 0], 
+                                                                        X_scaled[:, 1], 
+                                                                        c=clusters, 
+                                                                        cmap='viridis', 
+                                                                        alpha=0.6
+                                                                    )
+                                                                    
+                                                                    # Add cluster centers
+                                                                    centers = kmeans.cluster_centers_
+                                                                    ax.scatter(
+                                                                        centers[:, 0], 
+                                                                        centers[:, 1], 
+                                                                        s=200, 
+                                                                        marker='X', 
+                                                                        c='red', 
+                                                                        alpha=0.8
+                                                                    )
+                                                                    
+                                                                    ax.set_title('K-Means Clustering Results (Standardized Features)')
+                                                                    ax.set_xlabel(f'Feature 1: {features[0]}')
+                                                                    ax.set_ylabel(f'Feature 2: {features[1]}')
+                                                                    plt.colorbar(scatter, label='Cluster')
+                                                                    plt.tight_layout()
+                                                                    st.pyplot(fig)
                                                             
                                                             # Store results
                                                             method_results[method] = {
@@ -1612,9 +1613,8 @@ with main_container:
                                                             }
                                                         
                                                         elif method == "PCA Factor Analysis" and method in method_params:
+                                                            # Get parameters outside the expander
                                                             params = method_params[method]
-                                                            
-                                                            # Get features for PCA
                                                             features = params["features"]
                                                             n_components = params["n_components"]
                                                             
@@ -1643,74 +1643,76 @@ with main_container:
                                                                 columns=[f'PC{i+1}' for i in range(n_components)]
                                                             )
                                                             
-                                                            # Display PCA results
-                                                            st.write("#### Sample of PCA Results")
-                                                            st.dataframe(pca_df.head(10))
-                                                            
-                                                            # Display explained variance
+                                                            # Get explained variance for convergence
                                                             explained_variance = pca.explained_variance_ratio_
                                                             cum_explained_variance = np.cumsum(explained_variance)
                                                             
                                                             # Store for convergence analysis
                                                             convergence_scores['pca_explained_variance'] = explained_variance
                                                             
-                                                            var_df = pd.DataFrame({
-                                                                'Principal Component': [f'PC{i+1}' for i in range(n_components)],
-                                                                'Explained Variance (%)': explained_variance * 100,
-                                                                'Cumulative Variance (%)': cum_explained_variance * 100
-                                                            })
+                                                            # Display results in an expander (collapsed by default)
+                                                            with st.expander(f"Results for {method}", expanded=False):
+                                                                # Display PCA results
+                                                                st.write("#### Sample of PCA Results")
+                                                                st.dataframe(pca_df.head(10))
                                                             
-                                                            st.write("#### Explained Variance")
-                                                            st.dataframe(var_df)
-                                                            
-                                                            # Visualize explained variance
-                                                            fig, ax = plt.subplots(figsize=(10, 6))
-                                                            ax.bar(
-                                                                range(1, n_components+1), 
-                                                                explained_variance * 100, 
-                                                                alpha=0.5, 
-                                                                label='Individual'
-                                                            )
-                                                            ax.step(
-                                                                range(1, n_components+1), 
-                                                                cum_explained_variance * 100, 
-                                                                where='mid', 
-                                                                label='Cumulative'
-                                                            )
-                                                            
-                                                            ax.set_xlabel('Principal Component')
-                                                            ax.set_ylabel('Explained Variance (%)')
-                                                            ax.set_title('Explained Variance by Principal Component')
-                                                            ax.set_xticks(range(1, n_components+1))
-                                                            ax.legend()
-                                                            plt.tight_layout()
-                                                            st.pyplot(fig)
-                                                            
-                                                            # Visualize first two components
-                                                            if n_components >= 2:
+                                                                var_df = pd.DataFrame({
+                                                                    'Principal Component': [f'PC{i+1}' for i in range(n_components)],
+                                                                    'Explained Variance (%)': explained_variance * 100,
+                                                                    'Cumulative Variance (%)': cum_explained_variance * 100
+                                                                })
+                                                                
+                                                                st.write("#### Explained Variance")
+                                                                st.dataframe(var_df)
+                                                                
+                                                                # Visualize explained variance
                                                                 fig, ax = plt.subplots(figsize=(10, 6))
-                                                                scatter = ax.scatter(
-                                                                    X_pca[:, 0], 
-                                                                    X_pca[:, 1], 
-                                                                    alpha=0.6
+                                                                ax.bar(
+                                                                    range(1, n_components+1), 
+                                                                    explained_variance * 100, 
+                                                                    alpha=0.5, 
+                                                                    label='Individual'
+                                                                )
+                                                                ax.step(
+                                                                    range(1, n_components+1), 
+                                                                    cum_explained_variance * 100, 
+                                                                    where='mid', 
+                                                                    label='Cumulative'
                                                                 )
                                                                 
-                                                                ax.set_title('First Two Principal Components')
-                                                                ax.set_xlabel(f'PC1 ({explained_variance[0]:.2%} var.)')
-                                                                ax.set_ylabel(f'PC2 ({explained_variance[1]:.2%} var.)')
+                                                                ax.set_xlabel('Principal Component')
+                                                                ax.set_ylabel('Explained Variance (%)')
+                                                                ax.set_title('Explained Variance by Principal Component')
+                                                                ax.set_xticks(range(1, n_components+1))
+                                                                ax.legend()
                                                                 plt.tight_layout()
                                                                 st.pyplot(fig)
                                                                 
-                                                                # Display component loadings
-                                                                loadings = pca.components_
-                                                                loadings_df = pd.DataFrame(
-                                                                    loadings.T, 
-                                                                    index=features,
-                                                                    columns=[f'PC{i+1}' for i in range(n_components)]
-                                                                )
-                                                                
-                                                                st.write("#### Component Loadings")
-                                                                st.dataframe(loadings_df)
+                                                                # Visualize first two components
+                                                                if n_components >= 2:
+                                                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                                                    scatter = ax.scatter(
+                                                                        X_pca[:, 0], 
+                                                                        X_pca[:, 1], 
+                                                                        alpha=0.6
+                                                                    )
+                                                                    
+                                                                    ax.set_title('First Two Principal Components')
+                                                                    ax.set_xlabel(f'PC1 ({explained_variance[0]:.2%} var.)')
+                                                                    ax.set_ylabel(f'PC2 ({explained_variance[1]:.2%} var.)')
+                                                                    plt.tight_layout()
+                                                                    st.pyplot(fig)
+                                                                    
+                                                                    # Display component loadings
+                                                                    loadings = pca.components_
+                                                                    loadings_df = pd.DataFrame(
+                                                                        loadings.T, 
+                                                                        index=features,
+                                                                        columns=[f'PC{i+1}' for i in range(n_components)]
+                                                                    )
+                                                                    
+                                                                    st.write("#### Component Loadings")
+                                                                    st.dataframe(loadings_df)
                                                             
                                                             # Store results
                                                             method_results[method] = {
@@ -1728,39 +1730,41 @@ with main_container:
                                                             # Calculate correlation matrix
                                                             corr_matrix = numeric_data.corr()
                                                             
-                                                            # Display correlation matrix
-                                                            st.write("#### Correlation Matrix")
-                                                            st.dataframe(corr_matrix)
+                                                            # Store for convergence
+                                                            convergence_scores['correlation_mean'] = corr_matrix.abs().mean().mean()
                                                             
-                                                            # Visualize correlation matrix
-                                                            fig, ax = plt.subplots(figsize=(12, 10))
-                                                            mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
-                                                            cmap = sns.diverging_palette(230, 20, as_cmap=True)
-                                                            
-                                                            sns.heatmap(
-                                                                corr_matrix, 
-                                                                mask=mask, 
-                                                                cmap=cmap, 
-                                                                vmax=1, 
-                                                                vmin=-1, 
-                                                                center=0,
-                                                                square=True, 
-                                                                linewidths=.5, 
-                                                                annot=True, 
-                                                                fmt=".2f"
-                                                            )
-                                                            
-                                                            plt.title('Correlation Matrix')
-                                                            plt.tight_layout()
-                                                            st.pyplot(fig)
+                                                            # Display results in an expander (collapsed by default)
+                                                            with st.expander(f"Results for {method}", expanded=False):
+                                                                # Display correlation matrix
+                                                                st.write("#### Correlation Matrix")
+                                                                st.dataframe(corr_matrix)
+                                                                
+                                                                # Visualize correlation matrix
+                                                                fig, ax = plt.subplots(figsize=(12, 10))
+                                                                mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+                                                                cmap = sns.diverging_palette(230, 20, as_cmap=True)
+                                                                
+                                                                sns.heatmap(
+                                                                    corr_matrix, 
+                                                                    mask=mask, 
+                                                                    cmap=cmap, 
+                                                                    vmax=1, 
+                                                                    vmin=-1, 
+                                                                    center=0,
+                                                                    square=True, 
+                                                                    linewidths=.5, 
+                                                                    annot=True, 
+                                                                    fmt=".2f"
+                                                                )
+                                                                
+                                                                plt.title('Correlation Matrix')
+                                                                plt.tight_layout()
+                                                                st.pyplot(fig)
                                                             
                                                             # Store results
                                                             method_results[method] = {
                                                                 'correlation_matrix': corr_matrix
                                                             }
-                                                            
-                                                            # Store for convergence
-                                                            convergence_scores['correlation_mean'] = corr_matrix.abs().mean().mean()
                                                         
                                                         elif method == "Statistical Hypothesis Testing":
                                                             # Perform basic hypothesis tests on numeric columns

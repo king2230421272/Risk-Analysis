@@ -1286,8 +1286,10 @@ with main_container:
                                         col1, col2 = st.columns(2)
                                         
                                         with col1:
-                                            # Get numeric columns
+                                            # Get numeric columns, excluding any ID columns
                                             numeric_cols = st.session_state.interpolated_data.select_dtypes(include=np.number).columns.tolist()
+                                            # Filter out any columns that contain 'id' or 'ID' in their name
+                                            numeric_cols = [col for col in numeric_cols if 'id' not in col.lower()]
                                             if numeric_cols:
                                                 # Default to the last numeric column as target
                                                 default_target_idx = -1
@@ -1336,8 +1338,10 @@ with main_container:
                                         col1, col2 = st.columns(2)
                                         
                                         with col1:
-                                            # Get numeric columns for clustering
+                                            # Get numeric columns for clustering, excluding any ID columns
                                             numeric_cols = st.session_state.interpolated_data.select_dtypes(include=np.number).columns.tolist()
+                                            # Filter out any columns that contain 'id' or 'ID' in their name
+                                            numeric_cols = [col for col in numeric_cols if 'id' not in col.lower()]
                                             
                                             # Default to the first column for clustering
                                             default_cluster_vars = [numeric_cols[0]] if numeric_cols else []
@@ -1371,8 +1375,10 @@ with main_container:
                                         col1, col2 = st.columns(2)
                                         
                                         with col1:
-                                            # Get numeric columns for PCA
+                                            # Get numeric columns for PCA, excluding any ID columns
                                             numeric_cols = st.session_state.interpolated_data.select_dtypes(include=np.number).columns.tolist()
+                                            # Filter out any columns that contain 'id' or 'ID' in their name
+                                            numeric_cols = [col for col in numeric_cols if 'id' not in col.lower()]
                                             
                                             # Default to all columns except first and last for PCA (as eigenvalues)
                                             default_pca_vars = numeric_cols.copy()

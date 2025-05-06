@@ -1241,26 +1241,8 @@ with main_container:
                                 if 'convergence_iterations' not in st.session_state:
                                     st.session_state.convergence_iterations = 0
                                 
-                                # Add current dataset to analysis - optional step
-                                if st.button("Add Current Interpolated Dataset to Analysis", key="add_dataset_btn"):
-                                    # Create a copy to avoid reference issues
-                                    dataset_copy = st.session_state.interpolated_result.copy()
-                                    
-                                    # Add dataset to convergence analysis list
-                                    dataset_id = len(st.session_state.convergence_datasets) + 1
-                                    dataset_info = {
-                                        'id': dataset_id,
-                                        'name': f"Analysis {dataset_id}",
-                                        'data': dataset_copy,
-                                        'convergence_scores': {},
-                                        'methods': [],
-                                        'timestamp': pd.Timestamp.now()
-                                    }
-                                    
-                                    st.session_state.convergence_datasets.append(dataset_info)
-                                    st.session_state.convergence_iterations += 1
-                                    
-                                    st.success(f"Dataset {dataset_info['id']} added to analysis.")
+                                # No longer allowing direct addition of datasets
+                                # Datasets are only created by running analysis methods
                                 
                                 # Show available analytical methods
                                 st.subheader("Select Analytical Methods")

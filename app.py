@@ -214,7 +214,91 @@ with main_container:
                 except Exception as e:
                     st.error(f"Error accessing database: {e}")
                 
-                # Individual datasets section removed as requested
+                # Add separator
+                st.markdown("---")
+                st.markdown("### Load Individual Datasets")
+                
+                col1, col2 = st.columns(2)
+                
+                # LOAD AS ORIGINAL DATA
+                with col1:
+                    st.subheader("Load as Original Data")
+                    
+                    try:
+                        # Get list of datasets from database
+                        all_datasets = db_handler.list_datasets()
+                        
+                        if not all_datasets:
+                            st.info("No datasets found in the database. Please save some datasets first.")
+                        else:
+                            # Create a formatted selectbox for datasets
+                            dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']}x{ds['column_count']})") 
+                                              for ds in all_datasets]
+                            
+                            selected_dataset = st.selectbox(
+                                "Select dataset to load as Original Data:",
+                                options=dataset_options,
+                                format_func=lambda x: x[1],
+                                key="original_data_db_select"
+                            )
+                            
+                            if st.button("Load as Original Data", key="load_original_btn"):
+                                try:
+                                    # Load the selected dataset
+                                    loaded_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
+                                    st.session_state.original_data = loaded_df
+                                    
+                                    st.success(f"Dataset loaded as Original Data: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
+                                    
+                                    # Show data preview
+                                    st.write("Preview:")
+                                    st.dataframe(loaded_df.head())
+                                    
+                                except Exception as e:
+                                    st.error(f"Error loading dataset: {e}")
+                    
+                    except Exception as e:
+                        st.error(f"Error accessing database: {e}")
+                
+                # LOAD AS INTERPOLATED DATA
+                with col2:
+                    st.subheader("Load as Data to Interpolate")
+                    
+                    try:
+                        # Get list of datasets from database
+                        all_datasets = db_handler.list_datasets()
+                        
+                        if not all_datasets:
+                            st.info("No datasets found in the database. Please save some datasets first.")
+                        else:
+                            # Create a formatted selectbox for datasets
+                            dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']}x{ds['column_count']})") 
+                                              for ds in all_datasets]
+                            
+                            selected_dataset = st.selectbox(
+                                "Select dataset to load as Data to Interpolate:",
+                                options=dataset_options,
+                                format_func=lambda x: x[1],
+                                key="interpolated_data_db_select"
+                            )
+                            
+                            if st.button("Load as Data to Interpolate", key="load_interpolated_btn"):
+                                try:
+                                    # Load the selected dataset
+                                    loaded_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
+                                    st.session_state.interpolated_data = loaded_df
+                                    
+                                    st.success(f"Dataset loaded as Data to Interpolate: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
+                                    
+                                    # Show data preview
+                                    st.write("Preview:")
+                                    st.dataframe(loaded_df.head())
+                                    
+                                except Exception as e:
+                                    st.error(f"Error loading dataset: {e}")
+                    
+                    except Exception as e:
+                        st.error(f"Error accessing database: {e}")
         
         # Select active dataset for analysis
         st.subheader("Select Active Dataset")
@@ -1022,7 +1106,7 @@ with main_container:
                     # Create advanced processing options with tabs
                     advanced_options = st.tabs([
                         "Step 1: MCMC Interpolation", 
-                        "Step 2: Multiple Interpolation Analysis",
+                        "Step 2: Modules Analysis",
                         "Step 3: CGAN Analysis", 
                         "Step 4: Distribution Testing", 
                         "Step 5: Outlier Detection"
@@ -1091,7 +1175,11 @@ with main_container:
                                                     'data': interpolated_result.copy(),
                                                     'convergence_scores': {},
                                                     'timestamp': pd.Timestamp.now(),
-                                                    'name': f"{dataset_prefix}_{i+1}"
+                                                    'name': f"{dataset_prefix}_{i+1}",
+                                                    # Mark these as not analysis results
+                                                    'is_analysis_result': False,
+                                                    # Add methods field for compatibility
+                                                    'methods': ["MCMC_Dataset_Generation"]
                                                 }
                                                 generated_datasets.append(dataset_info)
                                         
@@ -1112,7 +1200,7 @@ with main_container:
                                                 st.session_state.convergence_datasets.append(dataset)
                                                 st.session_state.convergence_iterations += 1
                                             
-                                            st.info(f"Added {iterations} datasets to the Multiple Interpolation Analysis. Please proceed to that tab for analysis.")
+                                            st.info(f"Added {iterations} datasets to the Modules Analysis. Please proceed to that tab for analysis.")
                                         
                                         # Display side-by-side comparison of before and after
                                         col1, col2 = st.columns(2)
@@ -1151,11 +1239,11 @@ with main_container:
                             except Exception as e:
                                 st.error(f"Error during MCMC interpolation: {e}")
                     
-                    # 2. MULTIPLE INTERPOLATION ANALYSIS TAB
+                    # 2. MODULES ANALYSIS TAB
                     with advanced_options[1]:
-                        st.write("### Multiple Interpolation Analysis")
+                        st.write("### Modules Analysis")
                         st.write("""
-                        The Multiple Interpolation Analysis component provides a unified interface for analyzing datasets through multiple
+                        The Modules Analysis component provides a unified interface for analyzing datasets through multiple
                         analytical methods and evaluating them in parallel. Key benefits include:
                         1. Applying different analytical techniques to the same dataset
                         2. Comparing results across methods to ensure consistency
@@ -1164,7 +1252,7 @@ with main_container:
                         
                         # Check if we have MCMC interpolated result
                         if 'interpolated_result' not in st.session_state:
-                            st.info("Please run MCMC interpolation first before performing multiple interpolation analysis.")
+                            st.info("Please run MCMC interpolation first before performing modules analysis.")
                         else:
                             # Display core information about the imputation process
                             st.subheader("Imputation Statistics")
@@ -1222,8 +1310,8 @@ with main_container:
                                 else:
                                     st.write("Single imputed dataset available")
                             
-                            # Add multiple interpolation analysis section
-                            st.subheader("Multiple Interpolation Analysis")
+                            # Add modules analysis section
+                            st.subheader("Modules Analysis")
                             
                             st.write("""
                             This analysis uses the MCMC-interpolated dataset from the previous step to run multiple analytical 
@@ -1241,8 +1329,26 @@ with main_container:
                                 if 'convergence_iterations' not in st.session_state:
                                     st.session_state.convergence_iterations = 0
                                 
-                                # No longer allowing direct addition of datasets
-                                # Datasets are only created by running analysis methods
+                                # Add current dataset to analysis - optional step
+                                if st.button("Add Current Interpolated Dataset to Analysis", key="add_dataset_btn"):
+                                    # Create a copy to avoid reference issues
+                                    dataset_copy = st.session_state.interpolated_result.copy()
+                                    
+                                    # Add dataset to convergence analysis list
+                                    dataset_id = len(st.session_state.convergence_datasets) + 1
+                                    dataset_info = {
+                                        'id': dataset_id,
+                                        'name': f"Analysis {dataset_id}",
+                                        'data': dataset_copy,
+                                        'convergence_scores': {},
+                                        'methods': [],
+                                        'timestamp': pd.Timestamp.now()
+                                    }
+                                    
+                                    st.session_state.convergence_datasets.append(dataset_info)
+                                    st.session_state.convergence_iterations += 1
+                                    
+                                    st.success(f"Dataset {dataset_info['id']} added to analysis.")
                                 
                                 # Show available analytical methods
                                 st.subheader("Select Analytical Methods")
@@ -1361,15 +1467,11 @@ with main_container:
                                             # Get numeric columns for PCA
                                             numeric_cols = st.session_state.interpolated_result.select_dtypes(include=np.number).columns.tolist()
                                             
-                                            # Default to all columns except first and last for PCA (as eigenvalues)
-                                            default_pca_vars = numeric_cols.copy()
-                                            if len(default_pca_vars) > 0:
-                                                # Remove first and last columns by default
-                                                if len(default_pca_vars) > 1:
-                                                    default_pca_vars = default_pca_vars[1:-1]
+                                            # Default to the first column for PCA
+                                            default_pca_vars = [numeric_cols[0]] if numeric_cols else []
                                             
                                             pca_vars = st.multiselect(
-                                                "Select variables for PCA (first and last columns disregarded by default):",
+                                                "Select variables for PCA:",
                                                 options=numeric_cols,
                                                 default=default_pca_vars,
                                                 key="pca_features"
@@ -1436,21 +1538,21 @@ with main_container:
                                                     
                                                     # Run each selected method for this dataset
                                                     for method in selected_methods:
-                                                        # Make results collapsible and collapsed by default
+                                                        st.write(f"### Results for {method}")
+                                                        
                                                         if method == "Linear Regression Analysis" and method in method_params:
-                                                            with st.expander(f"Results for {method}", expanded=False):
-                                                                params = method_params[method]
+                                                            params = method_params[method]
                                                             
-                                                                # Get the target and features
-                                                                target = params["target"]
-                                                                features = params["features"]
-                                                                test_size = params["test_size"]
-                                                            
+                                                            # Get the target and features
+                                                            target = params["target"]
+                                                            features = params["features"]
+                                                            test_size = params["test_size"]
+                                                    
                                                             # Check if we have enough data
                                                             if len(features) == 0:
                                                                 st.error(f"Need at least one feature for {method}.")
                                                                 continue
-                                                                
+                                                            
                                                             # Prepare the data
                                                             from sklearn.model_selection import train_test_split
                                                             X = data[features]
@@ -1532,7 +1634,6 @@ with main_container:
                                                                     'test_rmse': test_rmse
                                                                 }
                                                             }
-                                                        
                                                         elif method == "K-Means Clustering" and method in method_params:
                                                             params = method_params[method]
                                                             
@@ -1544,7 +1645,7 @@ with main_container:
                                                             if len(features) < 2:
                                                                 st.error(f"Need at least two features for {method}.")
                                                                 continue
-                                                                
+                                                            
                                                             # Prepare the data
                                                             from sklearn.preprocessing import StandardScaler
                                                             from sklearn.cluster import KMeans
@@ -1613,7 +1714,7 @@ with main_container:
                                                                 'inertia': kmeans.inertia_,
                                                                 'cluster_centers': kmeans.cluster_centers_
                                                             }
-                                                        
+                                                    
                                                         elif method == "PCA Factor Analysis" and method in method_params:
                                                             params = method_params[method]
                                                             
@@ -1625,7 +1726,7 @@ with main_container:
                                                             if len(features) < n_components:
                                                                 st.error(f"Need at least {n_components} features for PCA with {n_components} components.")
                                                                 continue
-                                                                
+                                                            
                                                             # Prepare the data
                                                             from sklearn.preprocessing import StandardScaler
                                                             from sklearn.decomposition import PCA
@@ -1723,7 +1824,7 @@ with main_container:
                                                                 'explained_variance': explained_variance,
                                                                 'loadings': pca.components_
                                                             }
-                                                        
+                                                    
                                                         elif method == "Correlation Analysis":
                                                             # Perform correlation analysis on numeric columns
                                                             numeric_data = data.select_dtypes(include=np.number)
@@ -1811,36 +1912,22 @@ with main_container:
                                                             if total_tested > 0:
                                                                 normal_pct = (normal_count / total_tested) * 100
                                                                 convergence_scores['normality_percentage'] = normal_pct
-                                                    
-                                                    # Save the results to the session state, but only if they're from Run Analysis Methods
-                                                    # Restructuring to separate results for different analysis methods
-                                                    analysis_id = len(st.session_state.convergence_datasets) + 1
-                                                    new_analysis = {
-                                                        'id': analysis_id,
-                                                        'name': f"Analysis {analysis_id}",
-                                                        'methods': selected_methods,
-                                                        'method_results': method_results,
-                                                        # Store convergence scores by method name to keep them separate
-                                                        'convergence_scores': {},
-                                                        'data': data,
-                                                        'timestamp': pd.Timestamp.now(),
-                                                        # Flag to indicate this came from running analysis methods
-                                                        'is_analysis_result': True
-                                                    }
-                                                    
-                                                    # Organize convergence scores by method for easier comparison
-                                                    for method in selected_methods:
-                                                        new_analysis['convergence_scores'][method] = {
-                                                            k: v for k, v in convergence_scores.items() 
-                                                            # Store only the scores related to this method
-                                                            # This means scores might appear under multiple methods
-                                                            # if they were calculated from multiple methods
-                                                        }
-                                                    
-                                                    st.session_state.convergence_datasets.append(new_analysis)
-                                                    
-                                                    st.success(f"Analysis complete. Results saved as Analysis {new_analysis['id']}.")
-                                                    st.info("Navigate to the Multiple Interpolation Analysis Results tab to compare analysis results.")
+                                            
+                                            # Save the results to the session state
+                                            new_analysis = {
+                                                'id': len(st.session_state.convergence_datasets) + 1,
+                                                'name': f"Analysis {len(st.session_state.convergence_datasets) + 1}",
+                                                'methods': selected_methods,
+                                                'method_results': method_results,
+                                                'convergence_scores': convergence_scores,
+                                                'data': data,
+                                                'timestamp': pd.Timestamp.now()
+                                            }
+                                            
+                                            st.session_state.convergence_datasets.append(new_analysis)
+                                            
+                                            st.success(f"Analysis complete. Results saved as Analysis {new_analysis['id']}.")
+                                            st.info("Navigate to the Convergence Evaluation tab to evaluate convergence with multiple analyses.")
                                 else:
                                     st.warning("Please select at least one analytical method to continue.")
                                 
@@ -1851,438 +1938,102 @@ with main_container:
                             if not st.session_state.convergence_datasets:
                                 st.warning("No analysis results available. Please run analysis in the Analyze Imputed Data tab.")
                             else:
-                                st.write("### Multiple Interpolation Analysis Results")
-                                st.write("Compare the results from multiple interpolation analyses.")
+                                st.write("### Convergence Evaluation")
+                                st.write("Evaluate the convergence of multiple imputations.")
                                 
-                                # Show available datasets - only those from analysis methods
+                                # Show available datasets
                                 st.write("#### Available Analysis Results")
-                                # Filter to only show results from analysis methods (not directly added datasets)
-                                analysis_results = [a for a in st.session_state.convergence_datasets 
-                                                  if a.get('is_analysis_result', False)]
-                                
-                                if not analysis_results:
-                                    st.warning("No analysis results available yet. Please run analytical methods in the Analyze Imputed Data tab.")
-                                    # Create empty dataframe to ensure code below works properly
-                                    results_df = pd.DataFrame(columns=['ID', 'Dataset', 'Methods', 'Timestamp'])
-                                else:
-                                    results_df = pd.DataFrame([
-                                        {
-                                            'ID': a['id'],
-                                            'Dataset': a['name'],
-                                            'Methods': ", ".join(a.get('methods', [])),
-                                            'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
-                                        }
-                                        for a in analysis_results
-                                    ])
+                                results_df = pd.DataFrame([
+                                    {
+                                        'ID': a['id'],
+                                        'Dataset': a['name'],
+                                        'Methods': ", ".join(a.get('methods', [])),
+                                        'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
+                                    }
+                                    for a in st.session_state.convergence_datasets
+                                ])
                                 
                                 st.dataframe(results_df)
                                 
-                                # Create a separate section for selecting analysis results
-                                st.write("### Compare Analysis Results")
-                                st.write("Select two or more analysis results to compare.")
-                                
-                                # Select datasets to compare - default to all available analysis results
-                                # Use the filtered analysis_results list instead of all convergence_datasets
-                                if not analysis_results:
-                                    all_ids = []
-                                else:
-                                    all_ids = [a['id'] for a in analysis_results]
-                                    
+                                # Select datasets to compare
                                 selected_ids = st.multiselect(
                                     "Select analysis results to compare:",
-                                    options=all_ids,
-                                    default=all_ids  # Default to all available analysis results
+                                    options=[a['id'] for a in st.session_state.convergence_datasets],
+                                    default=[]
                                 )
                                 
                                 if selected_ids:
-                                    # Get selected analyses from the filtered analysis_results
-                                    selected_analyses = [a for a in analysis_results if a['id'] in selected_ids]
+                                    # Get selected analyses
+                                    selected_analyses = [a for a in st.session_state.convergence_datasets if a['id'] in selected_ids]
                                     
                                     if len(selected_analyses) > 1:
-                                        st.write("### Analysis Steps")
-                                        st.write("The selected analysis results will be processed through these steps:")
-                                        # Create tabs for different analysis approaches
-                                        analysis_tabs = st.tabs(["Individual Analysis", "Pooled Analysis", "Convergence Diagnostics", "Interpretation & Reporting"])
+                                        st.write("### Convergence Statistics")
                                         
-                                        # TAB 1: INDIVIDUAL ANALYSIS
-                                        with analysis_tabs[0]:
-                                            st.write("### Individual Analysis of Datasets")
-                                            st.write("Examine each dataset's analysis results separately.")
-                                            
-                                            # Prepare data for comparison
-                                            comparison_data = []
-                                            
-                                            for analysis in selected_analyses:
-                                                # Extract relevant metrics from each analysis result
-                                                metrics = {
-                                                    'ID': analysis['id'],
-                                                    'Dataset': analysis['name']
-                                                }
-                                                
-                                                # Add convergence scores - now organized by method
-                                                method_scores = analysis.get('convergence_scores', {})
-                                                
-                                                # First, select which analytical method to display
-                                                analysis_methods = analysis.get('methods', [])
-                                                if analysis_methods:
-                                                    # Create a section for each analytical method
-                                                    for method_name, method_data in method_scores.items():
-                                                        # Add method prefix to each metric for clarity
-                                                        for key, value in method_data.items():
-                                                            metrics[f"{method_name}__{key}"] = value
-                                                
-                                                comparison_data.append(metrics)
-                                            
-                                            # Display comparison table
-                                            comparison_df = pd.DataFrame(comparison_data)
-                                            st.dataframe(comparison_df)
-                                            
-                                            # Calculate variation statistics
-                                            if len(comparison_data) > 1:
-                                                st.write("#### Variation Between Datasets")
-                                                
-                                                numeric_cols = comparison_df.select_dtypes(include=np.number).columns
-                                                if len(numeric_cols) > 0:
-                                                    # Calculate coefficient of variation (CV) for each metric
-                                                    variation_stats = {}
-                                                    
-                                                    for col in numeric_cols:
-                                                        values = comparison_df[col].dropna()
-                                                        if len(values) > 1:
-                                                            mean = values.mean()
-                                                            std = values.std()
-                                                            cv = (std / mean) * 100 if mean != 0 else float('nan')
-                                                            
-                                                            variation_stats[col] = {
-                                                                'Mean': mean,
-                                                                'Std': std,
-                                                                'CV (%)': cv
-                                                            }
-                                                    
-                                                    if variation_stats:
-                                                        var_df = pd.DataFrame(variation_stats).T
-                                                        st.dataframe(var_df)
-                                                    else:
-                                                        st.warning("No comparable numeric metrics found across the selected analyses.")
-                                                else:
-                                                    st.warning("No numeric metrics available for dataset comparison.")
+                                        # Prepare data for comparison
+                                        comparison_data = []
                                         
-                                        # TAB 2: POOLED ANALYSIS
-                                        with analysis_tabs[1]:
-                                            st.write("### Pooled Analysis Results")
-                                            st.write("Combine analysis results using Rubin's rules for multiple imputations.")
+                                        for analysis in selected_analyses:
+                                            # Extract relevant metrics from each analysis result
+                                            metrics = {
+                                                'ID': analysis['id'],
+                                                'Dataset': analysis['name']
+                                            }
                                             
-                                            # Check if we have numeric data to analyze
+                                            # Add convergence scores
+                                            for key, value in analysis.get('convergence_scores', {}).items():
+                                                metrics[key] = value
+                                            
+                                            comparison_data.append(metrics)
+                                        
+                                        # Display comparison table
+                                        comparison_df = pd.DataFrame(comparison_data)
+                                        st.dataframe(comparison_df)
+                                        
+                                        # Calculate variation statistics
+                                        if len(comparison_data) > 1:
+                                            st.write("#### Variation Between Imputations")
+                                            
                                             numeric_cols = comparison_df.select_dtypes(include=np.number).columns
                                             if len(numeric_cols) > 0:
-                                                # Calculate pooled statistics
-                                                pooled_stats = {}
+                                                # Calculate coefficient of variation (CV) for each metric
+                                                variation_stats = {}
                                                 
                                                 for col in numeric_cols:
                                                     values = comparison_df[col].dropna()
                                                     if len(values) > 1:
-                                                        # 1. Calculate mean (pooled estimate)
                                                         mean = values.mean()
+                                                        std = values.std()
+                                                        cv = (std / mean) * 100 if mean != 0 else float('nan')
                                                         
-                                                        # 2. Calculate within-imputation variance (average variance)
-                                                        # Assuming each dataset has the same variance structure
-                                                        within_var = values.var() / len(values)
-                                                        
-                                                        # 3. Calculate between-imputation variance
-                                                        between_var = values.var() * (1.0 + 1.0/len(values))
-                                                        
-                                                        # 4. Calculate total variance (Rubin's formula)
-                                                        total_var = within_var + between_var
-                                                        
-                                                        # 5. Calculate standard error
-                                                        se = np.sqrt(total_var)
-                                                        
-                                                        # 6. Calculate degrees of freedom (Rubin's formula)
-                                                        df = (len(values) - 1) * (1 + (within_var / between_var))**2
-                                                        
-                                                        # 7. Calculate 95% confidence interval
-                                                        from scipy import stats
-                                                        t_value = stats.t.ppf(0.975, df)
-                                                        ci_lower = mean - t_value * se
-                                                        ci_upper = mean + t_value * se
-                                                        
-                                                        # 8. Calculate fraction of missing information (FMI)
-                                                        fmi = (between_var + between_var/len(values)) / total_var
-                                                        
-                                                        pooled_stats[col] = {
-                                                            'Pooled Estimate': mean,
-                                                            'Within Variance': within_var,
-                                                            'Between Variance': between_var,
-                                                            'Total Variance': total_var,
-                                                            'Standard Error': se,
-                                                            'DF': df,
-                                                            '95% CI Lower': ci_lower,
-                                                            '95% CI Upper': ci_upper,
-                                                            'FMI': fmi
+                                                        variation_stats[col] = {
+                                                            'Mean': mean,
+                                                            'Std': std,
+                                                            'CV (%)': cv
                                                         }
                                                 
-                                                if pooled_stats:
-                                                    # Create a nice summary table
-                                                    summary_data = []
-                                                    for col, stats in pooled_stats.items():
-                                                        row = {'Parameter': col}
-                                                        row.update({
-                                                            'Estimate': stats['Pooled Estimate'],
-                                                            'SE': stats['Standard Error'],
-                                                            '95% CI': f"({stats['95% CI Lower']:.3f}, {stats['95% CI Upper']:.3f})",
-                                                            'FMI (%)': stats['FMI'] * 100
-                                                        })
-                                                        summary_data.append(row)
+                                                if variation_stats:
+                                                    var_df = pd.DataFrame(variation_stats).T
+                                                    st.dataframe(var_df)
                                                     
-                                                    # Show summary table
-                                                    st.write("#### Pooled Parameter Estimates")
-                                                    st.write("Combined results using Rubin's rules for multiple imputation:")
-                                                    st.dataframe(pd.DataFrame(summary_data))
+                                                    # Interpret convergence
+                                                    st.write("#### Convergence Interpretation")
                                                     
-                                                    # Show detailed statistics
-                                                    with st.expander("Show detailed variance components", expanded=False):
-                                                        detailed_data = []
-                                                        for col, stats in pooled_stats.items():
-                                                            row = {'Parameter': col}
-                                                            row.update({
-                                                                'Within Var': stats['Within Variance'],
-                                                                'Between Var': stats['Between Variance'],
-                                                                'Total Var': stats['Total Variance'],
-                                                                'DF': stats['DF']
-                                                            })
-                                                            detailed_data.append(row)
+                                                    cv_values = var_df['CV (%)'].dropna()
+                                                    if len(cv_values) > 0:
+                                                        avg_cv = cv_values.mean()
                                                         
-                                                        st.dataframe(pd.DataFrame(detailed_data))
-                                                        
-                                                        st.write("""
-                                                        **Explanation of variance components:**
-                                                        - **Within Variance**: Average variance within each imputed dataset
-                                                        - **Between Variance**: Variance between estimates from different datasets
-                                                        - **Total Variance**: Combined variance accounting for both sources of uncertainty
-                                                        - **DF**: Adjusted degrees of freedom for statistical inference
-                                                        """)
+                                                        if avg_cv < 5:
+                                                            st.success(f"Good convergence (Average CV: {avg_cv:.2f}%). The multiple imputations have converged well.")
+                                                        elif avg_cv < 10:
+                                                            st.info(f"Acceptable convergence (Average CV: {avg_cv:.2f}%). The multiple imputations show reasonable consistency.")
+                                                        else:
+                                                            st.warning(f"Poor convergence (Average CV: {avg_cv:.2f}%). Consider running more imputations or reviewing the imputation model.")
                                                 else:
-                                                    st.warning("No suitable parameters found for pooled analysis.")
+                                                    st.warning("No comparable numeric metrics found across the selected analyses.")
                                             else:
-                                                st.warning("No numeric metrics available for pooled analysis.")
-                                        
-                                        # TAB 3: CONVERGENCE DIAGNOSTICS
-                                        with analysis_tabs[2]:
-                                            st.write("### Convergence Diagnostics")
-                                            st.write("Evaluate convergence of multiple imputation process.")
-                                            
-                                            # Check if we have numeric data to analyze
-                                            numeric_cols = comparison_df.select_dtypes(include=np.number).columns
-                                            if len(numeric_cols) > 0:
-                                                # PSRF/Gelman-Rubin Calculation
-                                                psrf_results = {}
-                                                between_within_ratio = {}
-                                                
-                                                for col in numeric_cols:
-                                                    values = comparison_df[col].dropna()
-                                                    if len(values) > 1:
-                                                        # For PSRF, we need to calculate between and within chain variance
-                                                        # Since we don't have actual chains, we'll treat each dataset as a chain
-                                                        
-                                                        # Between-imputation variance (scaled)
-                                                        between_var = values.var() * (len(values) + 1) / len(values)
-                                                        
-                                                        # Within-imputation variance (averaged)
-                                                        within_var = values.var() / 2  # Simplified approximation
-                                                        
-                                                        # PSRF calculation
-                                                        if within_var > 0:
-                                                            psrf = np.sqrt((within_var + between_var) / within_var)
-                                                            psrf_results[col] = psrf
-                                                            
-                                                            # Calculate Between/Within Ratio
-                                                            ratio = between_var / within_var if within_var > 0 else np.nan
-                                                            between_within_ratio[col] = ratio
-                                                
-                                                if psrf_results:
-                                                    # Display PSRF results
-                                                    st.write("#### Potential Scale Reduction Factor (PSRF)")
-                                                    st.write("""
-                                                    PSRF (Gelman-Rubin statistic) values close to 1.0 indicate good convergence of the imputation process.
-                                                    Values above 1.1 may indicate poor convergence.
-                                                    """)
-                                                    
-                                                    psrf_df = pd.DataFrame({
-                                                        'Parameter': list(psrf_results.keys()),
-                                                        'PSRF': list(psrf_results.values()),
-                                                        'Status': ['Good (< 1.1)' if v < 1.1 else 'Fair (1.1-1.2)' if v < 1.2 else 'Poor (> 1.2)' for v in psrf_results.values()]
-                                                    })
-                                                    
-                                                    st.dataframe(psrf_df)
-                                                    
-                                                    # Display Between/Within Ratio
-                                                    st.write("#### Between/Within Variance Ratio")
-                                                    st.write("""
-                                                    This ratio indicates the proportion of variance attributable to missing data imputation.
-                                                    Higher values suggest that the imputation process introduces significant uncertainty.
-                                                    """)
-                                                    
-                                                    ratio_df = pd.DataFrame({
-                                                        'Parameter': list(between_within_ratio.keys()),
-                                                        'B/W Ratio': list(between_within_ratio.values()),
-                                                        'Impact': ['Low (< 0.5)' if v < 0.5 else 'Moderate (0.5-1.0)' if v < 1.0 else 'High (> 1.0)' for v in between_within_ratio.values()]
-                                                    })
-                                                    
-                                                    st.dataframe(ratio_df)
-                                                    
-                                                    # Visualization of parameter traces
-                                                    st.write("#### Parameter Trace Plots")
-                                                    st.write("Visual inspection of parameter stability across imputations:")
-                                                    
-                                                    # Create trace plots for selected parameters
-                                                    selected_params = st.multiselect(
-                                                        "Select parameters to visualize:",
-                                                        options=list(psrf_results.keys()),
-                                                        default=list(psrf_results.keys())[:2] if len(psrf_results) >= 2 else list(psrf_results.keys())
-                                                    )
-                                                    
-                                                    if selected_params:
-                                                        import matplotlib.pyplot as plt
-                                                        
-                                                        # Create plot
-                                                        fig, ax = plt.subplots(figsize=(10, 6))
-                                                        
-                                                        for param in selected_params:
-                                                            values = comparison_df[param].dropna()
-                                                            ax.plot(range(1, len(values) + 1), values, 'o-', label=param)
-                                                        
-                                                        ax.set_xlabel('Imputation Number')
-                                                        ax.set_ylabel('Parameter Value')
-                                                        ax.set_title('Parameter Trace Across Imputations')
-                                                        ax.legend()
-                                                        ax.grid(True, linestyle='--', alpha=0.7)
-                                                        
-                                                        st.pyplot(fig)
-                                                        
-                                                        st.write("""
-                                                        **Interpretation of trace plots:**
-                                                        - Stable traces with minimal fluctuation indicate good convergence
-                                                        - Systematic trends or large jumps suggest potential issues with imputation
-                                                        - Parallel traces across parameters suggest good overall convergence
-                                                        """)
-                                                else:
-                                                    st.warning("Could not calculate convergence diagnostics from the available data.")
-                                            else:
-                                                st.warning("No numeric metrics available for convergence diagnostics.")
-                                        
-                                        # TAB 4: INTERPRETATION & REPORTING
-                                        with analysis_tabs[3]:
-                                            st.write("### Results Interpretation & Reporting")
-                                            st.write("Comprehensive summary and interpretation of multiple imputation results.")
-                                            
-                                            # Check if we have numeric data to analyze
-                                            numeric_cols = comparison_df.select_dtypes(include=np.number).columns
-                                            if len(numeric_cols) > 0:
-                                                # Summary statistics for easy reporting
-                                                if 'psrf_results' in locals() and pooled_stats:
-                                                    # Calculate summary metrics
-                                                    avg_psrf = np.mean(list(psrf_results.values()))
-                                                    max_psrf = np.max(list(psrf_results.values()))
-                                                    
-                                                    # Average FMI
-                                                    avg_fmi = np.mean([stats['FMI'] for stats in pooled_stats.values()])
-                                                    
-                                                    # Create a summary for reporting
-                                                    st.write("#### Executive Summary")
-                                                    
-                                                    # Determine overall convergence status
-                                                    if max_psrf < 1.1:
-                                                        convergence_status = "Excellent"
-                                                    elif max_psrf < 1.2:
-                                                        convergence_status = "Good"
-                                                    else:
-                                                        convergence_status = "Needs improvement"
-                                                    
-                                                    col1, col2, col3 = st.columns(3)
-                                                    
-                                                    with col1:
-                                                        st.metric("Datasets Analyzed", len(selected_analyses))
-                                                    
-                                                    with col2:
-                                                        st.metric("Convergence Status", convergence_status)
-                                                    
-                                                    with col3:
-                                                        st.metric("Missing Information", f"{avg_fmi*100:.1f}%")
-                                                    
-                                                    # Recommendations section
-                                                    st.write("#### Recommendations")
-                                                    
-                                                    rec_items = []
-                                                    
-                                                    if max_psrf > 1.2:
-                                                        rec_items.append("- Consider generating more imputed datasets to improve convergence.")
-                                                    
-                                                    if avg_fmi > 0.3:
-                                                        rec_items.append("- High fraction of missing information suggests findings should be interpreted with caution.")
-                                                        rec_items.append("- Consider sensitivity analyses with alternative imputation methods.")
-                                                    
-                                                    if avg_fmi < 0.1 and max_psrf < 1.1:
-                                                        rec_items.append("- Good convergence achieved with low missing information. Results are likely robust.")
-                                                    
-                                                    if rec_items:
-                                                        for item in rec_items:
-                                                            st.write(item)
-                                                    else:
-                                                        st.write("- No specific recommendations - analysis appears satisfactory.")
-                                                    
-                                                    # Full report section
-                                                    with st.expander("Generate Full Report", expanded=False):
-                                                        st.write("### Multiple Imputation Analysis Report")
-                                                        st.write(f"Generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}")
-                                                        
-                                                        st.write("#### 1. Overview")
-                                                        st.write(f"- Number of imputed datasets: {len(selected_analyses)}")
-                                                        st.write(f"- Parameters analyzed: {len(numeric_cols)}")
-                                                        st.write(f"- Average fraction of missing information: {avg_fmi*100:.1f}%")
-                                                        
-                                                        st.write("#### 2. Pooled Estimates")
-                                                        # Create a nice summary table
-                                                        summary_data = []
-                                                        for col, stats in pooled_stats.items():
-                                                            row = {'Parameter': col}
-                                                            row.update({
-                                                                'Estimate': f"{stats['Pooled Estimate']:.4f}",
-                                                                'SE': f"{stats['Standard Error']:.4f}",
-                                                                '95% CI': f"({stats['95% CI Lower']:.3f}, {stats['95% CI Upper']:.3f})",
-                                                                'FMI (%)': f"{stats['FMI'] * 100:.1f}%"
-                                                            })
-                                                            summary_data.append(row)
-                                                        
-                                                        # Show summary table
-                                                        st.dataframe(pd.DataFrame(summary_data))
-                                                        
-                                                        st.write("#### 3. Convergence Statistics")
-                                                        st.write(f"- Average PSRF: {avg_psrf:.3f}")
-                                                        st.write(f"- Maximum PSRF: {max_psrf:.3f}")
-                                                        st.write(f"- Overall convergence status: {convergence_status}")
-                                                        
-                                                        st.write("#### 4. Methodology")
-                                                        st.write("""
-                                                        This analysis follows Rubin's rules for multiple imputation:
-                                                        - Each dataset was imputed independently using MCMC methods
-                                                        - Analyses were performed identically on each imputed dataset
-                                                        - Results were pooled accounting for both within and between imputation variance
-                                                        - Convergence was assessed using the potential scale reduction factor
-                                                        """)
-                                                        
-                                                        # Download button for report
-                                                        st.download_button(
-                                                            "Download Report as CSV",
-                                                            pd.DataFrame(summary_data).to_csv(index=False),
-                                                            "multiple_imputation_report.csv",
-                                                            "text/csv"
-                                                        )
-                                                else:
-                                                    st.info("To generate a comprehensive report, please analyze the data using both the Pooled Analysis and Convergence Diagnostics tabs first.")
-                                            else:
-                                                st.warning("No numeric metrics available for reporting.")
+                                                st.warning("No numeric metrics available for convergence evaluation.")
                                     else:
-                                        st.warning("Please select at least two analysis results to compare datasets.")
+                                        st.warning("Please select at least two analysis results to compare convergence.")
                                 
                             # Add database section for storing and retrieving analysis results
                             st.write("### Save and Load Analysis Results")

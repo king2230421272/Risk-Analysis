@@ -57,6 +57,10 @@ if 'convergence_datasets' not in st.session_state:
     st.session_state.convergence_datasets = []
 if 'convergence_iterations' not in st.session_state:
     st.session_state.convergence_iterations = 0
+if 'cgan_analysis_data' not in st.session_state:
+    st.session_state.cgan_analysis_data = None
+if 'switch_to_cgan' not in st.session_state:
+    st.session_state.switch_to_cgan = False
 
 # Initialize modules
 data_handler = DataHandler()
@@ -2267,6 +2271,33 @@ with main_container:
                                                     })
                                                     
                                                     st.dataframe(psrf_df)
+                                                    
+                                                    # Check if convergence is good overall and if so, output the dataset to CGAN Analysis
+                                                    max_psrf = max(psrf_results.values())
+                                                    if max_psrf < 1.1:
+                                                        # Good convergence - prepare for CGAN Analysis
+                                                        st.success("Good convergence detected! The dataset will be available for CGAN Analysis.")
+                                                        
+                                                        # Find the dataset with the best convergence (use first one if multiple)
+                                                        best_dataset = None
+                                                        for dataset in datasets_to_analyze:
+                                                            if dataset['data'] is not None:
+                                                                best_dataset = dataset['data']
+                                                                break
+                                                        
+                                                        if best_dataset is not None:
+                                                            # Store in session state for CGAN Analysis to use
+                                                            st.session_state.cgan_analysis_data = best_dataset
+                                                            
+                                                            # Create a button to go directly to CGAN Analysis tab
+                                                            if st.button("Proceed to CGAN Analysis"):
+                                                                # We'll use a session state flag to indicate we should switch to CGAN Analysis
+                                                                st.session_state.switch_to_cgan = True
+                                                                st.experimental_rerun()
+                                                    elif max_psrf < 1.2:
+                                                        st.info("Fair convergence. You may proceed to CGAN Analysis, but results may not be optimal.")
+                                                    else:
+                                                        st.warning("Poor convergence detected. Consider improving the interpolation process before proceeding to CGAN Analysis.")
                                                     
                                                     # Display Between/Within Ratio
                                                     st.write("#### Between/Within Variance Ratio")

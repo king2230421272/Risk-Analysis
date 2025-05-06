@@ -313,7 +313,7 @@ class AdvancedDataProcessor:
         
         return generator, discriminator
     
-    def cgan_analysis(self, interpolated_data, noise_samples=100):
+    def cgan_analysis(self, interpolated_data, noise_samples=100, custom_conditions=None):
         """
         Use trained CGAN model to analyze interpolated data.
         
@@ -323,11 +323,16 @@ class AdvancedDataProcessor:
             The interpolated data to analyze
         noise_samples : int
             Number of noise samples to generate for each condition
+        custom_conditions : dict, optional
+            Dictionary with column names as keys and custom condition values to use
+            instead of the values from the interpolated data
             
         Returns:
         --------
         pandas.DataFrame
             Data with CGAN analysis results
+        dict
+            Additional analysis information including KS test results
         """
         if self.cgan_model is None:
             raise ValueError("CGAN model not trained. Please call train_cgan first.")
@@ -354,8 +359,31 @@ class AdvancedDataProcessor:
         if missing_cols:
             raise ValueError(f"Missing condition columns in data: {missing_cols}")
         
-        # Extract condition data
-        condition_data = data[condition_cols].values
+        # If custom conditions are provided, use them instead of the data from the DataFrame
+        if custom_conditions is not None and isinstance(custom_conditions, dict):
+            print(f"Using custom condition values: {custom_conditions}")
+            
+            # Create a DataFrame with just one row containing the custom condition values
+            custom_condition_df = pd.DataFrame([custom_conditions])
+            
+            # Ensure all condition columns are present
+            for col in condition_cols:
+                if col not in custom_condition_df.columns:
+                    raise ValueError(f"Missing condition column '{col}' in custom conditions")
+            
+            # Extract only the needed columns in the correct order
+            condition_data = custom_condition_df[condition_cols].values
+            
+            # Override the interpolated_data for result comparison
+            # (if we're using custom conditions, we only generate one set of predictions)
+            if len(target_cols) > 0 and all(col in data.columns for col in target_cols):
+                comparison_data = data[target_cols].head(1).copy()
+            else:
+                comparison_data = pd.DataFrame(index=[0], columns=target_cols)
+        else:
+            # Use the condition data from the provided DataFrame
+            condition_data = data[condition_cols].values
+            comparison_data = data
         
         # Scale the condition data
         scaled_condition = condition_scaler.transform(condition_data)

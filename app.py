@@ -2882,6 +2882,93 @@ with main_container:
                                         default=remaining_cols[:min(3, len(remaining_cols))]
                                     )
                             
+                            # Condition Information Section
+                            if len(condition_cols) > 0:
+                                st.write("#### Condition Information Input")
+                                st.write("Specify condition values for CGAN to generate data conditioned on these values.")
+                                
+                                with st.expander("Condition Values", expanded=True):
+                                    st.write("You can define specific condition values or use statistical distributions to sample from.")
+                                    
+                                    # Initialize manual condition input dictionary in session state if not exists
+                                    if 'manual_condition_inputs' not in st.session_state:
+                                        st.session_state.manual_condition_inputs = {}
+                                    
+                                    # Select condition input mode
+                                    condition_input_mode = st.radio(
+                                        "How would you like to provide condition information?",
+                                        options=["Use training data statistics", "Define specific values"],
+                                        index=0,
+                                        key="condition_input_mode"
+                                    )
+                                    
+                                    # Create a DataFrame to store and display condition information
+                                    condition_info_data = []
+                                    
+                                    if condition_input_mode == "Use training data statistics":
+                                        # Display statistics from training data
+                                        st.write("Using statistical information from training data:")
+                                        
+                                        for col in condition_cols:
+                                            col_stats = {
+                                                "Column": col,
+                                                "Mean": training_data[col].mean(),
+                                                "Std Dev": training_data[col].std(),
+                                                "Min": training_data[col].min(),
+                                                "Max": training_data[col].max()
+                                            }
+                                            condition_info_data.append(col_stats)
+                                        
+                                        # Create DataFrame and display
+                                        condition_info_df = pd.DataFrame(condition_info_data)
+                                        st.dataframe(condition_info_df)
+                                        
+                                        st.info("When generating data, the model will use these statistics to sample condition values.")
+                                        
+                                    else:  # Define specific values
+                                        st.write("Define custom condition values:")
+                                        
+                                        # Create columns for each condition column with input fields
+                                        col_count = len(condition_cols)
+                                        cols_per_row = 3
+                                        rows_needed = (col_count + cols_per_row - 1) // cols_per_row
+                                        
+                                        for row_idx in range(rows_needed):
+                                            cols = st.columns(min(cols_per_row, col_count - row_idx * cols_per_row))
+                                            
+                                            for col_idx, column in enumerate(cols):
+                                                actual_idx = row_idx * cols_per_row + col_idx
+                                                if actual_idx < col_count:
+                                                    col_name = condition_cols[actual_idx]
+                                                    
+                                                    # Get column statistics for min/max values
+                                                    col_min = float(training_data[col_name].min())
+                                                    col_max = float(training_data[col_name].max())
+                                                    col_mean = float(training_data[col_name].mean())
+                                                    
+                                                    # Set default value to mean if not already in session state
+                                                    if col_name not in st.session_state.manual_condition_inputs:
+                                                        st.session_state.manual_condition_inputs[col_name] = col_mean
+                                                    
+                                                    with column:
+                                                        # Display input slider for the condition column
+                                                        st.session_state.manual_condition_inputs[col_name] = st.slider(
+                                                            f"{col_name}", 
+                                                            min_value=col_min,
+                                                            max_value=col_max,
+                                                            value=st.session_state.manual_condition_inputs[col_name],
+                                                            step=(col_max-col_min)/100,
+                                                            key=f"condition_value_{col_name}"
+                                                        )
+                                        
+                                        # Display the selected values in a nice format
+                                        st.write("Selected condition values:")
+                                        condition_values = {col: st.session_state.manual_condition_inputs[col] for col in condition_cols}
+                                        st.json(condition_values)
+                                        
+                                        # Store these values to session state for use during generation
+                                        st.session_state.condition_values = condition_values
+                            
                             # Dataset Balance Analysis
                             with st.expander("Training Data Analysis", expanded=False):
                                 if len(condition_cols) > 0:

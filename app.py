@@ -1454,15 +1454,15 @@ with main_container:
                                                     
                                                     # Run each selected method for this dataset
                                                     for method in selected_methods:
-                                                        st.write(f"### Results for {method}")
-                                                        
+                                                        # Make results collapsible and collapsed by default
                                                         if method == "Linear Regression Analysis" and method in method_params:
-                                                            params = method_params[method]
+                                                            with st.expander(f"Results for {method}", expanded=False):
+                                                                params = method_params[method]
                                                             
-                                                            # Get the target and features
-                                                            target = params["target"]
-                                                            features = params["features"]
-                                                            test_size = params["test_size"]
+                                                                # Get the target and features
+                                                                target = params["target"]
+                                                                features = params["features"]
+                                                                test_size = params["test_size"]
                                                             
                                                             # Check if we have enough data
                                                             if len(features) == 0:

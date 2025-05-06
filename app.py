@@ -1393,15 +1393,25 @@ with main_container:
                                     # Execute button
                                     if st.button("Run Selected Analytical Methods"):
                                         with st.spinner("Running analytical methods on all MCMC-generated datasets..."):
-                                            # Only analyze datasets from MCMC-based Interpolation
+                                            # Check if we have multiple datasets from MCMC
                                             datasets_to_analyze = []
                                             
-                                            # Only add the MCMC interpolated result - this is the dataset we want to analyze
+                                            # First add the current interpolated result
                                             if 'interpolated_result' in st.session_state and st.session_state.interpolated_result is not None:
                                                 datasets_to_analyze.append({
-                                                    'name': 'MCMC_Interpolated_Dataset',
+                                                    'name': 'Current Interpolated Dataset',
                                                     'data': st.session_state.interpolated_result
                                                 })
+                                                
+                                            # Then add all datasets from convergence_datasets (if any)
+                                            if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
+                                                for ds in st.session_state.convergence_datasets:
+                                                    if 'data' in ds and ds['data'] is not None:
+                                                        datasets_to_analyze.append({
+                                                            'name': ds.get('name', f"Dataset {ds.get('id', 'unknown')}"),
+                                                            'data': ds['data'],
+                                                            'id': ds.get('id')
+                                                        })
                                             
                                             # Check if we have datasets to analyze
                                             if not datasets_to_analyze:
@@ -1418,13 +1428,11 @@ with main_container:
                                                     data = dataset_info['data']
                                                     dataset_name = dataset_info['name']
                                                     
-                                                    # Make Analysis for MCMC_Interpolation collapsible and hidden by default
-                                                    with st.expander(f"Analysis for {dataset_name}", expanded=False):
-                                                        st.info("This section contains detailed analysis results for the MCMC-interpolated dataset")
-                                                        
-                                                        # Placeholder for results
-                                                        method_results = {}
-                                                        convergence_scores = {}
+                                                    st.subheader(f"Analysis for {dataset_name}")
+                                                    
+                                                    # Placeholder for results
+                                                    method_results = {}
+                                                    convergence_scores = {}
                                                     
                                                     # Run each selected method for this dataset
                                                     for method in selected_methods:
@@ -1487,13 +1495,13 @@ with main_container:
                                                             })
                                                             st.dataframe(metrics_df)
                                                             
-                                                            # Display coefficients in a collapsible section
-                                                            with st.expander("Model Coefficients", expanded=False):
-                                                                coef_df = pd.DataFrame({
-                                                                    'Feature': features,
-                                                                    'Coefficient': model.coef_
-                                                                })
-                                                                st.dataframe(coef_df)
+                                                            # Display coefficients
+                                                            coef_df = pd.DataFrame({
+                                                                'Feature': features,
+                                                                'Coefficient': model.coef_
+                                                            })
+                                                            st.write("#### Model Coefficients")
+                                                            st.dataframe(coef_df)
                                                             
                                                             # Visualize predictions vs actual
                                                             fig, ax = plt.subplots(1, 2, figsize=(12, 5))
@@ -1696,15 +1704,16 @@ with main_container:
                                                                 plt.tight_layout()
                                                                 st.pyplot(fig)
                                                                 
-                                                                # Display component loadings in a collapsible section
-                                                                with st.expander("Component Loadings", expanded=False):
-                                                                    loadings = pca.components_
-                                                                    loadings_df = pd.DataFrame(
-                                                                        loadings.T, 
-                                                                        index=features,
-                                                                        columns=[f'PC{i+1}' for i in range(n_components)]
-                                                                    )
-                                                                    st.dataframe(loadings_df)
+                                                                # Display component loadings
+                                                                loadings = pca.components_
+                                                                loadings_df = pd.DataFrame(
+                                                                    loadings.T, 
+                                                                    index=features,
+                                                                    columns=[f'PC{i+1}' for i in range(n_components)]
+                                                                )
+                                                                
+                                                                st.write("#### Component Loadings")
+                                                                st.dataframe(loadings_df)
                                                             
                                                             # Store results
                                                             method_results[method] = {
@@ -1722,9 +1731,9 @@ with main_container:
                                                             # Calculate correlation matrix
                                                             corr_matrix = numeric_data.corr()
                                                             
-                                                            # Display correlation matrix in a collapsible section
-                                                            with st.expander("Correlation Matrix", expanded=False):
-                                                                st.dataframe(corr_matrix)
+                                                            # Display correlation matrix
+                                                            st.write("#### Correlation Matrix")
+                                                            st.dataframe(corr_matrix)
                                                             
                                                             # Visualize correlation matrix
                                                             fig, ax = plt.subplots(figsize=(12, 10))
@@ -1760,32 +1769,32 @@ with main_container:
                                                             # Perform basic hypothesis tests on numeric columns
                                                             numeric_data = data.select_dtypes(include=np.number)
                                                             
-                                                            # Normality tests (Shapiro-Wilk) in a collapsible section
-                                                            with st.expander("Normality Tests (Shapiro-Wilk)", expanded=False):
-                                                                normality_results = []
+                                                            # Normality tests (Shapiro-Wilk)
+                                                            st.write("#### Normality Tests (Shapiro-Wilk)")
+                                                            normality_results = []
                                                             
-                                                                for col in numeric_data.columns:
-                                                                    # Drop NaN values
-                                                                    values = numeric_data[col].dropna()
-                                                                    
-                                                                    # Only test if we have enough data (3-5000 samples)
-                                                                    if len(values) >= 3 and len(values) <= 5000:
-                                                                        stat, p = stats.shapiro(values)
-                                                                        normality_results.append({
-                                                                            'Column': col,
-                                                                            'Statistic': stat,
-                                                                            'p-value': p,
-                                                                            'Normal Distribution': 'Yes' if p > 0.05 else 'No'
-                                                                        })
-                                                                    else:
-                                                                        normality_results.append({
-                                                                            'Column': col,
-                                                                            'Statistic': None,
-                                                                            'p-value': None,
-                                                                            'Normal Distribution': 'Not tested (insufficient samples)'
-                                                                        })
+                                                            for col in numeric_data.columns:
+                                                                # Drop NaN values
+                                                                values = numeric_data[col].dropna()
                                                                 
-                                                                st.dataframe(pd.DataFrame(normality_results))
+                                                                # Only test if we have enough data (3-5000 samples)
+                                                                if len(values) >= 3 and len(values) <= 5000:
+                                                                    stat, p = stats.shapiro(values)
+                                                                    normality_results.append({
+                                                                        'Column': col,
+                                                                        'Statistic': stat,
+                                                                        'p-value': p,
+                                                                        'Normal Distribution': 'Yes' if p > 0.05 else 'No'
+                                                                    })
+                                                                else:
+                                                                    normality_results.append({
+                                                                        'Column': col,
+                                                                        'Statistic': None,
+                                                                        'p-value': None,
+                                                                        'Normal Distribution': 'Not tested (insufficient samples)'
+                                                                    })
+                                                            
+                                                            st.dataframe(pd.DataFrame(normality_results))
                                                             
                                                             # Store results
                                                             method_results[method] = {

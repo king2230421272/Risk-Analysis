@@ -316,10 +316,15 @@ with main_container:
                         all_columns = st.session_state.data.columns.tolist()
                         
                         # Feature selection
+                        # Filter selected features to ensure all default values are in the options list
+                        filtered_defaults = []
+                        if 'selected_features' in st.session_state and st.session_state.selected_features:
+                            filtered_defaults = [f for f in st.session_state.selected_features if f in all_columns]
+                        
                         st.session_state.selected_features = st.multiselect(
                             "Features to include in processing",
                             all_columns,
-                            default=st.session_state.selected_features if st.session_state.selected_features else all_columns
+                            default=filtered_defaults if filtered_defaults else all_columns
                         )
                         
                         # Target variable selection

@@ -1341,8 +1341,8 @@ with main_container:
                                                 # Filter out target from features
                                                 feature_options = [col for col in numeric_cols if col != target_var]
                                                 
-                                                # Default to the first column as feature
-                                                default_features = [feature_options[0]] if feature_options else []
+                                                # Default to all columns except target as features
+                                                default_features = feature_options
                                                 
                                                 feature_vars = st.multiselect(
                                                     "Select predictor variables:",
@@ -1381,8 +1381,8 @@ with main_container:
                                             # Filter out any columns that contain 'id' or 'ID' in their name
                                             numeric_cols = [col for col in numeric_cols if 'id' not in col.lower()]
                                             
-                                            # Default to the first column for clustering
-                                            default_cluster_vars = [numeric_cols[0]] if numeric_cols else []
+                                            # Default to all columns for clustering
+                                            default_cluster_vars = numeric_cols
                                             
                                             cluster_vars = st.multiselect(
                                                 "Select variables for clustering:",
@@ -1418,15 +1418,11 @@ with main_container:
                                             # Filter out any columns that contain 'id' or 'ID' in their name
                                             numeric_cols = [col for col in numeric_cols if 'id' not in col.lower()]
                                             
-                                            # Default to all columns except first and last for PCA (as eigenvalues)
+                                            # Default to all columns for PCA
                                             default_pca_vars = numeric_cols.copy()
-                                            if len(default_pca_vars) > 0:
-                                                # Remove first and last columns by default
-                                                if len(default_pca_vars) > 1:
-                                                    default_pca_vars = default_pca_vars[1:-1]
                                             
                                             pca_vars = st.multiselect(
-                                                "Select variables for PCA (first and last columns disregarded by default):",
+                                                "Select variables for PCA:",
                                                 options=numeric_cols,
                                                 default=default_pca_vars,
                                                 key="pca_features"

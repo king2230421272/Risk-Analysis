@@ -3041,6 +3041,9 @@ with main_container:
                                                 
                                                 # Calculate KS test
                                                 try:
+                                                    # First import stats from scipy explicitly
+                                                    from scipy import stats
+                                                    
                                                     ks_stat, ks_pval = stats.ks_2samp(
                                                         eval_data[viz_col].dropna(), 
                                                         analysis_results[viz_col].dropna()

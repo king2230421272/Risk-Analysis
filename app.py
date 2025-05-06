@@ -5,6 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
+from scipy import stats
 from modules.data_processing import DataProcessor
 from modules.advanced_data_processing import AdvancedDataProcessor
 from modules.prediction import Predictor
@@ -1166,41 +1167,298 @@ with main_container:
                     with advanced_options[1]:
                         st.write("### Multiple Imputation Analysis")
                         st.write("""
-                        This tab performs advanced analysis on the interpolated dataset to evaluate convergence and 
-                        statistical properties. The analysis includes three core methods:
-                        1. Cluster Analysis (K-Means)
-                        2. Regression Analysis (Linear Regression)
-                        3. Factor Analysis (Principal Component Analysis - PCA)
+                        Multiple imputation is a statistical technique for handling missing data that creates multiple 
+                        filled-in (imputed) datasets, analyzes them separately, and then combines the results. This helps:
+                        1. Preserve statistical relationships in the data
+                        2. Account for uncertainty in the missing values
+                        3. Produce more reliable statistical inferences
                         """)
                         
                         # Check if we have MCMC interpolated result
                         if 'interpolated_result' not in st.session_state:
                             st.info("Please run MCMC interpolation first before performing multiple imputation analysis.")
                         else:
-                            # Initialize convergence status
-                            if 'convergence_status' not in st.session_state:
-                                st.session_state.convergence_status = "Not evaluated"
-                                st.session_state.convergence_iterations = 0
-                                st.session_state.convergence_datasets = []
-                                st.session_state.closest_convergence_dataset = None
-                                
-                            # Show current status
-                            status_col1, status_col2 = st.columns(2)
-                            with status_col1:
-                                st.write("**Current Analysis Status**")
-                                st.write(f"Convergence Status: {st.session_state.convergence_status}")
-                                st.write(f"Iterations Completed: {st.session_state.convergence_iterations}")
+                            # Display core information about the imputation process
+                            st.subheader("Imputation Statistics")
                             
-                            with status_col2:
-                                st.write("**Datasets Information**")
-                                if st.session_state.convergence_datasets:
-                                    st.write(f"Number of Analyzed Datasets: {len(st.session_state.convergence_datasets)}")
-                                    if st.session_state.closest_convergence_dataset is not None:
-                                        st.write("Closest to Convergence: Dataset Available")
-                                    else:
-                                        st.write("Closest to Convergence: None Identified Yet")
+                            # Get current imputed dataset
+                            current_data = st.session_state.interpolated_result
+                            
+                            # Calculate imputation statistics
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write("**Original Missing Data**")
+                                if 'original_missing_counts' in st.session_state:
+                                    missing_counts = st.session_state.original_missing_counts
+                                    total_missing = missing_counts.sum().sum()
+                                    total_cells = missing_counts.size
+                                    
+                                    st.write(f"Total missing values: {total_missing}")
+                                    st.write(f"Missing percentage: {total_missing/total_cells*100:.2f}%")
+                                    
+                                    # Show top columns with missing values
+                                    missing_by_col = missing_counts.sum()
+                                    if len(missing_by_col) > 0:
+                                        top_missing = missing_by_col.sort_values(ascending=False).head(5)
+                                        st.write("Columns with most missing values:")
+                                        for col, count in top_missing.items():
+                                            if count > 0:
+                                                st.write(f"- {col}: {count} values ({count/len(current_data)*100:.1f}%)")
                                 else:
-                                    st.write("No datasets analyzed yet.")
+                                    st.write("Original missing value information not available.")
+                            
+                            with col2:
+                                st.write("**Imputation Results**")
+                                # Check for any remaining missing values
+                                remaining_missing = current_data.isna().sum().sum()
+                                if remaining_missing > 0:
+                                    st.warning(f"Imputation incomplete: {remaining_missing} values still missing")
+                                else:
+                                    st.success("All missing values successfully imputed")
+                                
+                                if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
+                                    num_datasets = len(st.session_state.convergence_datasets)
+                                    st.write(f"Number of imputed datasets: {num_datasets}")
+                                    
+                                    # Show creation timestamps range
+                                    if num_datasets > 0:
+                                        timestamps = [ds['timestamp'] for ds in st.session_state.convergence_datasets]
+                                        if timestamps:
+                                            earliest = min(timestamps)
+                                            latest = max(timestamps)
+                                            st.write(f"Created between: {earliest.strftime('%Y-%m-%d %H:%M')} and {latest.strftime('%Y-%m-%d %H:%M')}")
+                                else:
+                                    st.write("Single imputed dataset available")
+                            
+                            # Add pooled analysis section
+                            st.subheader("Multiple Imputation Analysis")
+                            
+                            if 'convergence_datasets' in st.session_state and len(st.session_state.convergence_datasets) > 1:
+                                st.write("""
+                                Multiple imputation creates several complete datasets with different imputed values.
+                                This allows us to account for the uncertainty in the missing data by analyzing variations
+                                across imputed datasets.
+                                """)
+                                
+                                # Datasets for analysis
+                                datasets_for_analysis = [f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
+                                selected_datasets = st.multiselect(
+                                    "Select datasets to analyze:",
+                                    options=datasets_for_analysis,
+                                    default=datasets_for_analysis[:min(5, len(datasets_for_analysis))]
+                                )
+                                
+                                if selected_datasets:
+                                    # Analysis options
+                                    analysis_type = st.radio(
+                                        "Choose analysis method:",
+                                        ["Pooled Statistics", "Imputation Variance Analysis", "Distribution Comparisons"]
+                                    )
+                                    
+                                    if st.button("Run Multiple Imputation Analysis"):
+                                        with st.spinner("Analyzing multiple imputed datasets..."):
+                                            # Get the data for selected datasets
+                                            selected_data = []
+                                            for ds_name in selected_datasets:
+                                                ds_id = int(ds_name.split()[-1])
+                                                dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
+                                                if dataset:
+                                                    selected_data.append(dataset['data'])
+                                            
+                                            # Perform selected analysis
+                                            if analysis_type == "Pooled Statistics":
+                                                # Calculate pooled statistics across datasets
+                                                st.write("### Pooled Statistics Across Imputed Datasets")
+                                                
+                                                # Calculate mean and standard deviation for each dataset
+                                                summary_stats = []
+                                                for i, data in enumerate(selected_data):
+                                                    # Get numeric columns only
+                                                    numeric_data = data.select_dtypes(include=np.number)
+                                                    ds_stats = numeric_data.describe().T[['mean', 'std']]
+                                                    ds_stats.columns = [f'mean_{i+1}', f'std_{i+1}']
+                                                    summary_stats.append(ds_stats)
+                                                
+                                                if summary_stats:
+                                                    # Combine all stats
+                                                    all_stats = pd.concat(summary_stats, axis=1)
+                                                    
+                                                    # Calculate pooled mean and variance
+                                                    mean_cols = [col for col in all_stats.columns if col.startswith('mean')]
+                                                    std_cols = [col for col in all_stats.columns if col.startswith('std')]
+                                                    
+                                                    pooled_mean = all_stats[mean_cols].mean(axis=1)
+                                                    
+                                                    # Calculate within-imputation variance (average of squared std devs)
+                                                    within_var = (all_stats[std_cols] ** 2).mean(axis=1)
+                                                    
+                                                    # Calculate between-imputation variance
+                                                    between_var = all_stats[mean_cols].var(axis=1)
+                                                    
+                                                    # Total variance (Rubin's rule: total = within + between + between/m)
+                                                    m = len(selected_data)
+                                                    total_var = within_var + between_var * (1 + 1/m)
+                                                    
+                                                    # Pooled standard error
+                                                    pooled_se = np.sqrt(total_var)
+                                                    
+                                                    # Create results dataframe
+                                                    results = pd.DataFrame({
+                                                        'Pooled Mean': pooled_mean,
+                                                        'Within Imputation Variance': within_var,
+                                                        'Between Imputation Variance': between_var,
+                                                        'Total Variance': total_var,
+                                                        'Pooled SE': pooled_se
+                                                    })
+                                                    
+                                                    st.dataframe(results)
+                                                    
+                                                    # Show interpretation
+                                                    st.write("### Interpretation")
+                                                    st.write("""
+                                                    - **Pooled Mean**: The average estimate across all imputed datasets
+                                                    - **Within Imputation Variance**: Average variance within each imputed dataset
+                                                    - **Between Imputation Variance**: Variance of the estimates across datasets (reflects uncertainty due to imputation)
+                                                    - **Total Variance**: Combined variance following Rubin's rule
+                                                    - **Pooled SE**: Standard error accounting for both sources of uncertainty
+                                                    """)
+                                                    
+                                                    # Show diagnostic measures
+                                                    fraction_missing_info = between_var / total_var
+                                                    relative_increase_var = (between_var + between_var/m) / within_var
+                                                    
+                                                    st.write("### Diagnostic Measures")
+                                                    diagnostic_df = pd.DataFrame({
+                                                        'Fraction of Missing Information': fraction_missing_info,
+                                                        'Relative Increase in Variance': relative_increase_var
+                                                    })
+                                                    st.dataframe(diagnostic_df)
+                                            
+                                            elif analysis_type == "Imputation Variance Analysis":
+                                                st.write("### Imputation Variance Analysis")
+                                                
+                                                # Identify columns imputed across datasets
+                                                if 'original_missing_counts' in st.session_state:
+                                                    missing_counts = st.session_state.original_missing_counts
+                                                    # Get columns with missing values
+                                                    imputed_cols = missing_counts.columns[missing_counts.any()].tolist()
+                                                    
+                                                    # Only analyze numeric columns
+                                                    numeric_cols = selected_data[0].select_dtypes(include=np.number).columns
+                                                    numeric_imputed_cols = [col for col in imputed_cols if col in numeric_cols]
+                                                    
+                                                    if numeric_imputed_cols:
+                                                        # Select columns to analyze
+                                                        cols_to_analyze = st.multiselect(
+                                                            "Select columns to analyze variance:",
+                                                            options=numeric_imputed_cols,
+                                                            default=numeric_imputed_cols[:min(3, len(numeric_imputed_cols))]
+                                                        )
+                                                        
+                                                        if cols_to_analyze:
+                                                            # Calculate variance for each imputed column across datasets
+                                                            var_results = {}
+                                                            for col in cols_to_analyze:
+                                                                # Extract values for this column from each dataset
+                                                                col_values = []
+                                                                for data in selected_data:
+                                                                    if col in data.columns:
+                                                                        col_values.append(data[col])
+                                                                
+                                                                if col_values:
+                                                                    # Stack series into a dataframe
+                                                                    col_df = pd.concat(col_values, axis=1)
+                                                                    # Calculate variance across imputed values
+                                                                    var_results[col] = col_df.var(axis=1).mean()
+                                                            
+                                                            # Display variance results
+                                                            var_df = pd.DataFrame({
+                                                                'Column': list(var_results.keys()),
+                                                                'Average Imputation Variance': list(var_results.values())
+                                                            })
+                                                            var_df = var_df.sort_values('Average Imputation Variance', ascending=False)
+                                                            st.dataframe(var_df)
+                                                            
+                                                            # Visualize variance
+                                                            st.write("### Imputation Variance by Column")
+                                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                                            ax.bar(var_df['Column'], var_df['Average Imputation Variance'])
+                                                            ax.set_ylabel('Average Imputation Variance')
+                                                            ax.set_xlabel('Column')
+                                                            plt.xticks(rotation=45, ha='right')
+                                                            st.pyplot(fig)
+                                                    else:
+                                                        st.info("No numeric columns with missing values were found.")
+                                                else:
+                                                    st.warning("Original missing value information not available.")
+                                            
+                                            elif analysis_type == "Distribution Comparisons":
+                                                st.write("### Distribution Comparisons Across Imputed Datasets")
+                                                
+                                                # Get numeric columns
+                                                numeric_cols = selected_data[0].select_dtypes(include=np.number).columns.tolist()
+                                                selected_column = st.selectbox("Select column for distribution comparison:", numeric_cols)
+                                                
+                                                if selected_column:
+                                                    # Extract distributions
+                                                    distributions = []
+                                                    for i, data in enumerate(selected_data):
+                                                        if selected_column in data.columns:
+                                                            distributions.append({
+                                                                'dataset': f"Dataset {i+1}",
+                                                                'data': data[selected_column].dropna()
+                                                            })
+                                                    
+                                                    # Create distribution plot
+                                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                                    for dist in distributions:
+                                                        ax.hist(dist['data'], alpha=0.5, bins=20, label=dist['dataset'])
+                                                    
+                                                    ax.set_xlabel(selected_column)
+                                                    ax.set_ylabel('Frequency')
+                                                    ax.set_title(f'Distribution of {selected_column} Across Imputed Datasets')
+                                                    ax.legend()
+                                                    st.pyplot(fig)
+                                                    
+                                                    # Run statistical tests to compare distributions
+                                                    st.write("### Statistical Comparison of Distributions")
+                                                    st.write("Kolmogorov-Smirnov test results (comparing each dataset to the first dataset):")
+                                                    
+                                                    test_results = []
+                                                    reference_dist = distributions[0]['data']
+                                                    
+                                                    for i, dist in enumerate(distributions[1:], 1):
+                                                        test_dist = dist['data']
+                                                        ks_stat, p_value = stats.ks_2samp(reference_dist, test_dist)
+                                                        test_results.append({
+                                                            'Comparison': f"Dataset 1 vs Dataset {i+1}",
+                                                            'KS Statistic': ks_stat,
+                                                            'p-value': p_value,
+                                                            'Significant Difference': 'Yes' if p_value < 0.05 else 'No'
+                                                        })
+                                                    
+                                                    if test_results:
+                                                        st.dataframe(pd.DataFrame(test_results))
+                                                        
+                                                        # Summary
+                                                        significant_diffs = sum(1 for result in test_results if result['Significant Difference'] == 'Yes')
+                                                        total_comparisons = len(test_results)
+                                                        
+                                                        if significant_diffs > 0:
+                                                            st.warning(f"Found significant differences in {significant_diffs} out of {total_comparisons} comparisons.")
+                                                            st.write("This suggests that the imputation process may be creating significantly different distributions for this variable.")
+                                                        else:
+                                                            st.success("No significant differences found between imputed datasets.")
+                                                            st.write("This suggests the imputation process is stable for this variable.")
+                                            
+                                else:
+                                    st.info("Please select at least one dataset to analyze.")
+                            else:
+                                st.info("""
+                                To perform multiple imputation analysis, you need at least 2 imputed datasets.
+                                Please go back to the MCMC Interpolation tab and generate multiple datasets.
+                                """)
 
                             # Add current dataset to analysis
                             if st.button("Add Current Interpolated Dataset to Analysis", key="add_dataset_btn"):

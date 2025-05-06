@@ -147,6 +147,73 @@ with main_container:
                 st.error("⚠️ Database connection is not available. Cannot load data from database.")
                 st.info("Please check your database connection settings or continue using file upload.")
             else:
+                # First add a "Load Both Datasets" section at the top
+                st.subheader("Load Both Datasets with One Click")
+                
+                try:
+                    # Get list of datasets from database
+                    all_datasets = db_handler.list_datasets()
+                    
+                    if not all_datasets:
+                        st.info("No datasets found in the database. Please save some datasets first.")
+                    else:
+                        # Create a formatted selectbox for datasets
+                        dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']}x{ds['column_count']})") 
+                                          for ds in all_datasets]
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            original_dataset = st.selectbox(
+                                "Select dataset for Original Data:",
+                                options=dataset_options,
+                                format_func=lambda x: x[1],
+                                key="original_combined_select"
+                            )
+                        
+                        with col2:
+                            interpolated_dataset = st.selectbox(
+                                "Select dataset for Data to Interpolate:",
+                                options=dataset_options,
+                                format_func=lambda x: x[1],
+                                key="interpolated_combined_select"
+                            )
+                        
+                        if st.button("Load Both Datasets", key="load_both_btn"):
+                            try:
+                                # Load the original dataset
+                                original_df = db_handler.load_dataset(dataset_id=original_dataset[0])
+                                st.session_state.original_data = original_df
+                                
+                                # Load the interpolated dataset
+                                interpolated_df = db_handler.load_dataset(dataset_id=interpolated_dataset[0])
+                                st.session_state.interpolated_data = interpolated_df
+                                
+                                # Success message
+                                st.success(f"Both datasets loaded successfully!")
+                                
+                                # Show data previews
+                                st.write("Original Data Preview:")
+                                st.dataframe(original_df.head())
+                                
+                                st.write("Data to Interpolate Preview:")
+                                st.dataframe(interpolated_df.head())
+                                
+                                # Set active dataset to the original data
+                                st.session_state.data = original_df
+                                st.session_state.active_dataset = "Original Data"
+                                st.info("Original data set as active dataset for analysis.")
+                                
+                            except Exception as e:
+                                st.error(f"Error loading datasets: {e}")
+                
+                except Exception as e:
+                    st.error(f"Error accessing database: {e}")
+                
+                # Add separator
+                st.markdown("---")
+                st.markdown("### Load Individual Datasets")
+                
                 col1, col2 = st.columns(2)
                 
                 # LOAD AS ORIGINAL DATA

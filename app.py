@@ -2781,6 +2781,8 @@ with main_container:
                                                 if converged_pairs:
                                                     st.success("✅ **CONVERGENCE ACHIEVED!** The interpolation process has stabilized.")
                                                     st.session_state.convergence_status = "Converged"
+                                                    # Set all_converged flag for the sequential analysis
+                                                    st.session_state.all_converged = True
                                                     
                                                     # Identify the best converged pair and dataset
                                                     best_pair = max(converged_pairs, key=lambda x: x['convergence_score'])
@@ -2790,6 +2792,8 @@ with main_container:
                                                     if best_dataset:
                                                         st.write(f"**Best converged dataset: Dataset {best_dataset_id}**")
                                                         st.session_state.closest_convergence_dataset = best_dataset
+                                                        # Store the best dataset for CGAN analysis
+                                                        st.session_state.best_converged_dataset = best_dataset
                                                         
                                                     # If in consecutive mode, mark the analysis as complete
                                                     if consecutive_mode:

@@ -1231,7 +1231,7 @@ with main_container:
                                     st.write("""
                                     ### Run All Analysis Steps
                                     Use this control to run all analysis steps consecutively with a single click. 
-                                    This will perform K-Means clustering, Linear Regression, and PCA analysis on all datasets, 
+                                    This will perform Linear Regression, K-Means clustering, and PCA analysis on all datasets, 
                                     followed by convergence evaluation.
                                     """)
                                     
@@ -1252,8 +1252,8 @@ with main_container:
                                             st.info("Starting consecutive analysis. Please wait while all steps are executed...")
                                     
                                 # Analysis methods in tabs
-                                analysis_tabs = st.tabs(["Dataset Selection", "Cluster Analysis (K-Means)", 
-                                                        "Regression Analysis", "Factor Analysis (PCA)", 
+                                analysis_tabs = st.tabs(["Dataset Selection", "Regression Analysis", 
+                                                        "Cluster Analysis (K-Means)", "Factor Analysis (PCA)", 
                                                         "Convergence Evaluation"])
                                 
                                 # Initialize consecutive analysis if it doesn't exist
@@ -1269,17 +1269,17 @@ with main_container:
                                     
                                     # Execute analysis steps in order
                                     if current_step == 0:
-                                        # Start with cluster analysis
-                                        st.warning("Consecutive analysis: Running K-Means clustering analysis...")
-                                        # This will be executed in the Cluster Analysis tab, so increase step
+                                        # Start with regression analysis
+                                        st.warning("Consecutive analysis: Running Linear Regression analysis...")
+                                        # This will be executed in the Regression Analysis tab, so increase step
                                         st.session_state.current_analysis_step = 1
                                         # Redirect to that tab
                                         # Using rerun() here would be ideal but leads to an infinite loop
                                         # Instead, we'll let each tab check the step to see if processing is needed
                                     
                                     elif current_step == 1:
-                                        # Move to regression analysis
-                                        st.warning("Consecutive analysis: Running Regression analysis...")
+                                        # Move to clustering analysis
+                                        st.warning("Consecutive analysis: Running K-Means clustering analysis...")
                                         st.session_state.current_analysis_step = 2
                                     
                                     elif current_step == 2:

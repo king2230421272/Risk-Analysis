@@ -1844,7 +1844,7 @@ with main_container:
                                                     st.session_state.convergence_datasets.append(new_analysis)
                                                     
                                                     st.success(f"Analysis complete. Results saved as Analysis {new_analysis['id']}.")
-                                                    st.info("Navigate to the Convergence Evaluation tab to evaluate convergence with multiple analyses.")
+                                                    st.info("Navigate to the Multiple Interpolation Analysis Results tab to compare analysis results.")
                                 else:
                                     st.warning("Please select at least one analytical method to continue.")
                                 
@@ -1855,8 +1855,8 @@ with main_container:
                             if not st.session_state.convergence_datasets:
                                 st.warning("No analysis results available. Please run analysis in the Analyze Imputed Data tab.")
                             else:
-                                st.write("### Convergence Evaluation")
-                                st.write("Evaluate the convergence of multiple imputations.")
+                                st.write("### Multiple Interpolation Analysis Results")
+                                st.write("Compare the results from multiple interpolation analyses.")
                                 
                                 # Show available datasets
                                 st.write("#### Available Analysis Results")
@@ -1884,7 +1884,7 @@ with main_container:
                                     selected_analyses = [a for a in st.session_state.convergence_datasets if a['id'] in selected_ids]
                                     
                                     if len(selected_analyses) > 1:
-                                        st.write("### Convergence Statistics")
+                                        st.write("### Analysis Comparison")
                                         
                                         # Prepare data for comparison
                                         comparison_data = []
@@ -1908,7 +1908,7 @@ with main_container:
                                         
                                         # Calculate variation statistics
                                         if len(comparison_data) > 1:
-                                            st.write("#### Variation Between Imputations")
+                                            st.write("#### Variation Between Datasets")
                                             
                                             numeric_cols = comparison_df.select_dtypes(include=np.number).columns
                                             if len(numeric_cols) > 0:
@@ -1932,25 +1932,17 @@ with main_container:
                                                     var_df = pd.DataFrame(variation_stats).T
                                                     st.dataframe(var_df)
                                                     
-                                                    # Interpret convergence
-                                                    st.write("#### Convergence Interpretation")
+                                                    # No longer interpret convergence - just show the data
+                                                    st.write("#### Dataset Variation Statistics")
                                                     
-                                                    cv_values = var_df['CV (%)'].dropna()
-                                                    if len(cv_values) > 0:
-                                                        avg_cv = cv_values.mean()
-                                                        
-                                                        if avg_cv < 5:
-                                                            st.success(f"Good convergence (Average CV: {avg_cv:.2f}%). The multiple imputations have converged well.")
-                                                        elif avg_cv < 10:
-                                                            st.info(f"Acceptable convergence (Average CV: {avg_cv:.2f}%). The multiple imputations show reasonable consistency.")
-                                                        else:
-                                                            st.warning(f"Poor convergence (Average CV: {avg_cv:.2f}%). Consider running more imputations or reviewing the imputation model.")
+                                                    # Simply display the variance statistics without evaluation
+                                                    st.info("These statistics show variation between datasets but no convergence evaluation is performed.")
                                                 else:
                                                     st.warning("No comparable numeric metrics found across the selected analyses.")
                                             else:
-                                                st.warning("No numeric metrics available for convergence evaluation.")
+                                                st.warning("No numeric metrics available for dataset comparison.")
                                     else:
-                                        st.warning("Please select at least two analysis results to compare convergence.")
+                                        st.warning("Please select at least two analysis results to compare datasets.")
                                 
                             # Add database section for storing and retrieving analysis results
                             st.write("### Save and Load Analysis Results")

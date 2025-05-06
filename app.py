@@ -55,6 +55,8 @@ if 'outlier_results' not in st.session_state:
     st.session_state.outlier_results = None
 if 'convergence_datasets' not in st.session_state:
     st.session_state.convergence_datasets = []
+if 'convergence_iterations' not in st.session_state:
+    st.session_state.convergence_iterations = 0
 
 # Initialize modules
 data_handler = DataHandler()
@@ -1905,7 +1907,7 @@ with main_container:
                                         {
                                             'ID': a['id'],
                                             'Dataset': a['name'],
-                                            'Methods': ", ".join(a['methods']),
+                                            'Methods': ", ".join(a.get('methods', [])),
                                             'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
                                         }
                                         for a in st.session_state.convergence_datasets

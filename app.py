@@ -1252,8 +1252,8 @@ with main_container:
                                             st.info("Starting consecutive analysis. Please wait while all steps are executed...")
                                     
                                 # Analysis methods in tabs
-                                analysis_tabs = st.tabs(["Dataset Selection", "Regression Analysis", 
-                                                        "Cluster Analysis (K-Means)", "Factor Analysis (PCA)", 
+                                analysis_tabs = st.tabs(["Dataset Selection", "Linear Regression", 
+                                                        "K-Means Clustering", "PCA Factor Analysis", 
                                                         "Convergence Evaluation"])
                                 
                                 # Initialize consecutive analysis if it doesn't exist
@@ -1412,13 +1412,13 @@ with main_container:
                                         else:
                                             st.error("One or both of the selected datasets are not available.")
                                 
-                                # 2. Cluster Analysis (K-Means) Tab
+                                # 2. Linear Regression Tab
                                 with analysis_tabs[1]:
-                                    st.write("### Cluster Analysis (K-Means)")
+                                    st.write("### Linear Regression Analysis")
                                     st.write("""
-                                    K-Means clustering groups data points by similarity.
-                                    This helps determine if interpolated data preserves the clustering patterns
-                                    present in the original data.
+                                    Linear Regression analyzes the relationship between variables to predict outcomes.
+                                    This analysis helps ensure that interpolated data preserves the underlying
+                                    statistical relationships found in the original data.
                                     """)
                                     
                                     # Check if we're in consecutive analysis mode
@@ -1427,7 +1427,7 @@ with main_container:
                                         st.session_state.consecutive_analysis and 
                                         st.session_state.current_analysis_step == 1):
                                         consecutive_mode = True
-                                        st.info("Running K-Means Clustering analysis as part of consecutive analysis...")
+                                        st.info("Running Linear Regression analysis as part of consecutive analysis...")
                                     
                                     # Select datasets to analyze
                                     dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
@@ -1770,11 +1770,11 @@ with main_container:
                                     else:
                                         st.error(f"Dataset {selected_dataset} is not available.")
                                 
-                                # 3. Regression Analysis Tab
+                                # 3. K-Means Clustering Tab
                                 with analysis_tabs[2]:
-                                    st.write("### Regression Analysis")
+                                    st.write("### K-Means Clustering Analysis")
                                     st.write("""
-                                    Linear regression analyzes the relationship between variables.
+                                    K-Means clustering groups data points by similarity.
                                     We'll use it to evaluate if interpolated data maintains the same variable relationships as the original data.
                                     """)
                                     
@@ -1861,9 +1861,9 @@ with main_container:
                                         consecutive_mode = False
                                         if ('consecutive_analysis' in st.session_state and 
                                             st.session_state.consecutive_analysis and 
-                                            st.session_state.current_analysis_step == 2):
+                                            st.session_state.current_analysis_step == 1):
                                             consecutive_mode = True
-                                            st.info("Running Regression Analysis as part of consecutive analysis...")
+                                            st.info("Running Linear Regression as part of consecutive analysis...")
                                         
                                         # Run regression
                                         run_button_clicked = False

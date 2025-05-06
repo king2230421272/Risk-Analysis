@@ -1435,13 +1435,11 @@ with main_container:
                                                     for method in selected_methods:
                                                         # Make results collapsible and collapsed by default
                                                         if method == "Linear Regression Analysis" and method in method_params:
-                                                            with st.expander(f"Results for {method}", expanded=False):
-                                                                params = method_params[method]
-                                                            
-                                                                # Get the target and features
-                                                                target = params["target"]
-                                                                features = params["features"]
-                                                                test_size = params["test_size"]
+                                                            # Get parameters outside the expander
+                                                            params = method_params[method]
+                                                            target = params["target"]
+                                                            features = params["features"]
+                                                            test_size = params["test_size"]
                                                             
                                                             # Check if we have enough data
                                                             if len(features) == 0:
@@ -1484,38 +1482,40 @@ with main_container:
                                                             convergence_scores['regression_train_r2'] = train_r2
                                                             convergence_scores['regression_test_r2'] = test_r2
                                                             
-                                                            # Display metrics
-                                                            metrics_df = pd.DataFrame({
-                                                                'Metric': ['R² Score', 'RMSE'],
-                                                                'Train': [train_r2, train_rmse],
-                                                                'Test': [test_r2, test_rmse]
-                                                            })
-                                                            st.dataframe(metrics_df)
-                                                            
-                                                            # Display coefficients
-                                                            coef_df = pd.DataFrame({
-                                                                'Feature': features,
-                                                                'Coefficient': model.coef_
-                                                            })
-                                                            st.write("#### Model Coefficients")
-                                                            st.dataframe(coef_df)
-                                                            
-                                                            # Visualize predictions vs actual
-                                                            fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-                                                            ax[0].scatter(y_train, y_train_pred, alpha=0.5)
-                                                            ax[0].plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--')
-                                                            ax[0].set_xlabel('Actual')
-                                                            ax[0].set_ylabel('Predicted')
-                                                            ax[0].set_title('Train Set')
-                                                            
-                                                            ax[1].scatter(y_test, y_test_pred, alpha=0.5)
-                                                            ax[1].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
-                                                            ax[1].set_xlabel('Actual')
-                                                            ax[1].set_ylabel('Predicted')
-                                                            ax[1].set_title('Test Set')
-                                                            
-                                                            plt.tight_layout()
-                                                            st.pyplot(fig)
+                                                            # Display results in an expander (collapsed by default)
+                                                            with st.expander(f"Results for {method}", expanded=False):
+                                                                # Display metrics
+                                                                metrics_df = pd.DataFrame({
+                                                                    'Metric': ['R² Score', 'RMSE'],
+                                                                    'Train': [train_r2, train_rmse],
+                                                                    'Test': [test_r2, test_rmse]
+                                                                })
+                                                                st.dataframe(metrics_df)
+                                                                
+                                                                # Display coefficients
+                                                                coef_df = pd.DataFrame({
+                                                                    'Feature': features,
+                                                                    'Coefficient': model.coef_
+                                                                })
+                                                                st.write("#### Model Coefficients")
+                                                                st.dataframe(coef_df)
+                                                                
+                                                                # Visualize predictions vs actual
+                                                                fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+                                                                ax[0].scatter(y_train, y_train_pred, alpha=0.5)
+                                                                ax[0].plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--')
+                                                                ax[0].set_xlabel('Actual')
+                                                                ax[0].set_ylabel('Predicted')
+                                                                ax[0].set_title('Train Set')
+                                                                
+                                                                ax[1].scatter(y_test, y_test_pred, alpha=0.5)
+                                                                ax[1].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+                                                                ax[1].set_xlabel('Actual')
+                                                                ax[1].set_ylabel('Predicted')
+                                                                ax[1].set_title('Test Set')
+                                                                
+                                                                plt.tight_layout()
+                                                                st.pyplot(fig)
                                                             
                                                             # Store results
                                                             method_results[method] = {
@@ -1770,8 +1770,7 @@ with main_container:
                                                             # Perform basic hypothesis tests on numeric columns
                                                             numeric_data = data.select_dtypes(include=np.number)
                                                             
-                                                            # Normality tests (Shapiro-Wilk)
-                                                            st.write("#### Normality Tests (Shapiro-Wilk)")
+                                                            # Run normality tests outside the expander
                                                             normality_results = []
                                                             
                                                             for col in numeric_data.columns:
@@ -1795,13 +1794,6 @@ with main_container:
                                                                         'Normal Distribution': 'Not tested (insufficient samples)'
                                                                     })
                                                             
-                                                            st.dataframe(pd.DataFrame(normality_results))
-                                                            
-                                                            # Store results
-                                                            method_results[method] = {
-                                                                'normality_tests': normality_results
-                                                            }
-                                                            
                                                             # Calculate how many variables follow normal distribution
                                                             normal_count = sum(1 for result in normality_results 
                                                                             if result['Normal Distribution'] == 'Yes')
@@ -1812,6 +1804,22 @@ with main_container:
                                                             if total_tested > 0:
                                                                 normal_pct = (normal_count / total_tested) * 100
                                                                 convergence_scores['normality_percentage'] = normal_pct
+                                                            
+                                                            # Display results in an expander (collapsed by default)
+                                                            with st.expander(f"Results for {method}", expanded=False):
+                                                                st.write("#### Normality Tests (Shapiro-Wilk)")
+                                                                st.dataframe(pd.DataFrame(normality_results))
+                                                                
+                                                                # Display summary statistics
+                                                                if total_tested > 0:
+                                                                    st.write(f"#### Summary: {normal_count} out of {total_tested} variables are normally distributed ({normal_pct:.1f}%)")
+                                                            
+                                                            # Store results
+                                                            method_results[method] = {
+                                                                'normality_tests': normality_results,
+                                                                'normal_count': normal_count,
+                                                                'total_tested': total_tested
+                                                            }
                                                     
                                                     # Save the results to the session state, but only if they're from Run Analysis Methods
                                                     # Restructuring to separate results for different analysis methods

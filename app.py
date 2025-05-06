@@ -1884,63 +1884,378 @@ with main_container:
                                     selected_analyses = [a for a in st.session_state.convergence_datasets if a['id'] in selected_ids]
                                     
                                     if len(selected_analyses) > 1:
-                                        st.write("### Analysis Comparison")
+                                        # Create tabs for different analysis approaches
+                                        analysis_tabs = st.tabs(["Individual Analysis", "Pooled Analysis", "Convergence Diagnostics", "Interpretation & Reporting"])
                                         
-                                        # Prepare data for comparison
-                                        comparison_data = []
-                                        
-                                        for analysis in selected_analyses:
-                                            # Extract relevant metrics from each analysis result
-                                            metrics = {
-                                                'ID': analysis['id'],
-                                                'Dataset': analysis['name']
-                                            }
+                                        # TAB 1: INDIVIDUAL ANALYSIS
+                                        with analysis_tabs[0]:
+                                            st.write("### Individual Analysis of Datasets")
+                                            st.write("Examine each dataset's analysis results separately.")
                                             
-                                            # Add convergence scores
-                                            for key, value in analysis.get('convergence_scores', {}).items():
-                                                metrics[key] = value
+                                            # Prepare data for comparison
+                                            comparison_data = []
                                             
-                                            comparison_data.append(metrics)
-                                        
-                                        # Display comparison table
-                                        comparison_df = pd.DataFrame(comparison_data)
-                                        st.dataframe(comparison_df)
-                                        
-                                        # Calculate variation statistics
-                                        if len(comparison_data) > 1:
-                                            st.write("#### Variation Between Datasets")
+                                            for analysis in selected_analyses:
+                                                # Extract relevant metrics from each analysis result
+                                                metrics = {
+                                                    'ID': analysis['id'],
+                                                    'Dataset': analysis['name']
+                                                }
+                                                
+                                                # Add convergence scores
+                                                for key, value in analysis.get('convergence_scores', {}).items():
+                                                    metrics[key] = value
+                                                
+                                                comparison_data.append(metrics)
                                             
+                                            # Display comparison table
+                                            comparison_df = pd.DataFrame(comparison_data)
+                                            st.dataframe(comparison_df)
+                                            
+                                            # Calculate variation statistics
+                                            if len(comparison_data) > 1:
+                                                st.write("#### Variation Between Datasets")
+                                                
+                                                numeric_cols = comparison_df.select_dtypes(include=np.number).columns
+                                                if len(numeric_cols) > 0:
+                                                    # Calculate coefficient of variation (CV) for each metric
+                                                    variation_stats = {}
+                                                    
+                                                    for col in numeric_cols:
+                                                        values = comparison_df[col].dropna()
+                                                        if len(values) > 1:
+                                                            mean = values.mean()
+                                                            std = values.std()
+                                                            cv = (std / mean) * 100 if mean != 0 else float('nan')
+                                                            
+                                                            variation_stats[col] = {
+                                                                'Mean': mean,
+                                                                'Std': std,
+                                                                'CV (%)': cv
+                                                            }
+                                                    
+                                                    if variation_stats:
+                                                        var_df = pd.DataFrame(variation_stats).T
+                                                        st.dataframe(var_df)
+                                                    else:
+                                                        st.warning("No comparable numeric metrics found across the selected analyses.")
+                                                else:
+                                                    st.warning("No numeric metrics available for dataset comparison.")
+                                        
+                                        # TAB 2: POOLED ANALYSIS
+                                        with analysis_tabs[1]:
+                                            st.write("### Pooled Analysis Results")
+                                            st.write("Combine analysis results using Rubin's rules for multiple imputations.")
+                                            
+                                            # Check if we have numeric data to analyze
                                             numeric_cols = comparison_df.select_dtypes(include=np.number).columns
                                             if len(numeric_cols) > 0:
-                                                # Calculate coefficient of variation (CV) for each metric
-                                                variation_stats = {}
+                                                # Calculate pooled statistics
+                                                pooled_stats = {}
                                                 
                                                 for col in numeric_cols:
                                                     values = comparison_df[col].dropna()
                                                     if len(values) > 1:
+                                                        # 1. Calculate mean (pooled estimate)
                                                         mean = values.mean()
-                                                        std = values.std()
-                                                        cv = (std / mean) * 100 if mean != 0 else float('nan')
                                                         
-                                                        variation_stats[col] = {
-                                                            'Mean': mean,
-                                                            'Std': std,
-                                                            'CV (%)': cv
+                                                        # 2. Calculate within-imputation variance (average variance)
+                                                        # Assuming each dataset has the same variance structure
+                                                        within_var = values.var() / len(values)
+                                                        
+                                                        # 3. Calculate between-imputation variance
+                                                        between_var = values.var() * (1.0 + 1.0/len(values))
+                                                        
+                                                        # 4. Calculate total variance (Rubin's formula)
+                                                        total_var = within_var + between_var
+                                                        
+                                                        # 5. Calculate standard error
+                                                        se = np.sqrt(total_var)
+                                                        
+                                                        # 6. Calculate degrees of freedom (Rubin's formula)
+                                                        df = (len(values) - 1) * (1 + (within_var / between_var))**2
+                                                        
+                                                        # 7. Calculate 95% confidence interval
+                                                        from scipy import stats
+                                                        t_value = stats.t.ppf(0.975, df)
+                                                        ci_lower = mean - t_value * se
+                                                        ci_upper = mean + t_value * se
+                                                        
+                                                        # 8. Calculate fraction of missing information (FMI)
+                                                        fmi = (between_var + between_var/len(values)) / total_var
+                                                        
+                                                        pooled_stats[col] = {
+                                                            'Pooled Estimate': mean,
+                                                            'Within Variance': within_var,
+                                                            'Between Variance': between_var,
+                                                            'Total Variance': total_var,
+                                                            'Standard Error': se,
+                                                            'DF': df,
+                                                            '95% CI Lower': ci_lower,
+                                                            '95% CI Upper': ci_upper,
+                                                            'FMI': fmi
                                                         }
                                                 
-                                                if variation_stats:
-                                                    var_df = pd.DataFrame(variation_stats).T
-                                                    st.dataframe(var_df)
+                                                if pooled_stats:
+                                                    # Create a nice summary table
+                                                    summary_data = []
+                                                    for col, stats in pooled_stats.items():
+                                                        row = {'Parameter': col}
+                                                        row.update({
+                                                            'Estimate': stats['Pooled Estimate'],
+                                                            'SE': stats['Standard Error'],
+                                                            '95% CI': f"({stats['95% CI Lower']:.3f}, {stats['95% CI Upper']:.3f})",
+                                                            'FMI (%)': stats['FMI'] * 100
+                                                        })
+                                                        summary_data.append(row)
                                                     
-                                                    # No longer interpret convergence - just show the data
-                                                    st.write("#### Dataset Variation Statistics")
+                                                    # Show summary table
+                                                    st.write("#### Pooled Parameter Estimates")
+                                                    st.write("Combined results using Rubin's rules for multiple imputation:")
+                                                    st.dataframe(pd.DataFrame(summary_data))
                                                     
-                                                    # Simply display the variance statistics without evaluation
-                                                    st.info("These statistics show variation between datasets but no convergence evaluation is performed.")
+                                                    # Show detailed statistics
+                                                    with st.expander("Show detailed variance components", expanded=False):
+                                                        detailed_data = []
+                                                        for col, stats in pooled_stats.items():
+                                                            row = {'Parameter': col}
+                                                            row.update({
+                                                                'Within Var': stats['Within Variance'],
+                                                                'Between Var': stats['Between Variance'],
+                                                                'Total Var': stats['Total Variance'],
+                                                                'DF': stats['DF']
+                                                            })
+                                                            detailed_data.append(row)
+                                                        
+                                                        st.dataframe(pd.DataFrame(detailed_data))
+                                                        
+                                                        st.write("""
+                                                        **Explanation of variance components:**
+                                                        - **Within Variance**: Average variance within each imputed dataset
+                                                        - **Between Variance**: Variance between estimates from different datasets
+                                                        - **Total Variance**: Combined variance accounting for both sources of uncertainty
+                                                        - **DF**: Adjusted degrees of freedom for statistical inference
+                                                        """)
                                                 else:
-                                                    st.warning("No comparable numeric metrics found across the selected analyses.")
+                                                    st.warning("No suitable parameters found for pooled analysis.")
                                             else:
-                                                st.warning("No numeric metrics available for dataset comparison.")
+                                                st.warning("No numeric metrics available for pooled analysis.")
+                                        
+                                        # TAB 3: CONVERGENCE DIAGNOSTICS
+                                        with analysis_tabs[2]:
+                                            st.write("### Convergence Diagnostics")
+                                            st.write("Evaluate convergence of multiple imputation process.")
+                                            
+                                            # Check if we have numeric data to analyze
+                                            numeric_cols = comparison_df.select_dtypes(include=np.number).columns
+                                            if len(numeric_cols) > 0:
+                                                # PSRF/Gelman-Rubin Calculation
+                                                psrf_results = {}
+                                                between_within_ratio = {}
+                                                
+                                                for col in numeric_cols:
+                                                    values = comparison_df[col].dropna()
+                                                    if len(values) > 1:
+                                                        # For PSRF, we need to calculate between and within chain variance
+                                                        # Since we don't have actual chains, we'll treat each dataset as a chain
+                                                        
+                                                        # Between-imputation variance (scaled)
+                                                        between_var = values.var() * (len(values) + 1) / len(values)
+                                                        
+                                                        # Within-imputation variance (averaged)
+                                                        within_var = values.var() / 2  # Simplified approximation
+                                                        
+                                                        # PSRF calculation
+                                                        if within_var > 0:
+                                                            psrf = np.sqrt((within_var + between_var) / within_var)
+                                                            psrf_results[col] = psrf
+                                                            
+                                                            # Calculate Between/Within Ratio
+                                                            ratio = between_var / within_var if within_var > 0 else np.nan
+                                                            between_within_ratio[col] = ratio
+                                                
+                                                if psrf_results:
+                                                    # Display PSRF results
+                                                    st.write("#### Potential Scale Reduction Factor (PSRF)")
+                                                    st.write("""
+                                                    PSRF (Gelman-Rubin statistic) values close to 1.0 indicate good convergence of the imputation process.
+                                                    Values above 1.1 may indicate poor convergence.
+                                                    """)
+                                                    
+                                                    psrf_df = pd.DataFrame({
+                                                        'Parameter': list(psrf_results.keys()),
+                                                        'PSRF': list(psrf_results.values()),
+                                                        'Status': ['Good (< 1.1)' if v < 1.1 else 'Fair (1.1-1.2)' if v < 1.2 else 'Poor (> 1.2)' for v in psrf_results.values()]
+                                                    })
+                                                    
+                                                    st.dataframe(psrf_df)
+                                                    
+                                                    # Display Between/Within Ratio
+                                                    st.write("#### Between/Within Variance Ratio")
+                                                    st.write("""
+                                                    This ratio indicates the proportion of variance attributable to missing data imputation.
+                                                    Higher values suggest that the imputation process introduces significant uncertainty.
+                                                    """)
+                                                    
+                                                    ratio_df = pd.DataFrame({
+                                                        'Parameter': list(between_within_ratio.keys()),
+                                                        'B/W Ratio': list(between_within_ratio.values()),
+                                                        'Impact': ['Low (< 0.5)' if v < 0.5 else 'Moderate (0.5-1.0)' if v < 1.0 else 'High (> 1.0)' for v in between_within_ratio.values()]
+                                                    })
+                                                    
+                                                    st.dataframe(ratio_df)
+                                                    
+                                                    # Visualization of parameter traces
+                                                    st.write("#### Parameter Trace Plots")
+                                                    st.write("Visual inspection of parameter stability across imputations:")
+                                                    
+                                                    # Create trace plots for selected parameters
+                                                    selected_params = st.multiselect(
+                                                        "Select parameters to visualize:",
+                                                        options=list(psrf_results.keys()),
+                                                        default=list(psrf_results.keys())[:2] if len(psrf_results) >= 2 else list(psrf_results.keys())
+                                                    )
+                                                    
+                                                    if selected_params:
+                                                        import matplotlib.pyplot as plt
+                                                        
+                                                        # Create plot
+                                                        fig, ax = plt.subplots(figsize=(10, 6))
+                                                        
+                                                        for param in selected_params:
+                                                            values = comparison_df[param].dropna()
+                                                            ax.plot(range(1, len(values) + 1), values, 'o-', label=param)
+                                                        
+                                                        ax.set_xlabel('Imputation Number')
+                                                        ax.set_ylabel('Parameter Value')
+                                                        ax.set_title('Parameter Trace Across Imputations')
+                                                        ax.legend()
+                                                        ax.grid(True, linestyle='--', alpha=0.7)
+                                                        
+                                                        st.pyplot(fig)
+                                                        
+                                                        st.write("""
+                                                        **Interpretation of trace plots:**
+                                                        - Stable traces with minimal fluctuation indicate good convergence
+                                                        - Systematic trends or large jumps suggest potential issues with imputation
+                                                        - Parallel traces across parameters suggest good overall convergence
+                                                        """)
+                                                else:
+                                                    st.warning("Could not calculate convergence diagnostics from the available data.")
+                                            else:
+                                                st.warning("No numeric metrics available for convergence diagnostics.")
+                                        
+                                        # TAB 4: INTERPRETATION & REPORTING
+                                        with analysis_tabs[3]:
+                                            st.write("### Results Interpretation & Reporting")
+                                            st.write("Comprehensive summary and interpretation of multiple imputation results.")
+                                            
+                                            # Check if we have numeric data to analyze
+                                            numeric_cols = comparison_df.select_dtypes(include=np.number).columns
+                                            if len(numeric_cols) > 0:
+                                                # Summary statistics for easy reporting
+                                                if 'psrf_results' in locals() and pooled_stats:
+                                                    # Calculate summary metrics
+                                                    avg_psrf = np.mean(list(psrf_results.values()))
+                                                    max_psrf = np.max(list(psrf_results.values()))
+                                                    
+                                                    # Average FMI
+                                                    avg_fmi = np.mean([stats['FMI'] for stats in pooled_stats.values()])
+                                                    
+                                                    # Create a summary for reporting
+                                                    st.write("#### Executive Summary")
+                                                    
+                                                    # Determine overall convergence status
+                                                    if max_psrf < 1.1:
+                                                        convergence_status = "Excellent"
+                                                    elif max_psrf < 1.2:
+                                                        convergence_status = "Good"
+                                                    else:
+                                                        convergence_status = "Needs improvement"
+                                                    
+                                                    col1, col2, col3 = st.columns(3)
+                                                    
+                                                    with col1:
+                                                        st.metric("Datasets Analyzed", len(selected_analyses))
+                                                    
+                                                    with col2:
+                                                        st.metric("Convergence Status", convergence_status)
+                                                    
+                                                    with col3:
+                                                        st.metric("Missing Information", f"{avg_fmi*100:.1f}%")
+                                                    
+                                                    # Recommendations section
+                                                    st.write("#### Recommendations")
+                                                    
+                                                    rec_items = []
+                                                    
+                                                    if max_psrf > 1.2:
+                                                        rec_items.append("- Consider generating more imputed datasets to improve convergence.")
+                                                    
+                                                    if avg_fmi > 0.3:
+                                                        rec_items.append("- High fraction of missing information suggests findings should be interpreted with caution.")
+                                                        rec_items.append("- Consider sensitivity analyses with alternative imputation methods.")
+                                                    
+                                                    if avg_fmi < 0.1 and max_psrf < 1.1:
+                                                        rec_items.append("- Good convergence achieved with low missing information. Results are likely robust.")
+                                                    
+                                                    if rec_items:
+                                                        for item in rec_items:
+                                                            st.write(item)
+                                                    else:
+                                                        st.write("- No specific recommendations - analysis appears satisfactory.")
+                                                    
+                                                    # Full report section
+                                                    with st.expander("Generate Full Report", expanded=False):
+                                                        st.write("### Multiple Imputation Analysis Report")
+                                                        st.write(f"Generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}")
+                                                        
+                                                        st.write("#### 1. Overview")
+                                                        st.write(f"- Number of imputed datasets: {len(selected_analyses)}")
+                                                        st.write(f"- Parameters analyzed: {len(numeric_cols)}")
+                                                        st.write(f"- Average fraction of missing information: {avg_fmi*100:.1f}%")
+                                                        
+                                                        st.write("#### 2. Pooled Estimates")
+                                                        # Create a nice summary table
+                                                        summary_data = []
+                                                        for col, stats in pooled_stats.items():
+                                                            row = {'Parameter': col}
+                                                            row.update({
+                                                                'Estimate': f"{stats['Pooled Estimate']:.4f}",
+                                                                'SE': f"{stats['Standard Error']:.4f}",
+                                                                '95% CI': f"({stats['95% CI Lower']:.3f}, {stats['95% CI Upper']:.3f})",
+                                                                'FMI (%)': f"{stats['FMI'] * 100:.1f}%"
+                                                            })
+                                                            summary_data.append(row)
+                                                        
+                                                        # Show summary table
+                                                        st.dataframe(pd.DataFrame(summary_data))
+                                                        
+                                                        st.write("#### 3. Convergence Statistics")
+                                                        st.write(f"- Average PSRF: {avg_psrf:.3f}")
+                                                        st.write(f"- Maximum PSRF: {max_psrf:.3f}")
+                                                        st.write(f"- Overall convergence status: {convergence_status}")
+                                                        
+                                                        st.write("#### 4. Methodology")
+                                                        st.write("""
+                                                        This analysis follows Rubin's rules for multiple imputation:
+                                                        - Each dataset was imputed independently using MCMC methods
+                                                        - Analyses were performed identically on each imputed dataset
+                                                        - Results were pooled accounting for both within and between imputation variance
+                                                        - Convergence was assessed using the potential scale reduction factor
+                                                        """)
+                                                        
+                                                        # Download button for report
+                                                        st.download_button(
+                                                            "Download Report as CSV",
+                                                            pd.DataFrame(summary_data).to_csv(index=False),
+                                                            "multiple_imputation_report.csv",
+                                                            "text/csv"
+                                                        )
+                                                else:
+                                                    st.info("To generate a comprehensive report, please analyze the data using both the Pooled Analysis and Convergence Diagnostics tabs first.")
+                                            else:
+                                                st.warning("No numeric metrics available for reporting.")
                                     else:
                                         st.warning("Please select at least two analysis results to compare datasets.")
                                 

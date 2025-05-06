@@ -1532,6 +1532,36 @@ with main_container:
                                                             convergence_scores['regression_train_r2'] = train_r2
                                                             convergence_scores['regression_test_r2'] = test_r2
                                                             
+                                                            # If MCMC samples are available, try to enhance metrics with MCMC data
+                                                            if 'mcmc_samples' in st.session_state and st.session_state.mcmc_samples is not None:
+                                                                try:
+                                                                    st.info("Attempting to extract R² parameters from MCMC samples...")
+                                                                    
+                                                                    # Try to find relevant parameters in the posterior distribution
+                                                                    r2_params = {}
+                                                                    for param_name in ["regression_train_r2", "regression_test_r2"]:
+                                                                        # Check different possible parameter formats
+                                                                        if param_name in st.session_state.mcmc_samples.posterior:
+                                                                            sample_values = st.session_state.mcmc_samples.posterior[param_name].values
+                                                                            r2_params[param_name] = float(np.mean(sample_values))
+                                                                            st.success(f"Found MCMC samples for {param_name}")
+                                                                        elif f"mu_{param_name}" in st.session_state.mcmc_samples.posterior:
+                                                                            sample_values = st.session_state.mcmc_samples.posterior[f"mu_{param_name}"].values
+                                                                            r2_params[param_name] = float(np.mean(sample_values))
+                                                                            st.success(f"Found MCMC samples for mu_{param_name}")
+                                                                    
+                                                                    # Update metrics if parameters were found
+                                                                    if 'regression_train_r2' in r2_params:
+                                                                        convergence_scores['regression_train_r2_mcmc'] = r2_params['regression_train_r2']
+                                                                        st.info(f"Using MCMC-derived Train R²: {r2_params['regression_train_r2']:.4f} (vs sklearn: {train_r2:.4f})")
+                                                                    
+                                                                    if 'regression_test_r2' in r2_params:
+                                                                        convergence_scores['regression_test_r2_mcmc'] = r2_params['regression_test_r2']
+                                                                        st.info(f"Using MCMC-derived Test R²: {r2_params['regression_test_r2']:.4f} (vs sklearn: {test_r2:.4f})")
+                                                                    
+                                                                except Exception as e:
+                                                                    st.warning(f"Could not extract MCMC parameters: {str(e)}")
+                                                            
                                                             # Display results in an expander (collapsed by default)
                                                             with st.expander(f"Results for {method}", expanded=False):
                                                                 # Display metrics
@@ -1935,6 +1965,32 @@ with main_container:
                                     ])
                                 
                                 st.dataframe(results_df)
+                                
+                                # Add Clear Analysis Results button
+                                col1, col2 = st.columns([1, 3])
+                                with col1:
+                                    if st.button("Clear All Analysis Results"):
+                                        # Clear session state
+                                        st.session_state.convergence_datasets = []
+                                        st.success("All analysis results have been cleared. You can now run new analyses.")
+                                        st.experimental_rerun()
+                                with col2:
+                                    # Add a more granular clearing option if there are results available
+                                    if analysis_results:
+                                        selected_to_clear = st.multiselect(
+                                            "Select specific analysis results to clear:",
+                                            options=[a['id'] for a in analysis_results],
+                                            default=[]
+                                        )
+                                        
+                                        if selected_to_clear and st.button("Clear Selected Results"):
+                                            # Remove selected datasets from the list
+                                            st.session_state.convergence_datasets = [
+                                                ds for ds in st.session_state.convergence_datasets 
+                                                if not (ds.get('is_analysis_result', False) and ds['id'] in selected_to_clear)
+                                            ]
+                                            st.success(f"Cleared {len(selected_to_clear)} selected analysis results.")
+                                            st.experimental_rerun()
                                 
                                 # Create a separate section for selecting analysis results
                                 st.write("### Compare Analysis Results")

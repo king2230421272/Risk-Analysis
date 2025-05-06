@@ -1812,17 +1812,20 @@ with main_container:
                                                                 normal_pct = (normal_count / total_tested) * 100
                                                                 convergence_scores['normality_percentage'] = normal_pct
                                                     
-                                                    # Save the results to the session state
+                                                    # Save the results to the session state, but only if they're from Run Analysis Methods
                                                     # Restructuring to separate results for different analysis methods
+                                                    analysis_id = len(st.session_state.convergence_datasets) + 1
                                                     new_analysis = {
-                                                        'id': len(st.session_state.convergence_datasets) + 1,
-                                                        'name': f"Analysis {len(st.session_state.convergence_datasets) + 1}",
+                                                        'id': analysis_id,
+                                                        'name': f"Analysis {analysis_id}",
                                                         'methods': selected_methods,
                                                         'method_results': method_results,
                                                         # Store convergence scores by method name to keep them separate
                                                         'convergence_scores': {},
                                                         'data': data,
-                                                        'timestamp': pd.Timestamp.now()
+                                                        'timestamp': pd.Timestamp.now(),
+                                                        # Flag to indicate this came from running analysis methods
+                                                        'is_analysis_result': True
                                                     }
                                                     
                                                     # Organize convergence scores by method for easier comparison
@@ -1851,17 +1854,26 @@ with main_container:
                                 st.write("### Multiple Interpolation Analysis Results")
                                 st.write("Compare the results from multiple interpolation analyses.")
                                 
-                                # Show available datasets
+                                # Show available datasets - only those from analysis methods
                                 st.write("#### Available Analysis Results")
-                                results_df = pd.DataFrame([
-                                    {
-                                        'ID': a['id'],
-                                        'Dataset': a['name'],
-                                        'Methods': ", ".join(a.get('methods', [])),
-                                        'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
-                                    }
-                                    for a in st.session_state.convergence_datasets
-                                ])
+                                # Filter to only show results from analysis methods (not directly added datasets)
+                                analysis_results = [a for a in st.session_state.convergence_datasets 
+                                                  if a.get('is_analysis_result', False)]
+                                
+                                if not analysis_results:
+                                    st.warning("No analysis results available yet. Please run analytical methods in the Analyze Imputed Data tab.")
+                                    # Create empty dataframe to ensure code below works properly
+                                    results_df = pd.DataFrame(columns=['ID', 'Dataset', 'Methods', 'Timestamp'])
+                                else:
+                                    results_df = pd.DataFrame([
+                                        {
+                                            'ID': a['id'],
+                                            'Dataset': a['name'],
+                                            'Methods': ", ".join(a.get('methods', [])),
+                                            'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
+                                        }
+                                        for a in analysis_results
+                                    ])
                                 
                                 st.dataframe(results_df)
                                 
@@ -1869,16 +1881,22 @@ with main_container:
                                 st.write("### Compare Analysis Results")
                                 st.write("Select two or more analysis results to compare.")
                                 
-                                # Select datasets to compare
+                                # Select datasets to compare - default to all available analysis results
+                                # Use the filtered analysis_results list instead of all convergence_datasets
+                                if not analysis_results:
+                                    all_ids = []
+                                else:
+                                    all_ids = [a['id'] for a in analysis_results]
+                                    
                                 selected_ids = st.multiselect(
                                     "Select analysis results to compare:",
-                                    options=[a['id'] for a in st.session_state.convergence_datasets],
-                                    default=[]
+                                    options=all_ids,
+                                    default=all_ids  # Default to all available analysis results
                                 )
                                 
                                 if selected_ids:
-                                    # Get selected analyses
-                                    selected_analyses = [a for a in st.session_state.convergence_datasets if a['id'] in selected_ids]
+                                    # Get selected analyses from the filtered analysis_results
+                                    selected_analyses = [a for a in analysis_results if a['id'] in selected_ids]
                                     
                                     if len(selected_analyses) > 1:
                                         st.write("### Analysis Steps")

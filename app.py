@@ -1196,7 +1196,7 @@ with main_container:
                                                 st.session_state.convergence_datasets.append(dataset)
                                                 st.session_state.convergence_iterations += 1
                                             
-                                            st.info(f"Added {iterations} datasets to the Multiple Imputation Analysis. Please proceed to that tab for analysis.")
+                                            st.info(f"Added {iterations} datasets to the Modules Analysis. Please proceed to that tab for analysis.")
                                         
                                         # Display side-by-side comparison of before and after
                                         col1, col2 = st.columns(2)
@@ -1235,20 +1235,20 @@ with main_container:
                             except Exception as e:
                                 st.error(f"Error during MCMC interpolation: {e}")
                     
-                    # 2. MULTIPLE IMPUTATION ANALYSIS TAB
+                    # 2. MODULES ANALYSIS TAB
                     with advanced_options[1]:
-                        st.write("### Multiple Imputation Analysis")
+                        st.write("### Modules Analysis")
                         st.write("""
-                        Multiple imputation is a statistical technique for handling missing data that creates multiple 
-                        filled-in (imputed) datasets, analyzes them separately, and then combines the results. This helps:
-                        1. Preserve statistical relationships in the data
-                        2. Account for uncertainty in the missing values
-                        3. Produce more reliable statistical inferences
+                        The Modules Analysis component provides a unified interface for analyzing datasets through multiple
+                        analytical methods and evaluating them in parallel. Key benefits include:
+                        1. Applying different analytical techniques to the same dataset
+                        2. Comparing results across methods to ensure consistency
+                        3. Evaluating convergence and reliability of interpolated data
                         """)
                         
                         # Check if we have MCMC interpolated result
                         if 'interpolated_result' not in st.session_state:
-                            st.info("Please run MCMC interpolation first before performing multiple imputation analysis.")
+                            st.info("Please run MCMC interpolation first before performing modules analysis.")
                         else:
                             # Display core information about the imputation process
                             st.subheader("Imputation Statistics")
@@ -2011,9 +2011,9 @@ with main_container:
                                 except Exception as e:
                                     st.error(f"Error loading from database: {str(e)}")
                             
-                    # End of the Multiple Imputation Analysis module
+                    # End of the Modules Analysis module
 
 if __name__ == "__main__":
     st.sidebar.info("Data Analysis Platform")
     st.sidebar.markdown("---")
-    st.sidebar.markdown("A comprehensive platform for data analysis, statistical modeling, and multiple imputation convergence testing.")
+    st.sidebar.markdown("A comprehensive platform for data analysis, statistical modeling, and advanced modules convergence testing.")

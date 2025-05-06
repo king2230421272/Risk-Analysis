@@ -2938,6 +2938,16 @@ with main_container:
                                                 st.write("#### Metrics Table")
                                                 metrics_df = pd.DataFrame(iteration_data)
                                                 st.dataframe(metrics_df)
+                                
+                                # 5. CGAN ANALYSIS TAB
+                                with analysis_tabs[5]:
+                                    # Call the CGAN Analysis tab implementation from the imported module
+                                    cgan_analysis_tab(analysis_tabs[5], st.session_state.original_data, data_handler, advanced_processor)
+                                
+                                # 6. MULTIPLE IMPUTATION ANALYSIS TAB
+                                with analysis_tabs[6]:
+                                    # Call the Multiple Imputation Analysis tab implementation from the imported module
+                                    multiple_imputation_analysis_tab(analysis_tabs[6], st.session_state.convergence_datasets)
                     
                     # 3. CGAN ANALYSIS TAB
                     with advanced_options[2]:

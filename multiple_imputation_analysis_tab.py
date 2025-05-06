@@ -18,9 +18,15 @@ def multiple_imputation_analysis_tab(analysis_tabs_index, datasets_to_analyze=No
         """)
         
         # Check if we have datasets to analyze
-        if 'convergence_datasets' not in st.session_state or not st.session_state.convergence_datasets:
+        if ('convergence_datasets' not in st.session_state or 
+            not st.session_state.convergence_datasets or 
+            datasets_to_analyze is None):
             st.warning("No datasets available for analysis. Please interpolate data first.")
             return
+            
+        # Initialize convergence_datasets if not provided
+        if 'convergence_datasets' not in st.session_state:
+            st.session_state.convergence_datasets = []
         
         # Create a button to start the sequential analysis
         if st.button("Run Multiple Imputation Analysis", key="multiple_imputation_btn"):

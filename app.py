@@ -2881,27 +2881,43 @@ with main_container:
                                 
                                 # 5. Convergence Evaluation Tab
                                 with analysis_tabs[4]:
-                                    st.write("### Convergence Evaluation")
+                                    st.write("### Multiple Imputation Convergence")
                                     st.write("""
-                                    This tab evaluates convergence across all analyzed datasets based on the three analysis methods.
-                                    When results converge, it indicates that the interpolation has stabilized.
+                                    This tab evaluates whether your multiple imputation process has converged according to 
+                                    Rubin's rules for multiple imputation. Convergence means that generating additional 
+                                    imputed datasets would not significantly change your results.
                                     """)
                                     
-                                    # Check if we have enough datasets analyzed
-                                    analyzed_datasets = [ds for ds in st.session_state.convergence_datasets 
-                                                        if 'convergence_scores' in ds and ds['convergence_scores']]
-                                    
-                                    if not analyzed_datasets:
-                                        st.warning("No analyzed datasets found. Please perform analysis on at least one dataset.")
-                                    elif len(analyzed_datasets) < 2:
-                                        st.info("Only one dataset has been analyzed. Please analyze at least one more dataset to evaluate convergence.")
+                                    # Check if we have enough datasets for proper multiple imputation
+                                    if 'convergence_datasets' not in st.session_state or len(st.session_state.convergence_datasets) < 3:
+                                        st.warning("Multiple imputation typically requires at least 3-5 imputed datasets. Please generate more datasets.")
+                                        st.info("Return to the MCMC Interpolation tab and generate multiple datasets using the 'Generate multiple datasets' option.")
                                     else:
-                                        # Show convergence status
-                                        st.write("#### Current Convergence Status")
-                                        st.write(f"Status: {st.session_state.convergence_status}")
-                                        st.write(f"Iterations: {st.session_state.convergence_iterations}")
+                                        # Show current imputation statistics
+                                        st.write("#### Multiple Imputation Status")
+                                        num_datasets = len(st.session_state.convergence_datasets)
+                                        st.write(f"Number of imputed datasets: {num_datasets}")
                                         
-                                        # Check if we're in consecutive analysis mode
+                                        # Get information about datasets
+                                        datasets_info = []
+                                        for ds in st.session_state.convergence_datasets:
+                                            datasets_info.append({
+                                                'ID': ds['id'],
+                                                'Name': ds.get('name', f"Dataset {ds['id']}"),
+                                                'Shape': f"{ds['data'].shape[0]}×{ds['data'].shape[1]}",
+                                                'Missing Values': ds['data'].isna().sum().sum(),
+                                                'Timestamp': ds['timestamp']
+                                            })
+                                        
+                                        # Display dataset information
+                                        if datasets_info:
+                                            st.write("#### Available Imputed Datasets")
+                                            st.dataframe(pd.DataFrame(datasets_info))
+                                        
+                                        # Convergence analysis options
+                                        st.write("#### Convergence Diagnostics")
+                                        
+                                        # If we're in consecutive analysis mode
                                         consecutive_mode = False
                                         if ('consecutive_analysis' in st.session_state and 
                                             st.session_state.consecutive_analysis and 
@@ -2909,28 +2925,64 @@ with main_container:
                                             consecutive_mode = True
                                             st.info("Running Convergence Evaluation as part of consecutive analysis...")
                                         
-                                        # Evaluate convergence
-                                        run_button_clicked = False
-                                        if consecutive_mode:
-                                            # In consecutive mode, automatically trigger analysis
-                                            run_button_clicked = st.session_state.current_analysis_step == 4
-                                            if run_button_clicked:
-                                                st.success("Automatically evaluating convergence for all datasets...")
-                                        else:
-                                            # In regular mode, user has to click button
-                                            run_button_clicked = st.button("Evaluate Convergence", key="evaluate_convergence_btn")
+                                        # Set up diagnostics options
+                                        diagnostic_type = st.radio(
+                                            "Select convergence diagnostic method:",
+                                            ["Potential Scale Reduction Factor (PSRF)", "Between/Within Variance Ratio", "Visual Trace Plots"],
+                                            key="convergence_diagnostic_type"
+                                        )
+                                        
+                                        # Select datasets for convergence analysis
+                                        selected_datasets = st.multiselect(
+                                            "Select datasets for convergence analysis:",
+                                            options=[f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets],
+                                            default=[f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets[:min(5, len(st.session_state.convergence_datasets))]]
+                                        )
+                                        
+                                        # Button to run convergence analysis
+                                        run_button_clicked = st.button("Run Convergence Diagnostics", key="evaluate_convergence_btn") or consecutive_mode
                                             
-                                        if run_button_clicked:
-                                            # Define convergence thresholds
-                                            kmeans_inertia_threshold = 0.1  # 10% change
-                                            regression_r2_threshold = 0.05  # 5% change
-                                            pca_variance_threshold = 0.05  # 5% change
-                                            
-                                            # Track convergence metrics for each dataset
-                                            convergence_metrics = []
-                                            
-                                            # Evaluate each dataset
-                                            for ds in analyzed_datasets:
+                                        if run_button_clicked and selected_datasets:
+                                            # Get the numeric data from selected datasets
+                                            with st.spinner("Running diagnostics..."):
+                                                # Collect datasets for analysis
+                                                datasets = []
+                                                for ds_name in selected_datasets:
+                                                    ds_id = int(ds_name.split()[-1])
+                                                    ds = next((d for d in st.session_state.convergence_datasets if d['id'] == ds_id), None)
+                                                    if ds:
+                                                        datasets.append(ds)
+                                                
+                                                if len(datasets) < 2:
+                                                    st.error("At least 2 datasets are required for convergence diagnostics.")
+                                                else:
+                                                    # Get only numeric columns that all datasets have in common
+                                                    common_cols = set(datasets[0]['data'].select_dtypes(include=np.number).columns)
+                                                    for ds in datasets[1:]:
+                                                        common_cols &= set(ds['data'].select_dtypes(include=np.number).columns)
+                                                    
+                                                    common_cols = list(common_cols)
+                                                    
+                                                    if not common_cols:
+                                                        st.error("No common numeric columns found across the selected datasets.")
+                                                    else:
+                                                        # Allow user to select specific columns or use all
+                                                        st.write("#### Select Columns for Analysis")
+                                                        use_all_cols = st.checkbox("Use all common numeric columns", value=True)
+                                                        
+                                                        if not use_all_cols:
+                                                            selected_cols = st.multiselect(
+                                                                "Select specific columns to analyze:",
+                                                                options=common_cols,
+                                                                default=common_cols[:min(3, len(common_cols))]
+                                                            )
+                                                        else:
+                                                            selected_cols = common_cols
+                                                        
+                                                        if not selected_cols:
+                                                            st.warning("Please select at least one column for analysis.")
+                                                        else:
+                                                            # Perform the selected diagnostic
                                                 dataset_convergence = {
                                                     'id': ds['id'],
                                                     'metrics': {}

@@ -2158,6 +2158,21 @@ with main_container:
                                                                 elif f"mu_{col}" in st.session_state.mcmc_samples.posterior:
                                                                     chain_samples = st.session_state.mcmc_samples.posterior[f"mu_{col}"].values
                                                                     samples_found = True
+                                                                # Try to extract the base parameter name (without analysis prefix)
+                                                                elif '__' in col:
+                                                                    # Parameters like "Linear Regression Analysis__regression_train_r2"
+                                                                    # Try to find the base parameter after the '__'
+                                                                    base_param = col.split('__')[-1]
+                                                                    # Try base parameter name
+                                                                    if base_param in st.session_state.mcmc_samples.posterior:
+                                                                        chain_samples = st.session_state.mcmc_samples.posterior[base_param].values
+                                                                        samples_found = True
+                                                                        st.info(f"Found MCMC samples for base parameter: {base_param} (derived from {col})")
+                                                                    # Try with mu_ prefix on base param
+                                                                    elif f"mu_{base_param}" in st.session_state.mcmc_samples.posterior:
+                                                                        chain_samples = st.session_state.mcmc_samples.posterior[f"mu_{base_param}"].values
+                                                                        samples_found = True  
+                                                                        st.info(f"Found MCMC samples for base parameter: mu_{base_param} (derived from {col})")
                                                                 
                                                                 if samples_found:
                                                                     # Calculate PSRF using actual MCMC chain samples
@@ -2307,6 +2322,24 @@ with main_container:
                                                                     chain_samples = st.session_state.mcmc_samples.posterior[f"mu_{param}"].values
                                                                     param_name = f"mu_{param}"
                                                                     param_found = True
+                                                                # Try to extract the base parameter name (without analysis prefix)
+                                                                else:
+                                                                    # Parameters like "Linear Regression Analysis__regression_train_r2"
+                                                                    # Try to find the base parameter after the '__' if present
+                                                                    if '__' in param:
+                                                                        base_param = param.split('__')[-1]
+                                                                        # Try base parameter name
+                                                                        if base_param in st.session_state.mcmc_samples.posterior:
+                                                                            chain_samples = st.session_state.mcmc_samples.posterior[base_param].values
+                                                                            param_name = base_param
+                                                                            param_found = True
+                                                                            st.info(f"Found MCMC samples for base parameter: {base_param}")
+                                                                        # Try with mu_ prefix on base param
+                                                                        elif f"mu_{base_param}" in st.session_state.mcmc_samples.posterior:
+                                                                            chain_samples = st.session_state.mcmc_samples.posterior[f"mu_{base_param}"].values
+                                                                            param_name = f"mu_{base_param}"
+                                                                            param_found = True
+                                                                            st.info(f"Found MCMC samples for base parameter: {param_name}")
                                                                 
                                                                 if param_found and chain_samples is not None:
                                                                     # Create trace plot for this parameter
@@ -2348,7 +2381,20 @@ with main_container:
                                                                     
                                                                     st.pyplot(fig)
                                                                 else:
-                                                                    st.warning(f"Parameter {param} not found in MCMC samples")
+                                                                    # For regression parameters that might not be directly in MCMC samples
+                                                                    if "regression_train_r2" in param or "regression_test_r2" in param:
+                                                                        st.info(f"Parameter {param} is a regression metric, not a directly sampled MCMC parameter. Using surrogate visualization instead.")
+                                                                        
+                                                                        # Create a placeholder visualization for regression metrics
+                                                                        fig, ax = plt.subplots(figsize=(10, 4))
+                                                                        ax.text(0.5, 0.5, f"No direct MCMC samples for {param}\nThis is a derived regression metric", 
+                                                                                ha='center', va='center', fontsize=14)
+                                                                        ax.set_xlim(0, 1)
+                                                                        ax.set_ylim(0, 1)
+                                                                        ax.set_axis_off()
+                                                                        st.pyplot(fig)
+                                                                    else:
+                                                                        st.warning(f"Parameter {param} not found in MCMC samples")
                                                         
                                                         # Always show imputation comparison plots
                                                         st.write("##### Imputation Comparison Plots")

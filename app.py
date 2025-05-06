@@ -1022,7 +1022,7 @@ with main_container:
                     # Create advanced processing options with tabs
                     advanced_options = st.tabs([
                         "Step 1: MCMC Interpolation", 
-                        "Step 2: Modules Analysis",
+                        "Step 2: Multiple Interpolation Analysis",
                         "Step 3: CGAN Analysis", 
                         "Step 4: Distribution Testing", 
                         "Step 5: Outlier Detection"
@@ -1112,7 +1112,7 @@ with main_container:
                                                 st.session_state.convergence_datasets.append(dataset)
                                                 st.session_state.convergence_iterations += 1
                                             
-                                            st.info(f"Added {iterations} datasets to the Modules Analysis. Please proceed to that tab for analysis.")
+                                            st.info(f"Added {iterations} datasets to the Multiple Interpolation Analysis. Please proceed to that tab for analysis.")
                                         
                                         # Display side-by-side comparison of before and after
                                         col1, col2 = st.columns(2)
@@ -1164,7 +1164,7 @@ with main_container:
                         
                         # Check if we have MCMC interpolated result
                         if 'interpolated_result' not in st.session_state:
-                            st.info("Please run MCMC interpolation first before performing modules analysis.")
+                            st.info("Please run MCMC interpolation first before performing multiple interpolation analysis.")
                         else:
                             # Display core information about the imputation process
                             st.subheader("Imputation Statistics")

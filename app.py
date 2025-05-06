@@ -53,6 +53,8 @@ if 'distribution_test_results' not in st.session_state:
     st.session_state.distribution_test_results = None
 if 'outlier_results' not in st.session_state:
     st.session_state.outlier_results = None
+if 'convergence_datasets' not in st.session_state:
+    st.session_state.convergence_datasets = []
 
 # Initialize modules
 data_handler = DataHandler()

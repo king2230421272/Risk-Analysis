@@ -2774,29 +2774,100 @@ with main_container:
                         # Check if switch_to_cgan flag is set and we are on first render after setting it
                         active_tab_idx = 2 if 'switch_to_cgan' in st.session_state and st.session_state.switch_to_cgan else None
                         
-                        # Check if we have data to analyze
-                        if 'cgan_analysis_data' in st.session_state and st.session_state.cgan_analysis_data is not None:
-                            st.info("Using data from Convergence Diagnostics with good convergence metrics.")
-                            data_to_analyze = st.session_state.cgan_analysis_data
-                            st.write(f"Data shape: {data_to_analyze.shape[0]} rows, {data_to_analyze.shape[1]} columns")
+                        # DATA SOURCE SELECTION
+                        st.write("#### Select Data Sources")
+                        st.write("CGAN analysis requires two datasets: training data and evaluation data.")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.write("**Training Data Source**")
+                            # Always use original data for training by default
+                            training_data_source = "Original Data"
+                            if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                                st.success("✓ Using Original Data for model training")
+                                training_data = st.session_state.original_data
+                                st.write(f"Data shape: {training_data.shape[0]} rows, {training_data.shape[1]} columns")
+                            else:
+                                st.error("❌ Original Data not available. Please import data in the Data Import tab.")
+                                training_data = None
+                        
+                        with col2:
+                            st.write("**Evaluation Data Source**")
                             
-                            # Show data preview
-                            with st.expander("Data Preview", expanded=True):
-                                st.dataframe(data_to_analyze.head())
+                            # Set default evaluation data based on available sources, prioritizing data from Convergence Diagnostics
+                            eval_data_options = []
+                            if 'cgan_analysis_data' in st.session_state and st.session_state.cgan_analysis_data is not None:
+                                eval_data_options.append("Convergence Diagnostics Data")
+                            if 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None:
+                                eval_data_options.append("Interpolated Data")
+                            if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                                eval_data_options.append("Original Data")
+                            
+                            # Default to Convergence Diagnostics data if available
+                            default_option = eval_data_options[0] if eval_data_options else None
+                            
+                            if eval_data_options:
+                                eval_data_source = st.radio(
+                                    "Select data for evaluating the trained model:",
+                                    options=eval_data_options,
+                                    index=0
+                                )
                                 
-                            # CGAN Parameters section
-                            with st.expander("CGAN Training Parameters", expanded=True):
+                                # Get the selected evaluation data
+                                if eval_data_source == "Convergence Diagnostics Data":
+                                    eval_data = st.session_state.cgan_analysis_data
+                                    st.success("✓ Using Convergence Diagnostics Data for evaluation")
+                                elif eval_data_source == "Interpolated Data":
+                                    eval_data = st.session_state.interpolated_data
+                                    st.success("✓ Using Interpolated Data for evaluation")
+                                else:  # Original Data
+                                    eval_data = st.session_state.original_data
+                                    st.success("✓ Using Original Data for evaluation")
+                                
+                                st.write(f"Data shape: {eval_data.shape[0]} rows, {eval_data.shape[1]} columns")
+                            else:
+                                st.error("❌ No data available for evaluation. Please import or generate data.")
+                                eval_data = None
+                        
+                        # DATA PREVIEW SECTION
+                        if training_data is not None and eval_data is not None:
+                            with st.expander("Data Preview", expanded=False):
+                                tab1, tab2 = st.tabs(["Training Data", "Evaluation Data"])
+                                
+                                with tab1:
+                                    st.write("Preview of training data:")
+                                    st.dataframe(training_data.head())
+                                    
+                                    # Basic statistics
+                                    st.write("Basic statistics:")
+                                    st.dataframe(training_data.describe())
+                                
+                                with tab2:
+                                    st.write("Preview of evaluation data:")
+                                    st.dataframe(eval_data.head())
+                                    
+                                    # Basic statistics
+                                    st.write("Basic statistics:")
+                                    st.dataframe(eval_data.describe())
+                            
+                            # CGAN TRAINING SECTION
+                            st.write("#### CGAN Model Configuration")
+                            
+                            with st.expander("Training Parameters", expanded=True):
                                 col1, col2 = st.columns(2)
                                 
                                 with col1:
-                                    # Training parameters
+                                    # Training hyperparameters
+                                    st.write("**Model Hyperparameters**")
                                     epochs = st.slider("Training Epochs", min_value=50, max_value=500, value=200, step=50)
                                     batch_size = st.slider("Batch Size", min_value=8, max_value=64, value=32, step=8)
                                     noise_dim = st.slider("Noise Dimension", min_value=50, max_value=200, value=100, step=10)
                                 
                                 with col2:
                                     # Feature selection
-                                    numeric_cols = data_to_analyze.select_dtypes(include=np.number).columns.tolist()
+                                    st.write("**Feature Selection**")
+                                    numeric_cols = training_data.select_dtypes(include=np.number).columns.tolist()
                                     
                                     # Select condition columns
                                     condition_cols = st.multiselect(
@@ -2813,16 +2884,33 @@ with main_container:
                                         default=remaining_cols[:min(3, len(remaining_cols))]
                                     )
                             
+                            # Dataset Balance Analysis
+                            with st.expander("Training Data Analysis", expanded=False):
+                                if len(condition_cols) > 0:
+                                    st.write("**Condition Variables Distribution**")
+                                    
+                                    # Create a simple visualization of the distribution of condition variables
+                                    for col in condition_cols[:3]:  # Show at most 3 to avoid cluttering
+                                        fig, ax = plt.subplots(figsize=(8, 4))
+                                        training_data[col].hist(bins=20, ax=ax)
+                                        ax.set_title(f"Distribution of {col}")
+                                        ax.set_xlabel("Value")
+                                        ax.set_ylabel("Frequency")
+                                        st.pyplot(fig)
+                                    
+                                    if len(condition_cols) > 3:
+                                        st.info(f"Showing only 3 of {len(condition_cols)} condition variables. The rest are hidden to save space.")
+                            
                             # Train CGAN button
                             if st.button("Train CGAN Model", key="train_cgan_btn"):
                                 if len(condition_cols) == 0 or len(target_cols) == 0:
                                     st.error("Please select at least one condition column and one target column.")
                                 else:
-                                    with st.spinner("Training CGAN model... This may take a few minutes."):
+                                    with st.spinner("Training CGAN model on original data... This may take a few minutes."):
                                         try:
-                                            # Train the CGAN model
+                                            # Train the CGAN model using original data
                                             generator, discriminator = advanced_processor.train_cgan(
-                                                data_to_analyze,
+                                                training_data,
                                                 condition_cols=condition_cols,
                                                 target_cols=target_cols,
                                                 epochs=epochs,
@@ -2835,94 +2923,151 @@ with main_container:
                                                 'model': {'generator': generator, 'discriminator': discriminator},
                                                 'condition_cols': condition_cols,
                                                 'target_cols': target_cols,
-                                                'noise_dim': noise_dim
+                                                'noise_dim': noise_dim,
+                                                'training_data': training_data,
+                                                'eval_data': eval_data
                                             }
                                             
-                                            st.success("CGAN model trained successfully!")
+                                            st.success("CGAN model trained successfully on original data!")
                                         except Exception as e:
                                             st.error(f"Error training CGAN model: {str(e)}")
+                                            st.error("Please make sure all selected columns contain numeric data with no missing values.")
                             
-                            # CGAN Analysis section
+                            # CGAN ANALYSIS SECTION
                             if 'cgan_results' in st.session_state and st.session_state.cgan_results is not None:
-                                st.subheader("CGAN Analysis Results")
+                                st.write("### CGAN Analysis Results")
+                                st.write("Using the trained CGAN model to analyze the evaluation data.")
                                 
                                 # Generate and analyze data using the trained CGAN
-                                with st.spinner("Generating synthetic data and analyzing results..."):
+                                with st.spinner("Analyzing data with the trained CGAN model..."):
                                     try:
                                         # Set up for analysis
                                         noise_samples = st.slider("Number of synthetic samples per condition:", 
                                                                 min_value=10, max_value=500, value=100, step=10)
                                         
-                                        # Analyze using the trained model
+                                        # Analyze using the trained model and the selected evaluation data
                                         analysis_results = advanced_processor.cgan_analysis(
-                                            data_to_analyze,
+                                            eval_data,  # Use the selected evaluation data
                                             noise_samples=noise_samples
                                         )
                                         
                                         st.success("CGAN analysis completed successfully!")
                                         
                                         # Display results
-                                        st.write("#### Synthetic Data Statistics")
-                                        st.dataframe(analysis_results.describe())
+                                        st.write("#### Synthetic Data vs. Evaluation Data Statistics")
+                                        st.write("Compare statistics between evaluation data and synthetic data generated by the CGAN model.")
                                         
-                                        # Visualize distribution comparison
-                                        st.write("#### Distribution Comparison")
-                                        st.write("Compare original vs. synthetic data distributions:")
-                                        
-                                        # Select a column to visualize
-                                        viz_col = st.selectbox(
-                                            "Select column to visualize:",
-                                            options=st.session_state.cgan_results['target_cols']
-                                        )
-                                        
-                                        if viz_col:
-                                            # Create a distribution comparison plot
-                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                        # Get KS test results from the analysis
+                                        if 'ks_test_results' in analysis_results:
+                                            st.write("#### Distribution Similarity Test")
+                                            st.write("Kolmogorov-Smirnov test to compare evaluation and synthetic data distributions:")
                                             
-                                            # Original data distribution
-                                            ax.hist(data_to_analyze[viz_col], bins=20, alpha=0.5, label='Original', color='blue')
+                                            ks_df = pd.DataFrame(analysis_results['ks_test_results'])
+                                            st.dataframe(ks_df)
                                             
-                                            # Synthetic data distribution
-                                            if viz_col in analysis_results.columns:
-                                                ax.hist(analysis_results[viz_col], bins=20, alpha=0.5, label='Synthetic', color='green')
+                                            # Plot KS test p-values
+                                            fig, ax = plt.subplots(figsize=(10, 5))
+                                            bars = ax.bar(ks_df['Feature'], ks_df['p-value'])
                                             
-                                            ax.set_xlabel(viz_col)
-                                            ax.set_ylabel('Frequency')
-                                            ax.set_title(f'Distribution Comparison for {viz_col}')
-                                            ax.legend()
+                                            # Add a horizontal line at p=0.05
+                                            ax.axhline(y=0.05, color='red', linestyle='--', alpha=0.7)
+                                            ax.text(0, 0.06, 'p=0.05 threshold', color='red')
+                                            
+                                            # Color bars based on significance
+                                            for i, p in enumerate(ks_df['p-value']):
+                                                if p < 0.05:
+                                                    bars[i].set_color('red')
+                                                else:
+                                                    bars[i].set_color('green')
+                                            
+                                            ax.set_title('Distribution Similarity Test (p-values)')
+                                            ax.set_ylabel('p-value')
+                                            ax.set_xlabel('Feature')
+                                            plt.xticks(rotation=45, ha='right')
+                                            plt.tight_layout()
                                             st.pyplot(fig)
                                             
-                                            # Add statistical tests
-                                            st.write("#### Statistical Comparison")
+                                            # Success message based on p-values
+                                            if (ks_df['p-value'] >= 0.05).all():
+                                                st.success("All features show similar distributions between evaluation and synthetic data (p >= 0.05)")
+                                                st.success("This suggests the interpolated data maintains the same statistical properties as the original data.")
+                                            elif (ks_df['p-value'] >= 0.01).all():
+                                                st.warning("Some features show slight distribution differences (p < 0.05 but >= 0.01)")
+                                                st.info("Minor differences are expected, but the overall structure appears preserved.")
+                                            else:
+                                                st.error("Some features show significant distribution differences (p < 0.01)")
+                                                st.warning("Consider adjusting the interpolation parameters to better preserve the original data's distribution.")
+                                        
+                                        # Display comparison plots
+                                        if 'comparison_plots' in analysis_results:
+                                            st.write("#### Feature Distribution Comparison")
+                                            st.write("Visual comparison between evaluation data (blue) and synthetic data (orange):")
+                                            for feature, plot in analysis_results['comparison_plots'].items():
+                                                st.write(f"**{feature}**")
+                                                st.pyplot(plot)
+                                        
+                                        # If old format, provide a basic visualization
+                                        else:
+                                            st.write("#### Distribution Comparison")
+                                            st.write("Compare evaluation vs. synthetic data distributions:")
                                             
-                                            # Calculate KS test
-                                            try:
-                                                ks_stat, ks_pval = stats.ks_2samp(
-                                                    data_to_analyze[viz_col].dropna(), 
-                                                    analysis_results[viz_col].dropna()
-                                                )
+                                            # Select a column to visualize
+                                            viz_col = st.selectbox(
+                                                "Select column to visualize:",
+                                                options=st.session_state.cgan_results['target_cols']
+                                            )
+                                        
+                                            if viz_col:
+                                                # Create a distribution comparison plot
+                                                fig, ax = plt.subplots(figsize=(10, 6))
                                                 
-                                                st.write(f"**Kolmogorov-Smirnov Test**")
-                                                st.write(f"KS Statistic: {ks_stat:.4f}")
-                                                st.write(f"p-value: {ks_pval:.4f}")
+                                                # Evaluation data distribution
+                                                ax.hist(eval_data[viz_col], bins=20, alpha=0.5, label='Evaluation', color='blue')
                                                 
-                                                if ks_pval < 0.05:
-                                                    st.warning("Distributions are significantly different (p < 0.05)")
-                                                else:
-                                                    st.success("Distributions are not significantly different (p >= 0.05)")
-                                            except Exception as e:
-                                                st.error(f"Error calculating KS test: {str(e)}")
+                                                # Synthetic data distribution
+                                                if viz_col in analysis_results.columns:
+                                                    ax.hist(analysis_results[viz_col], bins=20, alpha=0.5, label='Synthetic', color='green')
+                                                
+                                                ax.set_xlabel(viz_col)
+                                                ax.set_ylabel('Frequency')
+                                                ax.set_title(f'Distribution Comparison for {viz_col}')
+                                                ax.legend()
+                                                st.pyplot(fig)
+                                                
+                                                # Add statistical tests
+                                                st.write("#### Statistical Comparison")
+                                                
+                                                # Calculate KS test
+                                                try:
+                                                    ks_stat, ks_pval = stats.ks_2samp(
+                                                        eval_data[viz_col].dropna(), 
+                                                        analysis_results[viz_col].dropna()
+                                                    )
+                                                    
+                                                    st.write(f"**Kolmogorov-Smirnov Test**")
+                                                    st.write(f"KS Statistic: {ks_stat:.4f}")
+                                                    st.write(f"p-value: {ks_pval:.4f}")
+                                                    
+                                                    if ks_pval < 0.05:
+                                                        st.warning("Distributions are significantly different (p < 0.05)")
+                                                    else:
+                                                        st.success("Distributions are not significantly different (p >= 0.05)")
+                                                except Exception as e:
+                                                    st.error(f"Error calculating KS test: {str(e)}")
                                         
                                         # Feature correlation analysis
                                         st.write("#### Feature Correlation Analysis")
-                                        st.write("Compare correlation matrices between original and synthetic data:")
+                                        st.write("Compare correlation matrices between evaluation and synthetic data:")
                                         
                                         # Calculate correlation matrices
                                         cols_to_compare = st.session_state.cgan_results['target_cols'] + st.session_state.cgan_results['condition_cols']
                                         cols_to_compare = list(set(cols_to_compare))  # Remove duplicates
                                         
-                                        # Original data correlation
-                                        original_corr = data_to_analyze[cols_to_compare].corr()
+                                        # Ensure all columns are available in both datasets
+                                        cols_to_compare = [col for col in cols_to_compare if col in eval_data.columns and col in analysis_results.columns]
+                                        
+                                        # Evaluation data correlation
+                                        original_corr = eval_data[cols_to_compare].corr()
                                         
                                         # Synthetic data correlation
                                         synthetic_corr = analysis_results[cols_to_compare].corr()
@@ -2934,7 +3079,7 @@ with main_container:
                                         col1, col2 = st.columns(2)
                                         
                                         with col1:
-                                            st.write("Original Data Correlation")
+                                            st.write("Evaluation Data Correlation")
                                             fig, ax = plt.subplots(figsize=(8, 6))
                                             sns.heatmap(original_corr, annot=True, cmap='coolwarm', ax=ax, fmt='.2f', linewidths=0.5)
                                             st.pyplot(fig)
@@ -2946,7 +3091,7 @@ with main_container:
                                             st.pyplot(fig)
                                         
                                         # Show correlation difference
-                                        st.write("Correlation Difference (Original - Synthetic)")
+                                        st.write("Correlation Difference (Evaluation - Synthetic)")
                                         fig, ax = plt.subplots(figsize=(10, 8))
                                         sns.heatmap(diff_corr, annot=True, cmap='YlOrRd', ax=ax, fmt='.2f', linewidths=0.5)
                                         st.pyplot(fig)

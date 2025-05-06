@@ -1306,14 +1306,8 @@ with main_container:
                                                 # Filter out target from features
                                                 feature_options = [col for col in numeric_cols if col != target_var]
                                                 
-                                                # Default to second through penultimate columns as features
-                                                default_features = []
-                                                if len(feature_options) >= 2:
-                                                    # Take all columns except first and last if there are at least 3 columns
-                                                    # (first feature option + all in between + target which is already excluded)
-                                                    default_features = feature_options[1:] if len(feature_options) <= 2 else feature_options[1:-1]
-                                                elif len(feature_options) > 0:
-                                                    default_features = [feature_options[0]]
+                                                # Default to the first column as feature
+                                                default_features = [feature_options[0]] if feature_options else []
                                                 
                                                 feature_vars = st.multiselect(
                                                     "Select predictor variables:",
@@ -1460,9 +1454,7 @@ with main_container:
                                                     
                                                     # Run each selected method for this dataset
                                                     for method in selected_methods:
-                                                        # Create a separate dataset for each analysis method
-                                                        # Store results for this method by creating a new dataset
-                                                        # Each method will be stored as a separate dataset for comparison
+                                                        # Make results collapsible and collapsed by default
                                                         if method == "Linear Regression Analysis" and method in method_params:
                                                             with st.expander(f"Results for {method}", expanded=False):
                                                                 params = method_params[method]
@@ -1838,48 +1830,20 @@ with main_container:
                                                                 normal_pct = (normal_count / total_tested) * 100
                                                                 convergence_scores['normality_percentage'] = normal_pct
                                                     
-                                                    # Store each method separately as a dataset for better comparison
-                                                    for method_name in method_results:
-                                                        # Create a unique ID for this method
-                                                        dataset_id = len(st.session_state.convergence_datasets) + 1
-                                                        
-                                                        # Create a dataset name that includes the method
-                                                        combined_name = f"{method_name} Analysis {dataset_id}"
-                                                        
-                                                        # Extract the metrics specific to this method
-                                                        method_scores = {}
-                                                        
-                                                        # Add method-specific metrics from convergence_scores
-                                                        for key, value in convergence_scores.items():
-                                                            if key.startswith(method_name.lower().split()[0]) or method_name.lower().split()[0] in key:
-                                                                method_scores[key] = value
-                                                        
-                                                        # Create a new analysis entry specifically for this method
-                                                        method_analysis = {
-                                                            'id': dataset_id,
-                                                            'name': combined_name,
-                                                            'methods': [method_name],  # This analysis only contains one method
-                                                            'method_results': {method_name: method_results[method_name]},
-                                                            'convergence_scores': method_scores,
-                                                            'data': data,
-                                                            'timestamp': pd.Timestamp.now()
-                                                        }
-                                                        
-                                                        # Add to session state
-                                                        st.session_state.convergence_datasets.append(method_analysis)
-                                                        
-                                                        # Display in a collapsible section (hidden by default)
-                                                        with st.expander(f"Results for {combined_name}", expanded=False):
-                                                            st.success(f"Results saved as Analysis {method_analysis['id']}.")
-                                                            
-                                                            # Show metrics in a tidy format
-                                                            if method_scores:
-                                                                st.write("#### Analysis Metrics")
-                                                                metrics_df = pd.DataFrame([method_scores])
-                                                                st.dataframe(metrics_df)
+                                                    # Save the results to the session state
+                                                    new_analysis = {
+                                                        'id': len(st.session_state.convergence_datasets) + 1,
+                                                        'name': f"Analysis {len(st.session_state.convergence_datasets) + 1}",
+                                                        'methods': selected_methods,
+                                                        'method_results': method_results,
+                                                        'convergence_scores': convergence_scores,
+                                                        'data': data,
+                                                        'timestamp': pd.Timestamp.now()
+                                                    }
                                                     
-                                                    # Show success message after all methods are processed
-                                                    st.success(f"All analyses complete. Each method stored as a separate analysis.")
+                                                    st.session_state.convergence_datasets.append(new_analysis)
+                                                    
+                                                    st.success(f"Analysis complete. Results saved as Analysis {new_analysis['id']}.")
                                                     st.info("Navigate to the Multiple Interpolation Analysis Results tab to compare analysis results.")
                                 else:
                                     st.warning("Please select at least one analytical method to continue.")
@@ -1891,30 +1855,28 @@ with main_container:
                             if not st.session_state.convergence_datasets:
                                 st.warning("No analysis results available. Please run analysis in the Analyze Imputed Data tab.")
                             else:
-                                # Create a collapsible section that is hidden by default
-                                with st.expander("### Multiple Interpolation Analysis Results", expanded=False):
-                                    st.write("Compare the results from multiple interpolation analyses.")
-                                    
-                                    # Show available datasets
-                                    st.write("#### Available Analysis Results")
-                                    results_df = pd.DataFrame([
-                                        {
-                                            'ID': a['id'],
-                                            'Dataset': a['name'],
-                                            'Methods': ", ".join(a.get('methods', [])),
-                                            'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
-                                        }
-                                        for a in st.session_state.convergence_datasets
-                                    ])
-                                    
-                                    st.dataframe(results_df)
+                                st.write("### Multiple Interpolation Analysis Results")
+                                st.write("Compare the results from multiple interpolation analyses.")
                                 
-                                # Select datasets to compare - keep this outside the expander for better visibility
-                                # and default select all datasets
+                                # Show available datasets
+                                st.write("#### Available Analysis Results")
+                                results_df = pd.DataFrame([
+                                    {
+                                        'ID': a['id'],
+                                        'Dataset': a['name'],
+                                        'Methods': ", ".join(a.get('methods', [])),
+                                        'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
+                                    }
+                                    for a in st.session_state.convergence_datasets
+                                ])
+                                
+                                st.dataframe(results_df)
+                                
+                                # Select datasets to compare
                                 selected_ids = st.multiselect(
                                     "Select analysis results to compare:",
                                     options=[a['id'] for a in st.session_state.convergence_datasets],
-                                    default=[a['id'] for a in st.session_state.convergence_datasets]  # Default select all
+                                    default=[]
                                 )
                                 
                                 if selected_ids:
@@ -1933,72 +1895,22 @@ with main_container:
                                             # Prepare data for comparison
                                             comparison_data = []
                                             
-                                            # Extract method from dataset name if available
-                                            method_groups = {}
-                                            
                                             for analysis in selected_analyses:
-                                                # Extract relevant metrics - exclude ID fields
+                                                # Extract relevant metrics from each analysis result
                                                 metrics = {
+                                                    'ID': analysis['id'],
                                                     'Dataset': analysis['name']
                                                 }
                                                 
-                                                # Try to extract method from the name or from methods list
-                                                method_name = "Unknown"
-                                                
-                                                # First try to extract from methods list
-                                                if 'methods' in analysis and analysis['methods']:
-                                                    method_name = analysis['methods'][0]
-                                                # Otherwise try to parse from name
-                                                elif ' - ' in analysis['name']:
-                                                    method_name = analysis['name'].split(' - ')[0]
-                                                elif 'Analysis' in analysis['name'] and analysis['name'].split('Analysis')[0].strip():
-                                                    method_name = analysis['name'].split('Analysis')[0].strip()
-                                                
-                                                metrics['Method'] = method_name
-                                                
-                                                # Add convergence scores (exclude any IDs)
+                                                # Add convergence scores
                                                 for key, value in analysis.get('convergence_scores', {}).items():
-                                                    if not ('id' in key.lower() or 'identifier' in key.lower()):
-                                                        metrics[key] = value
+                                                    metrics[key] = value
                                                 
-                                                # Add to comparison data
                                                 comparison_data.append(metrics)
-                                                
-                                                # Group by method
-                                                if method_name not in method_groups:
-                                                    method_groups[method_name] = []
-                                                method_groups[method_name].append(metrics)
                                             
                                             # Display comparison table
                                             comparison_df = pd.DataFrame(comparison_data)
-                                            
-                                            # Start with complete table
-                                            st.write("#### Complete Comparison Table")
                                             st.dataframe(comparison_df)
-                                            
-                                            # Then show grouped by method
-                                            st.write("#### Comparison by Method")
-                                            
-                                            # Create tabs for each method
-                                            if method_groups:
-                                                method_names = list(method_groups.keys())
-                                                method_tabs = st.tabs(method_names)
-                                                
-                                                for i, method_name in enumerate(method_names):
-                                                    with method_tabs[i]:
-                                                        method_df = pd.DataFrame(method_groups[method_name])
-                                                        st.dataframe(method_df)
-                                                        
-                                                        # If we have multiple results for this method, show statistics
-                                                        if len(method_groups[method_name]) > 1:
-                                                            st.write(f"##### Statistics for {method_name}")
-                                                            
-                                                            # Calculate statistics on numeric columns only
-                                                            numeric_cols = method_df.select_dtypes(include=np.number).columns
-                                                            
-                                                            if len(numeric_cols) > 0:
-                                                                stats_df = method_df[numeric_cols].describe()
-                                                                st.dataframe(stats_df)
                                             
                                             # Calculate variation statistics
                                             if len(comparison_data) > 1:

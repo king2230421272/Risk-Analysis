@@ -2098,39 +2098,83 @@ with main_container:
                                             # Filter out ID columns (case-insensitive)
                                             numeric_cols = [col for col in numeric_cols if "id" not in col.lower()]
                                             if len(numeric_cols) > 0:
-                                                # Calculate pooled statistics
+                                                # Calculate pooled statistics using Rubin's rules
+                                                st.write("#### Rubin's Rules for Multiple Imputation")
+                                                st.write("""
+                                                Rubin's rules combine results from multiple analyses by accounting for:
+                                                1. Within-imputation variability (uncertainty in each dataset)
+                                                2. Between-imputation variability (uncertainty due to missing data)
+                                                
+                                                This provides more accurate point estimates and confidence intervals.
+                                                """)
+                                                
                                                 pooled_stats = {}
+                                                
+                                                # Calculate the number of imputations
+                                                m = len(comparison_df)
+                                                st.write(f"Number of imputation datasets (m): {m}")
                                                 
                                                 for col in numeric_cols:
                                                     values = comparison_df[col].dropna()
                                                     if len(values) > 1:
-                                                        # 1. Calculate mean (pooled estimate)
+                                                        # Step 1: Calculate individual parameter estimates (Q) from each imputed dataset
+                                                        estimates = values.values
+                                                        
+                                                        # Step 2: Calculate the mean of the parameter estimates (Q_bar)
                                                         mean = values.mean()
                                                         
-                                                        # 2. Calculate within-imputation variance (average variance)
-                                                        # Assuming each dataset has the same variance structure
-                                                        within_var = values.var() / len(values)
+                                                        # Step 3: Calculate the between-imputation variance (B)
+                                                        # Formula: B = (1/(m-1)) * Sum((Q_i - Q_bar)^2)
+                                                        between_var = values.var(ddof=1)  # Unbiased estimator using (m-1) denominator
                                                         
-                                                        # 3. Calculate between-imputation variance
-                                                        between_var = values.var() * (1.0 + 1.0/len(values))
+                                                        # Step 4: Calculate the within-imputation variance (W)
+                                                        # For exact calculation, we would need the variance of each estimate
+                                                        # Since we don't have that for each imputation, we'll estimate it:
+                                                        try:
+                                                            # Look for variance columns for this parameter
+                                                            variance_col = None
+                                                            for potential_col in comparison_df.columns:
+                                                                if col in potential_col and ("_var" in potential_col.lower() or "variance" in potential_col.lower()):
+                                                                    variance_col = potential_col
+                                                                    break
+                                                            
+                                                            if variance_col:
+                                                                within_var = comparison_df[variance_col].mean()
+                                                                st.info(f"Found variance column for {col}: {variance_col}")
+                                                            else:
+                                                                # Fallback: Estimate based on between-imputation variance
+                                                                within_var = between_var / 2  # Conservative estimate
+                                                        except Exception as e:
+                                                            # If anything goes wrong, use the fallback method
+                                                            within_var = between_var / 2
+                                                            st.warning(f"Using estimated within-imputation variance for {col}. {str(e)}")
                                                         
-                                                        # 4. Calculate total variance (Rubin's formula)
-                                                        total_var = within_var + between_var
+                                                        # Step 5: Calculate the total variance (T) using Rubin's formula
+                                                        # T = W + (1 + 1/m)B
+                                                        total_var = within_var + (1 + 1/m) * between_var
                                                         
-                                                        # 5. Calculate standard error
+                                                        # Step 6: Calculate the standard error
                                                         se = np.sqrt(total_var)
                                                         
-                                                        # 6. Calculate degrees of freedom (Rubin's formula)
-                                                        df = (len(values) - 1) * (1 + (within_var / between_var))**2
+                                                        # Step 7: Calculate degrees of freedom (Rubin's formula)
+                                                        # df = (m-1) * (1 + (W / ((1+1/m)*B)))^2
+                                                        df = (m-1) * ((1 + within_var / ((1+1/m) * between_var)) ** 2)
+                                                        # Ensure df is not too small
+                                                        df = max(df, 2)
                                                         
-                                                        # 7. Calculate 95% confidence interval
+                                                        # Step 8: Calculate 95% confidence interval using t-distribution
                                                         from scipy import stats
                                                         t_value = stats.t.ppf(0.975, df)
                                                         ci_lower = mean - t_value * se
                                                         ci_upper = mean + t_value * se
                                                         
-                                                        # 8. Calculate fraction of missing information (FMI)
-                                                        fmi = (between_var + between_var/len(values)) / total_var
+                                                        # Step 9: Calculate fraction of missing information (FMI)
+                                                        # FMI = ((1+1/m)*B) / T
+                                                        fmi = ((1+1/m) * between_var) / total_var
+                                                        
+                                                        # Step 10: Calculate relative efficiency of using m imputations
+                                                        # RE = (1 + FMI/m)^-1
+                                                        relative_efficiency = 1 / (1 + fmi/m)
                                                         
                                                         pooled_stats[col] = {
                                                             'Pooled Estimate': mean,
@@ -2141,7 +2185,8 @@ with main_container:
                                                             'DF': df,
                                                             '95% CI Lower': ci_lower,
                                                             '95% CI Upper': ci_upper,
-                                                            'FMI': fmi
+                                                            'FMI': fmi,
+                                                            'Relative Efficiency': relative_efficiency
                                                         }
                                                 
                                                 if pooled_stats:

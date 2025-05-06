@@ -1134,11 +1134,11 @@ with main_container:
                                             
                                         with col2:
                                             st.write("After Interpolation:")
-                                            st.dataframe(st.session_state.interpolated_result.head())
+                                            st.dataframe(st.session_state.interpolated_data.head())
                                         
                                         # Show missing value counts before and after
                                         missing_before = interpolated_data.isna().sum().sum()
-                                        missing_after = st.session_state.interpolated_result.isna().sum().sum()
+                                        missing_after = st.session_state.interpolated_data.isna().sum().sum()
                                         
                                         st.write(f"Missing values before: {missing_before}")
                                         st.write(f"Missing values after: {missing_after}")
@@ -1174,50 +1174,47 @@ with main_container:
                         """)
                         
                         # Check if we have MCMC interpolated result
-                        if 'interpolated_result' not in st.session_state:
+                        if 'interpolated_data' not in st.session_state or st.session_state.interpolated_data is None or 'mcmc_generated' not in st.session_state or not st.session_state.mcmc_generated:
                             st.info("Please run MCMC interpolation first before performing multiple interpolation analysis.")
                         else:
                             # Display core information about the imputation process
                             st.subheader("Imputation Statistics")
                             
                             # Get current imputed dataset if available
-                            if 'interpolated_result' in st.session_state and st.session_state.interpolated_result is not None:
-                                current_data = st.session_state.interpolated_result
-                                
-                                # Calculate imputation statistics
-                                col1, col2 = st.columns(2)
-                                
-                                with col1:
-                                    st.write("**Original Missing Data**")
-                                    if 'original_missing_counts' in st.session_state:
-                                        missing_counts = st.session_state.original_missing_counts
-                                        total_missing = missing_counts.sum().sum()
-                                        total_cells = missing_counts.size
-                                        
-                                        st.write(f"Total missing values: {total_missing}")
-                                        st.write(f"Missing percentage: {total_missing/total_cells*100:.2f}%")
-                                        
-                                        # Show top columns with missing values
-                                        missing_by_col = missing_counts.sum()
-                                        if len(missing_by_col) > 0:
-                                            top_missing = missing_by_col.sort_values(ascending=False).head(5)
-                                            st.write("Columns with most missing values:")
-                                            for col, count in top_missing.items():
-                                                if count > 0:
-                                                    st.write(f"- {col}: {count} values ({count/len(current_data)*100:.1f}%)")
-                                    else:
-                                        st.write("Original missing value information not available.")
-                                
-                                with col2:
-                                    st.write("**Imputation Results**")
-                                    # Check for any remaining missing values
-                                    remaining_missing = current_data.isna().sum().sum()
-                                    if remaining_missing > 0:
-                                        st.warning(f"Imputation incomplete: {remaining_missing} values still missing")
-                                    else:
-                                        st.success("All missing values successfully imputed")
-                            else:
-                                st.warning("No imputed dataset available. Please run MCMC interpolation in the previous tab first.")
+                            current_data = st.session_state.interpolated_data
+                            
+                            # Calculate imputation statistics
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write("**Original Missing Data**")
+                                if 'original_missing_counts' in st.session_state:
+                                    missing_counts = st.session_state.original_missing_counts
+                                    total_missing = missing_counts.sum().sum()
+                                    total_cells = missing_counts.size
+                                    
+                                    st.write(f"Total missing values: {total_missing}")
+                                    st.write(f"Missing percentage: {total_missing/total_cells*100:.2f}%")
+                                    
+                                    # Show top columns with missing values
+                                    missing_by_col = missing_counts.sum()
+                                    if len(missing_by_col) > 0:
+                                        top_missing = missing_by_col.sort_values(ascending=False).head(5)
+                                        st.write("Columns with most missing values:")
+                                        for col, count in top_missing.items():
+                                            if count > 0:
+                                                st.write(f"- {col}: {count} values ({count/len(current_data)*100:.1f}%)")
+                                else:
+                                    st.write("Original missing value information not available.")
+                            
+                            with col2:
+                                st.write("**Imputation Results**")
+                                # Check for any remaining missing values
+                                remaining_missing = current_data.isna().sum().sum()
+                                if remaining_missing > 0:
+                                    st.warning(f"Imputation incomplete: {remaining_missing} values still missing")
+                                else:
+                                    st.success("All missing values successfully imputed")
                                 
                                 if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
                                     num_datasets = len(st.session_state.convergence_datasets)
@@ -1242,7 +1239,7 @@ with main_container:
                             """)
                             
                             # Reference the dataset from MCMC interpolation
-                            if 'interpolated_result' in st.session_state and st.session_state.interpolated_result is not None:
+                            if 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None:
                                 st.success("Using MCMC-interpolated dataset from Data Processing module")
                                 
                                 # Initialization for convergence datasets if needed
@@ -1285,7 +1282,7 @@ with main_container:
                                         
                                         with col1:
                                             # Get numeric columns
-                                            numeric_cols = st.session_state.interpolated_result.select_dtypes(include=np.number).columns.tolist()
+                                            numeric_cols = st.session_state.interpolated_data.select_dtypes(include=np.number).columns.tolist()
                                             if numeric_cols:
                                                 # Default to the last numeric column as target
                                                 default_target_idx = -1
@@ -1335,7 +1332,7 @@ with main_container:
                                         
                                         with col1:
                                             # Get numeric columns for clustering
-                                            numeric_cols = st.session_state.interpolated_result.select_dtypes(include=np.number).columns.tolist()
+                                            numeric_cols = st.session_state.interpolated_data.select_dtypes(include=np.number).columns.tolist()
                                             
                                             # Default to the first column for clustering
                                             default_cluster_vars = [numeric_cols[0]] if numeric_cols else []
@@ -1370,7 +1367,7 @@ with main_container:
                                         
                                         with col1:
                                             # Get numeric columns for PCA
-                                            numeric_cols = st.session_state.interpolated_result.select_dtypes(include=np.number).columns.tolist()
+                                            numeric_cols = st.session_state.interpolated_data.select_dtypes(include=np.number).columns.tolist()
                                             
                                             # Default to all columns except first and last for PCA (as eigenvalues)
                                             default_pca_vars = numeric_cols.copy()

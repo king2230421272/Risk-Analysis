@@ -2235,9 +2235,9 @@ with main_container:
                                     else:
                                         st.error(f"Dataset {selected_dataset} is not available.")
                                 
-                                # 4. Factor Analysis (PCA) Tab
+                                # 4. PCA Factor Analysis Tab
                                 with analysis_tabs[3]:
-                                    st.write("### Factor Analysis (PCA)")
+                                    st.write("### PCA Factor Analysis")
                                     st.write("""
                                     Principal Component Analysis (PCA) reduces dimensionality while preserving variance.
                                     This analysis helps evaluate if the interpolated data maintains the same underlying factors.

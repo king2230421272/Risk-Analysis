@@ -345,6 +345,15 @@ class AdvancedDataProcessor:
         # Preprocess the interpolated data
         data = self.preprocess_data(interpolated_data)
         
+        # Check if we have data to analyze
+        if data.empty or len(data) == 0:
+            raise ValueError("No data available for CGAN analysis after preprocessing")
+        
+        # Make sure the condition columns exist in the data
+        missing_cols = set(condition_cols) - set(data.columns)
+        if missing_cols:
+            raise ValueError(f"Missing condition columns in data: {missing_cols}")
+        
         # Extract condition data
         condition_data = data[condition_cols].values
         
@@ -386,18 +395,39 @@ class AdvancedDataProcessor:
         # Create a DataFrame for the CGAN analysis results
         cgan_results = pd.DataFrame()
         
+        # Check if results contain NaN or are empty
+        if np.isnan(mean_generations).all() or len(mean_generations) == 0:
+            print("Warning: Generated data contains only NaN values")
+            # Create empty DataFrame with appropriate columns
+            for i, col in enumerate(target_cols):
+                cgan_results[f'{col}_mean'] = np.zeros(condition_data.shape[0])
+                cgan_results[f'{col}_std'] = np.zeros(condition_data.shape[0])
+                if col in interpolated_data.columns:
+                    cgan_results[f'{col}_original'] = interpolated_data[col].values
+                    cgan_results[f'{col}_deviation'] = np.zeros(condition_data.shape[0])
+            return cgan_results
+        
+        # Add results to the DataFrame
         for i, col in enumerate(target_cols):
-            cgan_results[f'{col}_mean'] = mean_generations[:, i]
-            cgan_results[f'{col}_std'] = std_generations[:, i]
-            
-            # Add original values for comparison
-            if col in interpolated_data.columns:
-                cgan_results[f'{col}_original'] = interpolated_data[col].values
+            if i < mean_generations.shape[1]:  # Ensure column index is within bounds
+                cgan_results[f'{col}_mean'] = mean_generations[:, i]
+                cgan_results[f'{col}_std'] = std_generations[:, i]
                 
-                # Calculate deviation from CGAN prediction
-                cgan_results[f'{col}_deviation'] = np.abs(
-                    interpolated_data[col].values - mean_generations[:, i]
-                )
+                # Add original values for comparison
+                if col in interpolated_data.columns:
+                    # Ensure both arrays are the same length
+                    min_len = min(len(interpolated_data[col].values), len(mean_generations[:, i]))
+                    if min_len > 0:
+                        cgan_results[f'{col}_original'] = interpolated_data[col].values[:min_len]
+                        
+                        # Calculate deviation from CGAN prediction
+                        cgan_results[f'{col}_deviation'] = np.abs(
+                            interpolated_data[col].values[:min_len] - mean_generations[:min_len, i]
+                        )
+                    else:
+                        # Handle case when one array is empty
+                        cgan_results[f'{col}_original'] = []
+                        cgan_results[f'{col}_deviation'] = []
         
         print("CGAN analysis completed.")
         return cgan_results

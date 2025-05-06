@@ -2443,10 +2443,12 @@ with main_container:
                                                         
                                                         # Find the dataset with the best convergence (use first one if multiple)
                                                         best_dataset = None
-                                                        for dataset in datasets_to_analyze:
-                                                            if dataset['data'] is not None:
-                                                                best_dataset = dataset['data']
-                                                                break
+                                                        # Use datasets from convergence_datasets in session state
+                                                        if 'convergence_datasets' in st.session_state and len(st.session_state.convergence_datasets) > 0:
+                                                            for dataset in st.session_state.convergence_datasets:
+                                                                if dataset['data'] is not None:
+                                                                    best_dataset = dataset['data']
+                                                                    break
                                                         
                                                         if best_dataset is not None:
                                                             # Store in session state for CGAN Analysis to use
@@ -2456,7 +2458,7 @@ with main_container:
                                                             if st.button("Proceed to CGAN Analysis"):
                                                                 # We'll use a session state flag to indicate we should switch to CGAN Analysis
                                                                 st.session_state.switch_to_cgan = True
-                                                                st.experimental_rerun()
+                                                                st.rerun()
                                                     elif max_psrf < 1.2:
                                                         st.info("Fair convergence. You may proceed to CGAN Analysis, but results may not be optimal.")
                                                     else:

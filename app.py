@@ -1214,10 +1214,10 @@ with main_container:
                                         st.write(f"Missing values before: {missing_before}")
                                         st.write(f"Missing values after: {missing_after}")
                                         
-                                        # Option to set as active dataset
-                                        if st.button("Use Interpolated Result for Analysis", key="use_mcmc_result"):
-                                            st.session_state.data = st.session_state.interpolated_result
-                                            st.success("Interpolated result set as active dataset for analysis.")
+                                        # Automatically set interpolated data as the active dataset
+                                        st.session_state.data = st.session_state.interpolated_result
+                                        st.session_state.active_dataset = "Interpolated Data"
+                                        st.success("Interpolated result automatically set as active dataset for analysis.")
                                         
                                         # Add download button for interpolated data
                                         try:

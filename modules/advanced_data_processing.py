@@ -430,8 +430,8 @@ class AdvancedDataProcessor:
             for i, col in enumerate(target_cols):
                 cgan_results[f'{col}_mean'] = np.zeros(condition_data.shape[0])
                 cgan_results[f'{col}_std'] = np.zeros(condition_data.shape[0])
-                if col in interpolated_data.columns:
-                    cgan_results[f'{col}_original'] = interpolated_data[col].values
+                if col in comparison_data.columns:
+                    cgan_results[f'{col}_original'] = comparison_data[col].values
                     cgan_results[f'{col}_deviation'] = np.zeros(condition_data.shape[0])
             return cgan_results
         
@@ -442,15 +442,15 @@ class AdvancedDataProcessor:
                 cgan_results[f'{col}_std'] = std_generations[:, i]
                 
                 # Add original values for comparison
-                if col in interpolated_data.columns:
+                if col in comparison_data.columns:
                     # Ensure both arrays are the same length
-                    min_len = min(len(interpolated_data[col].values), len(mean_generations[:, i]))
+                    min_len = min(len(comparison_data[col].values), len(mean_generations[:, i]))
                     if min_len > 0:
-                        cgan_results[f'{col}_original'] = interpolated_data[col].values[:min_len]
+                        cgan_results[f'{col}_original'] = comparison_data[col].values[:min_len]
                         
                         # Calculate deviation from CGAN prediction
                         cgan_results[f'{col}_deviation'] = np.abs(
-                            interpolated_data[col].values[:min_len] - mean_generations[:min_len, i]
+                            comparison_data[col].values[:min_len] - mean_generations[:min_len, i]
                         )
                     else:
                         # Handle case when one array is empty

@@ -1144,13 +1144,13 @@ with main_container:
                                         st.write(f"Missing values after: {missing_after}")
                                         
                                         # Automatically set interpolated data as the active dataset
-                                        st.session_state.data = st.session_state.interpolated_result
+                                        st.session_state.data = st.session_state.interpolated_data
                                         st.session_state.active_dataset = "Interpolated Data"
                                         st.success("Interpolated result automatically set as active dataset for analysis.")
                                         
                                         # Add download button for interpolated data
                                         try:
-                                            data_bytes = data_handler.export_data(st.session_state.interpolated_result, format='csv')
+                                            data_bytes = data_handler.export_data(st.session_state.interpolated_data, format='csv')
                                             st.download_button(
                                                 label="Download Interpolated Data as CSV",
                                                 data=data_bytes,

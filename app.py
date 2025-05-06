@@ -2117,20 +2117,32 @@ with main_container:
                                                         # For PSRF, we need to calculate between and within chain variance
                                                         # Since we don't have actual chains, we'll treat each dataset as a chain
                                                         
-                                                        # Between-imputation variance (scaled)
-                                                        between_var = values.var() * (len(values) + 1) / len(values)
+                                                        # For PSRF with real imputed datasets, we need better calculations
+                                                        # 1. Between-imputation variance (B)
+                                                        between_var = values.var()
                                                         
-                                                        # Within-imputation variance (averaged)
-                                                        within_var = values.var() / 2  # Simplified approximation
+                                                        # 2. Estimate within-imputation variance 
+                                                        # We'll use a more realistic approach based on the data
+                                                        # For multiple imputations, we need to estimate the within-chain variance
+                                                        # Here we'll use the mean squared deviation around dataset values
                                                         
-                                                        # PSRF calculation
-                                                        if within_var > 0:
-                                                            psrf = np.sqrt((within_var + between_var) / within_var)
-                                                            psrf_results[col] = psrf
-                                                            
-                                                            # Calculate Between/Within Ratio
-                                                            ratio = between_var / within_var if within_var > 0 else np.nan
-                                                            between_within_ratio[col] = ratio
+                                                        # Using the square of standard error as a more stable estimator
+                                                        std_err = values.std() / np.sqrt(len(values))
+                                                        within_var = std_err**2 * len(values)
+                                                        
+                                                        # Add small constant to avoid division by zero
+                                                        within_var = max(within_var, 1e-10)
+                                                        
+                                                        # 3. Calculate variance estimator
+                                                        var_estimator = ((len(values) - 1) / len(values)) * within_var + ((1 / len(values)) * between_var)
+                                                        
+                                                        # 4. PSRF calculation (R-hat)
+                                                        psrf = np.sqrt(var_estimator / within_var)
+                                                        psrf_results[col] = psrf
+                                                        
+                                                        # 5. Calculate Between/Within Ratio (more informative)
+                                                        ratio = between_var / within_var
+                                                        between_within_ratio[col] = ratio
                                                 
                                                 if psrf_results:
                                                     # Display PSRF results

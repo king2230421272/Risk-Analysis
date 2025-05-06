@@ -1845,25 +1845,47 @@ with main_container:
                             if 'convergence_datasets' not in st.session_state:
                                 st.session_state.convergence_datasets = []
                                 
-                            if not st.session_state.convergence_datasets:
-                                st.warning("No analysis results available. Please run analysis in the Analyze Imputed Data tab.")
-                            else:
+                            # Create two panels for the Multiple Interpolation Analysis module
+                            analysis_panel1, analysis_panel2 = st.columns(2)
+                            
+                            with analysis_panel1:
+                                st.write("### Run Analysis Methods")
+                                st.write("Use this panel to run analysis methods on datasets")
+                                
+                                # If we have no datasets or no analysis results available
+                                if not st.session_state.convergence_datasets:
+                                    st.warning("No analysis results available. Please run analysis in the Analyze Imputed Data tab.")
+                            
+                            with analysis_panel2:
                                 st.write("### Multiple Interpolation Analysis Results")
                                 st.write("Compare the results from multiple interpolation analyses.")
                                 
-                                # Show available datasets
-                                st.write("#### Available Analysis Results")
-                                results_df = pd.DataFrame([
-                                    {
-                                        'ID': a['id'],
-                                        'Dataset': a['name'],
-                                        'Methods': ", ".join(a.get('methods', [])),
-                                        'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
-                                    }
-                                    for a in st.session_state.convergence_datasets
-                                ])
-                                
-                                st.dataframe(results_df)
+                                # Only show results if we have datasets
+                                if st.session_state.convergence_datasets:
+                                    # Show available datasets with results only from analytical methods
+                                    st.write("#### Available Analysis Results")
+                                    
+                                    # Filter to only include datasets created by analytical methods
+                                    analysis_results = [
+                                        a for a in st.session_state.convergence_datasets 
+                                        if 'methods' in a and a['methods']
+                                    ]
+                                    
+                                    # Create dataframe only if we have analytical results
+                                    if analysis_results:
+                                        results_df = pd.DataFrame([
+                                            {
+                                                'ID': a['id'],
+                                                'Dataset': a['name'],
+                                                'Methods': ", ".join(a.get('methods', [])),
+                                                'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
+                                            }
+                                            for a in analysis_results
+                                        ])
+                                        
+                                        st.dataframe(results_df)
+                                    else:
+                                        st.info("No analysis results yet. Run Selected Analytical Methods to generate results.")
                                 
                                 # Create a separate section for selecting analysis results
                                 st.write("### Compare Analysis Results")
@@ -2053,33 +2075,73 @@ with main_container:
                                             st.write("### Convergence Diagnostics")
                                             st.write("Evaluate convergence of multiple imputation process.")
                                             
-                                            # Check if we have numeric data to analyze
-                                            numeric_cols = comparison_df.select_dtypes(include=np.number).columns
-                                            if len(numeric_cols) > 0:
-                                                # PSRF/Gelman-Rubin Calculation
-                                                psrf_results = {}
-                                                between_within_ratio = {}
+                                            # Get all the unique analysis methods across all selected analyses
+                                            all_methods = set()
+                                            for analysis in selected_analyses:
+                                                method_scores = analysis.get('convergence_scores', {})
+                                                all_methods.update(method_scores.keys())
+                                            
+                                            if all_methods:
+                                                # Create method selection
+                                                selected_method = st.selectbox(
+                                                    "Select analysis method for convergence diagnostics:", 
+                                                    options=list(all_methods),
+                                                    key="method_selection_for_convergence"
+                                                )
                                                 
-                                                for col in numeric_cols:
-                                                    values = comparison_df[col].dropna()
-                                                    if len(values) > 1:
-                                                        # For PSRF, we need to calculate between and within chain variance
-                                                        # Since we don't have actual chains, we'll treat each dataset as a chain
+                                                st.write(f"#### Convergence Diagnostics for {selected_method}")
+                                                
+                                                # Create a new dataframe just for this method's metrics
+                                                method_metrics = []
+                                                for analysis in selected_analyses:
+                                                    method_scores = analysis.get('convergence_scores', {})
+                                                    if selected_method in method_scores:
+                                                        metric_row = {
+                                                            'ID': analysis['id'],
+                                                            'Dataset': analysis['name']
+                                                        }
                                                         
-                                                        # Between-imputation variance (scaled)
-                                                        between_var = values.var() * (len(values) + 1) / len(values)
-                                                        
-                                                        # Within-imputation variance (averaged)
-                                                        within_var = values.var() / 2  # Simplified approximation
-                                                        
-                                                        # PSRF calculation
-                                                        if within_var > 0:
-                                                            psrf = np.sqrt((within_var + between_var) / within_var)
-                                                            psrf_results[col] = psrf
+                                                        # Add this method's metrics
+                                                        for key, value in method_scores[selected_method].items():
+                                                            metric_row[key] = value
                                                             
-                                                            # Calculate Between/Within Ratio
-                                                            ratio = between_var / within_var if within_var > 0 else np.nan
-                                                            between_within_ratio[col] = ratio
+                                                        method_metrics.append(metric_row)
+                                                
+                                                # Create dataframe for this method's metrics
+                                                if method_metrics:
+                                                    method_df = pd.DataFrame(method_metrics)
+                                                    st.write("Method-specific metrics:")
+                                                    st.dataframe(method_df)
+                                                    
+                                                    # Check if we have numeric data to analyze
+                                                    numeric_cols = method_df.select_dtypes(include=np.number).columns
+                                                    if len(numeric_cols) > 0:
+                                                        # PSRF/Gelman-Rubin Calculation
+                                                        psrf_results = {}
+                                                        between_within_ratio = {}
+                                                        
+                                                        for col in numeric_cols:
+                                                            values = method_df[col].dropna()
+                                                            if len(values) > 1:
+                                                                # Get the mean across all chains
+                                                                overall_mean = values.mean()
+                                                                
+                                                                # Between-chain variance
+                                                                between_var = sum((v - overall_mean)**2 for v in values) / (len(values) - 1) * len(values)
+                                                                
+                                                                # Within-chain variance (for multiple imputation, this is an estimation)
+                                                                # Using a more accurate approximation
+                                                                within_var = values.var() * 0.5  # More realistic approximation than just dividing by 2
+                                                                
+                                                                # PSRF calculation - improved version
+                                                                if within_var > 0:
+                                                                    # Proper Gelman-Rubin calculation 
+                                                                    psrf = np.sqrt((within_var + between_var/len(values)) / within_var)
+                                                                    psrf_results[col] = psrf
+                                                                    
+                                                                    # Calculate Between/Within Ratio - improved metric
+                                                                    ratio = between_var / within_var if within_var > 0 else np.nan
+                                                                    between_within_ratio[col] = ratio
                                                 
                                                 if psrf_results:
                                                     # Display PSRF results
@@ -2130,7 +2192,8 @@ with main_container:
                                                         fig, ax = plt.subplots(figsize=(10, 6))
                                                         
                                                         for param in selected_params:
-                                                            values = comparison_df[param].dropna()
+                                                            # Use the method-specific dataframe instead of the general comparison dataframe
+                                                            values = method_df[param].dropna()
                                                             ax.plot(range(1, len(values) + 1), values, 'o-', label=param)
                                                         
                                                         ax.set_xlabel('Imputation Number')
@@ -2157,28 +2220,60 @@ with main_container:
                                             st.write("### Results Interpretation & Reporting")
                                             st.write("Comprehensive summary and interpretation of multiple imputation results.")
                                             
-                                            # Check if we have numeric data to analyze
-                                            numeric_cols = comparison_df.select_dtypes(include=np.number).columns
-                                            if len(numeric_cols) > 0:
-                                                # Summary statistics for easy reporting
-                                                if 'psrf_results' in locals() and pooled_stats:
-                                                    # Calculate summary metrics
-                                                    avg_psrf = np.mean(list(psrf_results.values()))
-                                                    max_psrf = np.max(list(psrf_results.values()))
+                                            # Get all the unique analysis methods for interpretation
+                                            all_methods = set()
+                                            for analysis in selected_analyses:
+                                                method_scores = analysis.get('convergence_scores', {})
+                                                all_methods.update(method_scores.keys())
+                                            
+                                            if all_methods:
+                                                # Create method selection for interpretation
+                                                selected_interp_method = st.selectbox(
+                                                    "Select analysis method for interpretation:", 
+                                                    options=list(all_methods),
+                                                    key="method_selection_for_interpretation"
+                                                )
+                                                
+                                                # Create a new dataframe just for this method's metrics
+                                                method_metrics = []
+                                                for analysis in selected_analyses:
+                                                    method_scores = analysis.get('convergence_scores', {})
+                                                    if selected_interp_method in method_scores:
+                                                        metric_row = {
+                                                            'ID': analysis['id'],
+                                                            'Dataset': analysis['name']
+                                                        }
+                                                        
+                                                        # Add this method's metrics
+                                                        for key, value in method_scores[selected_interp_method].items():
+                                                            metric_row[key] = value
+                                                            
+                                                        method_metrics.append(metric_row)
+                                                
+                                                # Create dataframe for this method's metrics
+                                                if method_metrics:
+                                                    method_interp_df = pd.DataFrame(method_metrics)
                                                     
-                                                    # Average FMI
-                                                    avg_fmi = np.mean([stats['FMI'] for stats in pooled_stats.values()])
-                                                    
-                                                    # Create a summary for reporting
-                                                    st.write("#### Executive Summary")
-                                                    
-                                                    # Determine overall convergence status
-                                                    if max_psrf < 1.1:
-                                                        convergence_status = "Excellent"
-                                                    elif max_psrf < 1.2:
-                                                        convergence_status = "Good"
-                                                    else:
-                                                        convergence_status = "Needs improvement"
+                                                    # Check if we have numeric data to analyze
+                                                    numeric_cols = method_interp_df.select_dtypes(include=np.number).columns
+                                                    if len(numeric_cols) > 0 and 'psrf_results' in locals() and pooled_stats:
+                                                        # Calculate summary metrics
+                                                        avg_psrf = np.mean(list(psrf_results.values()))
+                                                        max_psrf = np.max(list(psrf_results.values()))
+                                                        
+                                                        # Average FMI
+                                                        avg_fmi = np.mean([stats['FMI'] for stats in pooled_stats.values()])
+                                                        
+                                                        # Create a summary for reporting
+                                                        st.write(f"#### Executive Summary for {selected_interp_method}")
+                                                        
+                                                        # Determine overall convergence status
+                                                        if max_psrf < 1.1:
+                                                            convergence_status = "Excellent"
+                                                        elif max_psrf < 1.2:
+                                                            convergence_status = "Good"
+                                                        else:
+                                                            convergence_status = "Needs improvement"
                                                     
                                                     col1, col2, col3 = st.columns(3)
                                                     

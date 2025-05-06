@@ -1869,7 +1869,7 @@ with main_container:
                                         run_button_clicked = False
                                         if consecutive_mode:
                                             # In consecutive mode, automatically trigger analysis
-                                            run_button_clicked = st.session_state.current_analysis_step == 2
+                                            run_button_clicked = st.session_state.current_analysis_step == 1
                                             if run_button_clicked:
                                                 st.success("Automatically running Linear Regression for selected datasets...")
                                         else:

@@ -214,91 +214,7 @@ with main_container:
                 except Exception as e:
                     st.error(f"Error accessing database: {e}")
                 
-                # Add separator
-                st.markdown("---")
-                st.markdown("### Load Individual Datasets")
-                
-                col1, col2 = st.columns(2)
-                
-                # LOAD AS ORIGINAL DATA
-                with col1:
-                    st.subheader("Load as Original Data")
-                    
-                    try:
-                        # Get list of datasets from database
-                        all_datasets = db_handler.list_datasets()
-                        
-                        if not all_datasets:
-                            st.info("No datasets found in the database. Please save some datasets first.")
-                        else:
-                            # Create a formatted selectbox for datasets
-                            dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']}x{ds['column_count']})") 
-                                              for ds in all_datasets]
-                            
-                            selected_dataset = st.selectbox(
-                                "Select dataset to load as Original Data:",
-                                options=dataset_options,
-                                format_func=lambda x: x[1],
-                                key="original_data_db_select"
-                            )
-                            
-                            if st.button("Load as Original Data", key="load_original_btn"):
-                                try:
-                                    # Load the selected dataset
-                                    loaded_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
-                                    st.session_state.original_data = loaded_df
-                                    
-                                    st.success(f"Dataset loaded as Original Data: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
-                                    
-                                    # Show data preview
-                                    st.write("Preview:")
-                                    st.dataframe(loaded_df.head())
-                                    
-                                except Exception as e:
-                                    st.error(f"Error loading dataset: {e}")
-                    
-                    except Exception as e:
-                        st.error(f"Error accessing database: {e}")
-                
-                # LOAD AS INTERPOLATED DATA
-                with col2:
-                    st.subheader("Load as Data to Interpolate")
-                    
-                    try:
-                        # Get list of datasets from database
-                        all_datasets = db_handler.list_datasets()
-                        
-                        if not all_datasets:
-                            st.info("No datasets found in the database. Please save some datasets first.")
-                        else:
-                            # Create a formatted selectbox for datasets
-                            dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']}x{ds['column_count']})") 
-                                              for ds in all_datasets]
-                            
-                            selected_dataset = st.selectbox(
-                                "Select dataset to load as Data to Interpolate:",
-                                options=dataset_options,
-                                format_func=lambda x: x[1],
-                                key="interpolated_data_db_select"
-                            )
-                            
-                            if st.button("Load as Data to Interpolate", key="load_interpolated_btn"):
-                                try:
-                                    # Load the selected dataset
-                                    loaded_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
-                                    st.session_state.interpolated_data = loaded_df
-                                    
-                                    st.success(f"Dataset loaded as Data to Interpolate: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
-                                    
-                                    # Show data preview
-                                    st.write("Preview:")
-                                    st.dataframe(loaded_df.head())
-                                    
-                                except Exception as e:
-                                    st.error(f"Error loading dataset: {e}")
-                    
-                    except Exception as e:
-                        st.error(f"Error accessing database: {e}")
+                # Individual datasets section removed as requested
         
         # Select active dataset for analysis
         st.subheader("Select Active Dataset")
@@ -1235,11 +1151,11 @@ with main_container:
                             except Exception as e:
                                 st.error(f"Error during MCMC interpolation: {e}")
                     
-                    # 2. MODULES ANALYSIS TAB
+                    # 2. MULTIPLE INTERPOLATION ANALYSIS TAB
                     with advanced_options[1]:
-                        st.write("### Modules Analysis")
+                        st.write("### Multiple Interpolation Analysis")
                         st.write("""
-                        The Modules Analysis component provides a unified interface for analyzing datasets through multiple
+                        The Multiple Interpolation Analysis component provides a unified interface for analyzing datasets through multiple
                         analytical methods and evaluating them in parallel. Key benefits include:
                         1. Applying different analytical techniques to the same dataset
                         2. Comparing results across methods to ensure consistency
@@ -1306,8 +1222,8 @@ with main_container:
                                 else:
                                     st.write("Single imputed dataset available")
                             
-                            # Add modules analysis section
-                            st.subheader("Modules Analysis")
+                            # Add multiple interpolation analysis section
+                            st.subheader("Multiple Interpolation Analysis")
                             
                             st.write("""
                             This analysis uses the MCMC-interpolated dataset from the previous step to run multiple analytical 
@@ -1463,11 +1379,15 @@ with main_container:
                                             # Get numeric columns for PCA
                                             numeric_cols = st.session_state.interpolated_result.select_dtypes(include=np.number).columns.tolist()
                                             
-                                            # Default to the first column for PCA
-                                            default_pca_vars = [numeric_cols[0]] if numeric_cols else []
+                                            # Default to all columns except first and last for PCA (as eigenvalues)
+                                            default_pca_vars = numeric_cols.copy()
+                                            if len(default_pca_vars) > 0:
+                                                # Remove first and last columns by default
+                                                if len(default_pca_vars) > 1:
+                                                    default_pca_vars = default_pca_vars[1:-1]
                                             
                                             pca_vars = st.multiselect(
-                                                "Select variables for PCA:",
+                                                "Select variables for PCA (first and last columns disregarded by default):",
                                                 options=numeric_cols,
                                                 default=default_pca_vars,
                                                 key="pca_features"

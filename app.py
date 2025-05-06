@@ -1813,15 +1813,26 @@ with main_container:
                                                                 convergence_scores['normality_percentage'] = normal_pct
                                                     
                                                     # Save the results to the session state
+                                                    # Restructuring to separate results for different analysis methods
                                                     new_analysis = {
                                                         'id': len(st.session_state.convergence_datasets) + 1,
                                                         'name': f"Analysis {len(st.session_state.convergence_datasets) + 1}",
                                                         'methods': selected_methods,
                                                         'method_results': method_results,
-                                                        'convergence_scores': convergence_scores,
+                                                        # Store convergence scores by method name to keep them separate
+                                                        'convergence_scores': {},
                                                         'data': data,
                                                         'timestamp': pd.Timestamp.now()
                                                     }
+                                                    
+                                                    # Organize convergence scores by method for easier comparison
+                                                    for method in selected_methods:
+                                                        new_analysis['convergence_scores'][method] = {
+                                                            k: v for k, v in convergence_scores.items() 
+                                                            # Store only the scores related to this method
+                                                            # This means scores might appear under multiple methods
+                                                            # if they were calculated from multiple methods
+                                                        }
                                                     
                                                     st.session_state.convergence_datasets.append(new_analysis)
                                                     
@@ -1854,6 +1865,10 @@ with main_container:
                                 
                                 st.dataframe(results_df)
                                 
+                                # Create a separate section for selecting analysis results
+                                st.write("### Compare Analysis Results")
+                                st.write("Select two or more analysis results to compare.")
+                                
                                 # Select datasets to compare
                                 selected_ids = st.multiselect(
                                     "Select analysis results to compare:",
@@ -1866,6 +1881,8 @@ with main_container:
                                     selected_analyses = [a for a in st.session_state.convergence_datasets if a['id'] in selected_ids]
                                     
                                     if len(selected_analyses) > 1:
+                                        st.write("### Analysis Steps")
+                                        st.write("The selected analysis results will be processed through these steps:")
                                         # Create tabs for different analysis approaches
                                         analysis_tabs = st.tabs(["Individual Analysis", "Pooled Analysis", "Convergence Diagnostics", "Interpretation & Reporting"])
                                         
@@ -1884,9 +1901,17 @@ with main_container:
                                                     'Dataset': analysis['name']
                                                 }
                                                 
-                                                # Add convergence scores
-                                                for key, value in analysis.get('convergence_scores', {}).items():
-                                                    metrics[key] = value
+                                                # Add convergence scores - now organized by method
+                                                method_scores = analysis.get('convergence_scores', {})
+                                                
+                                                # First, select which analytical method to display
+                                                analysis_methods = analysis.get('methods', [])
+                                                if analysis_methods:
+                                                    # Create a section for each analytical method
+                                                    for method_name, method_data in method_scores.items():
+                                                        # Add method prefix to each metric for clarity
+                                                        for key, value in method_data.items():
+                                                            metrics[f"{method_name}__{key}"] = value
                                                 
                                                 comparison_data.append(metrics)
                                             

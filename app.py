@@ -1904,7 +1904,7 @@ with main_container:
                                     results_df = pd.DataFrame([
                                         {
                                             'ID': a['id'],
-                                            'Dataset': a['dataset_name'],
+                                            'Dataset': a['name'],
                                             'Methods': ", ".join(a['methods']),
                                             'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
                                         }
@@ -1934,7 +1934,7 @@ with main_container:
                                                 # Extract relevant metrics from each analysis result
                                                 metrics = {
                                                     'ID': analysis['id'],
-                                                    'Dataset': analysis['dataset_name']
+                                                    'Dataset': analysis['name']
                                                 }
                                                 
                                                 # Add convergence scores

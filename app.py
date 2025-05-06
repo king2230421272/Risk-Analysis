@@ -1148,10 +1148,9 @@ with main_container:
                                         st.write(f"Missing values before: {missing_before}")
                                         st.write(f"Missing values after: {missing_after}")
                                         
-                                        # Automatically set interpolated data as the active dataset
-                                        st.session_state.data = st.session_state.interpolated_data
-                                        st.session_state.active_dataset = "Interpolated Data"
-                                        st.success("Interpolated result automatically set as active dataset for analysis.")
+                                        # Update interpolated data but don't set it as active dataset
+                                        # The user will need to select it manually from the dataset selection dropdown
+                                        st.success("Interpolated data updated successfully.")
                                         
                                         # Add download button for interpolated data
                                         try:
@@ -2151,7 +2150,7 @@ with main_container:
                                                     """)
                                                     
                                                     # Format PSRF values to 2 decimal places
-                                                    formatted_psrf_values = [round(v, 2) for v in psrf_results.values()]
+                                                    formatted_psrf_values = [f"{v:.2f}" for v in psrf_results.values()]
                                                     
                                                     psrf_df = pd.DataFrame({
                                                         'Parameter': list(psrf_results.keys()),
@@ -2169,7 +2168,7 @@ with main_container:
                                                     """)
                                                     
                                                     # Format B/W Ratio values to 2 decimal places
-                                                    formatted_ratio_values = [round(v, 2) for v in between_within_ratio.values()]
+                                                    formatted_ratio_values = [f"{v:.2f}" for v in between_within_ratio.values()]
                                                     
                                                     ratio_df = pd.DataFrame({
                                                         'Parameter': list(between_within_ratio.keys()),

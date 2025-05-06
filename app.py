@@ -1412,13 +1412,13 @@ with main_container:
                                         else:
                                             st.error("One or both of the selected datasets are not available.")
                                 
-                                # 2. Regression Analysis Tab
+                                # 2. Cluster Analysis (K-Means) Tab
                                 with analysis_tabs[1]:
-                                    st.write("### Regression Analysis")
+                                    st.write("### Cluster Analysis (K-Means)")
                                     st.write("""
-                                    Linear Regression analysis evaluates relationships between variables.
-                                    This helps determine if interpolated data preserves the statistical 
-                                    relationships present in the original data.
+                                    K-Means clustering groups data points by similarity.
+                                    This helps determine if interpolated data preserves the clustering patterns
+                                    present in the original data.
                                     """)
                                     
                                     # Check if we're in consecutive analysis mode
@@ -1444,10 +1444,20 @@ with main_container:
                                         st.write("### Select datasets to analyze:")
                                         
                                         # Create checkboxes for each dataset
+                                        # Use a unique session state key to store checkbox states
+                                        if 'kmeans_selected_datasets' not in st.session_state:
+                                            st.session_state.kmeans_selected_datasets = []
+                                        
                                         selected_datasets = []
                                         for ds_option in dataset_options:
-                                            if st.checkbox(ds_option, key=f"kmeans_dataset_{ds_option}"):
+                                            checkbox_key = f"kmeans_dataset_{ds_option}"
+                                            # Pre-select datasets saved in session state
+                                            default_value = ds_option in st.session_state.kmeans_selected_datasets
+                                            if st.checkbox(ds_option, value=default_value, key=checkbox_key):
                                                 selected_datasets.append(ds_option)
+                                        
+                                        # Update the session state with current selections
+                                        st.session_state.kmeans_selected_datasets = selected_datasets.copy()
                                         
                                         if not selected_datasets:
                                             st.warning("Please select at least one dataset to analyze.")
@@ -1760,7 +1770,7 @@ with main_container:
                                     else:
                                         st.error(f"Dataset {selected_dataset} is not available.")
                                 
-                                # 3. Cluster Analysis (K-Means) Tab
+                                # 3. Regression Analysis Tab
                                 with analysis_tabs[2]:
                                     st.write("### Regression Analysis")
                                     st.write("""
@@ -1783,10 +1793,20 @@ with main_container:
                                         st.write("### Select datasets to analyze:")
                                         
                                         # Create checkboxes for each dataset
+                                        # Use a unique session state key to store checkbox states
+                                        if 'regression_selected_datasets' not in st.session_state:
+                                            st.session_state.regression_selected_datasets = []
+                                        
                                         selected_datasets = []
                                         for ds_option in dataset_options:
-                                            if st.checkbox(ds_option, key=f"regression_dataset_{ds_option}"):
+                                            checkbox_key = f"regression_dataset_{ds_option}"
+                                            # Pre-select datasets saved in session state
+                                            default_value = ds_option in st.session_state.regression_selected_datasets
+                                            if st.checkbox(ds_option, value=default_value, key=checkbox_key):
                                                 selected_datasets.append(ds_option)
+                                        
+                                        # Update the session state with current selections
+                                        st.session_state.regression_selected_datasets = selected_datasets.copy()
                                         
                                         if not selected_datasets:
                                             st.warning("Please select at least one dataset to analyze.")

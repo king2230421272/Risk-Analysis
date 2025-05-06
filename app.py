@@ -12,8 +12,6 @@ from modules.risk_assessment import RiskAssessor
 from utils.data_handler import DataHandler
 from utils.visualization import Visualizer
 from utils.database import DatabaseHandler
-from cgan_analysis_tab import cgan_analysis_tab
-from multiple_imputation_analysis_tab import multiple_imputation_analysis_tab
 
 # Set page configuration
 st.set_page_config(
@@ -1256,8 +1254,7 @@ with main_container:
                                 # Analysis methods in tabs
                                 analysis_tabs = st.tabs(["Dataset Selection", "Cluster Analysis (K-Means)", 
                                                         "Regression Analysis", "Factor Analysis (PCA)", 
-                                                        "Convergence Evaluation", "CGAN Analysis", 
-                                                        "Multiple Imputation Analysis"])
+                                                        "Convergence Evaluation"])
                                 
                                 # Initialize consecutive analysis if it doesn't exist
                                 if 'consecutive_analysis' not in st.session_state:
@@ -1291,21 +1288,11 @@ with main_container:
                                         st.session_state.current_analysis_step = 3
                                     
                                     elif current_step == 3:
-                                        # Move to convergence evaluation
+                                        # Final step - convergence evaluation
                                         st.warning("Consecutive analysis: Running convergence evaluation...")
                                         st.session_state.current_analysis_step = 4
                                     
                                     elif current_step == 4:
-                                        # If convergence is achieved, move to CGAN Analysis
-                                        if 'all_converged' in st.session_state and st.session_state.all_converged:
-                                            st.warning("Consecutive analysis: Running CGAN analysis...")
-                                            st.session_state.current_analysis_step = 5
-                                        else:
-                                            st.warning("Convergence not achieved. Stopping consecutive analysis.")
-                                            st.session_state.consecutive_analysis = False
-                                            st.session_state.current_analysis_step = 0
-                                    
-                                    elif current_step == 5:
                                         # Analysis complete
                                         st.success("Consecutive analysis completed successfully!")
                                         st.session_state.consecutive_analysis = False
@@ -2783,8 +2770,6 @@ with main_container:
                                                 if converged_pairs:
                                                     st.success("✅ **CONVERGENCE ACHIEVED!** The interpolation process has stabilized.")
                                                     st.session_state.convergence_status = "Converged"
-                                                    # Set all_converged flag for the sequential analysis
-                                                    st.session_state.all_converged = True
                                                     
                                                     # Identify the best converged pair and dataset
                                                     best_pair = max(converged_pairs, key=lambda x: x['convergence_score'])
@@ -2794,8 +2779,6 @@ with main_container:
                                                     if best_dataset:
                                                         st.write(f"**Best converged dataset: Dataset {best_dataset_id}**")
                                                         st.session_state.closest_convergence_dataset = best_dataset
-                                                        # Store the best dataset for CGAN analysis
-                                                        st.session_state.best_converged_dataset = best_dataset
                                                         
                                                     # If in consecutive mode, mark the analysis as complete
                                                     if consecutive_mode:
@@ -2938,16 +2921,6 @@ with main_container:
                                                 st.write("#### Metrics Table")
                                                 metrics_df = pd.DataFrame(iteration_data)
                                                 st.dataframe(metrics_df)
-                                
-                                # 5. CGAN ANALYSIS TAB
-                                with analysis_tabs[5]:
-                                    # Call the CGAN Analysis tab implementation from the imported module
-                                    cgan_analysis_tab(analysis_tabs[5], st.session_state.original_data, data_handler, advanced_processor)
-                                
-                                # 6. MULTIPLE IMPUTATION ANALYSIS TAB
-                                with analysis_tabs[6]:
-                                    # Call the Multiple Imputation Analysis tab implementation from the imported module
-                                    multiple_imputation_analysis_tab(analysis_tabs[6], st.session_state.convergence_datasets)
                     
                     # 3. CGAN ANALYSIS TAB
                     with advanced_options[2]:

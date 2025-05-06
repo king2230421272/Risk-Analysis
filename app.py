@@ -1427,7 +1427,7 @@ with main_container:
                                         st.session_state.consecutive_analysis and 
                                         st.session_state.current_analysis_step == 1):
                                         consecutive_mode = True
-                                        st.info("Running Linear Regression analysis as part of consecutive analysis...")
+                                        st.info("Running K-Means Clustering analysis as part of consecutive analysis...")
                                     
                                     # Select datasets to analyze
                                     dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
@@ -1506,7 +1506,7 @@ with main_container:
                                             # In consecutive mode, automatically trigger analysis
                                             run_button_clicked = st.session_state.current_analysis_step == 1
                                             if run_button_clicked:
-                                                st.success("Automatically running Linear Regression for all selected datasets...")
+                                                st.success("Automatically running K-Means Clustering for all selected datasets...")
                                         else:
                                             # In regular mode, user has to click button
                                             run_button_clicked = st.button("Run K-Means Clustering", key="run_kmeans_btn")
@@ -2258,10 +2258,20 @@ with main_container:
                                         st.write("### Select datasets to analyze:")
                                         
                                         # Create checkboxes for each dataset
+                                        # Use a unique session state key to store checkbox states
+                                        if 'pca_selected_datasets' not in st.session_state:
+                                            st.session_state.pca_selected_datasets = []
+                                        
                                         selected_datasets = []
                                         for ds_option in dataset_options:
-                                            if st.checkbox(ds_option, key=f"pca_dataset_{ds_option}"):
+                                            checkbox_key = f"pca_dataset_{ds_option}"
+                                            # Pre-select datasets saved in session state
+                                            default_value = ds_option in st.session_state.pca_selected_datasets
+                                            if st.checkbox(ds_option, value=default_value, key=checkbox_key):
                                                 selected_datasets.append(ds_option)
+                                        
+                                        # Update the session state with current selections
+                                        st.session_state.pca_selected_datasets = selected_datasets.copy()
                                         
                                         if not selected_datasets:
                                             st.warning("Please select at least one dataset to analyze.")

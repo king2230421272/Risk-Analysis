@@ -1537,394 +1537,394 @@ with main_container:
                                                         st.write(f"### Results for {method}")
                                                         
                                                         if method == "Linear Regression Analysis" and method in method_params:
-                                                            params = method_params[method]
-                                                            
-                                                            # Get the target and features
-                                                            target = params["target"]
-                                                            features = params["features"]
-                                                            test_size = params["test_size"]
-                                                            
-                                                            # Check if we have enough data
-                                                            if len(features) == 0:
-                                                                st.error(f"Need at least one feature for {method}.")
-                                                                continue
-                                                                
-                                                            # Prepare the data
-                                                            from sklearn.model_selection import train_test_split
-                                                            X = data[features]
-                                                            y = data[target]
-                                                            
-                                                            # Drop any rows with NaN values
-                                                            valid_indices = ~(X.isna().any(axis=1) | y.isna())
-                                                            X = X[valid_indices]
-                                                            y = y[valid_indices]
-                                                            
-                                                            # Split the data
-                                                            X_train, X_test, y_train, y_test = train_test_split(
-                                                                X, y, test_size=test_size, random_state=42
-                                                            )
-                                                            
-                                                            # Train the model
-                                                            from sklearn.linear_model import LinearRegression
-                                                            from sklearn.metrics import r2_score, mean_squared_error
-                                                            
-                                                            model = LinearRegression()
-                                                            model.fit(X_train, y_train)
-                                                            
-                                                            # Make predictions
-                                                            y_train_pred = model.predict(X_train)
-                                                            y_test_pred = model.predict(X_test)
-                                                            
-                                                            # Compute metrics
-                                                            train_r2 = r2_score(y_train, y_train_pred)
-                                                            test_r2 = r2_score(y_test, y_test_pred)
-                                                            train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
-                                                            test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
-                                                            
-                                                            # Store metrics for convergence analysis
-                                                            convergence_scores['regression_train_r2'] = train_r2
-                                                            convergence_scores['regression_test_r2'] = test_r2
-                                                            
-                                                            # Display metrics
-                                                            metrics_df = pd.DataFrame({
-                                                                'Metric': ['R² Score', 'RMSE'],
-                                                                'Train': [train_r2, train_rmse],
-                                                                'Test': [test_r2, test_rmse]
-                                                            })
-                                                            st.dataframe(metrics_df)
-                                                            
-                                                            # Display coefficients
-                                                            coef_df = pd.DataFrame({
-                                                                'Feature': features,
-                                                                'Coefficient': model.coef_
-                                                            })
-                                                            st.write("#### Model Coefficients")
-                                                            st.dataframe(coef_df)
-                                                            
-                                                            # Visualize predictions vs actual
-                                                            fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-                                                            ax[0].scatter(y_train, y_train_pred, alpha=0.5)
-                                                            ax[0].plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--')
-                                                            ax[0].set_xlabel('Actual')
-                                                            ax[0].set_ylabel('Predicted')
-                                                            ax[0].set_title('Train Set')
-                                                            
-                                                            ax[1].scatter(y_test, y_test_pred, alpha=0.5)
-                                                            ax[1].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
-                                                            ax[1].set_xlabel('Actual')
-                                                            ax[1].set_ylabel('Predicted')
-                                                            ax[1].set_title('Test Set')
-                                                            
-                                                            plt.tight_layout()
-                                                            st.pyplot(fig)
-                                                            
-                                                            # Store results
-                                                            method_results[method] = {
-                                                                'model': model,
-                                                                'features': features,
-                                                                'target': target,
-                                                                'metrics': {
-                                                                    'train_r2': train_r2,
-                                                                    'test_r2': test_r2,
-                                                                    'train_rmse': train_rmse,
-                                                                    'test_rmse': test_rmse
-                                                                }
-                                                            }
-                                                        
-                                                        elif method == "K-Means Clustering" and method in method_params:
-                                                            params = method_params[method]
-                                                            
-                                                            # Get features for clustering
-                                                            features = params["features"]
-                                                            n_clusters = params["n_clusters"]
-                                                            
-                                                            # Check if we have enough data
-                                                            if len(features) < 2:
-                                                                st.error(f"Need at least two features for {method}.")
-                                                                continue
-                                                                
-                                                            # Prepare the data
-                                                            from sklearn.preprocessing import StandardScaler
-                                                            from sklearn.cluster import KMeans
-                                                            
-                                                            X = data[features].dropna()
-                                                            
-                                                            # Scale the data
-                                                            scaler = StandardScaler()
-                                                            X_scaled = scaler.fit_transform(X)
-                                                            
-                                                            # Perform clustering
-                                                            kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-                                                            clusters = kmeans.fit_predict(X_scaled)
-                                                            
-                                                            # Add cluster labels to the original data
-                                                            clustered_data = X.copy()
-                                                            clustered_data['Cluster'] = clusters
-                                                            
-                                                            # Display clustered data
-                                                            st.write("#### Sample of Clustered Data")
-                                                            st.dataframe(clustered_data.head(10))
-                                                            
-                                                            # Display cluster statistics
-                                                            st.write("#### Cluster Statistics")
-                                                            cluster_stats = clustered_data.groupby('Cluster').agg(['mean', 'std'])
-                                                            st.dataframe(cluster_stats)
-                                                            
-                                                            # Store inertia for convergence analysis
-                                                            convergence_scores['kmeans_inertia'] = kmeans.inertia_
-                                                            
-                                                            # Visualize clusters (first two dimensions)
-                                                            if len(features) >= 2:
-                                                                fig, ax = plt.subplots(figsize=(10, 6))
-                                                                scatter = ax.scatter(
-                                                                    X_scaled[:, 0], 
-                                                                    X_scaled[:, 1], 
-                                                                    c=clusters, 
-                                                                    cmap='viridis', 
-                                                                    alpha=0.6
-                                                                )
-                                                                
-                                                                # Add cluster centers
-                                                                centers = kmeans.cluster_centers_
-                                                                ax.scatter(
-                                                                    centers[:, 0], 
-                                                                    centers[:, 1], 
-                                                                    s=200, 
-                                                                    marker='X', 
-                                                                    c='red', 
-                                                                    alpha=0.8
-                                                                )
-                                                                
-                                                                ax.set_title('K-Means Clustering Results (Standardized Features)')
-                                                                ax.set_xlabel(f'Feature 1: {features[0]}')
-                                                                ax.set_ylabel(f'Feature 2: {features[1]}')
-                                                                plt.colorbar(scatter, label='Cluster')
-                                                                plt.tight_layout()
-                                                                st.pyplot(fig)
-                                                            
-                                                            # Store results
-                                                            method_results[method] = {
-                                                                'model': kmeans,
-                                                                'features': features,
-                                                                'n_clusters': n_clusters,
-                                                                'scaler': scaler,
-                                                                'inertia': kmeans.inertia_,
-                                                                'cluster_centers': kmeans.cluster_centers_
-                                                            }
-                                                        
-                                                        elif method == "PCA Factor Analysis" and method in method_params:
-                                                            params = method_params[method]
-                                                            
-                                                            # Get features for PCA
-                                                            features = params["features"]
-                                                            n_components = params["n_components"]
-                                                            
-                                                            # Check if we have enough data
-                                                            if len(features) < n_components:
-                                                                st.error(f"Need at least {n_components} features for PCA with {n_components} components.")
-                                                                continue
-                                                                
-                                                            # Prepare the data
-                                                            from sklearn.preprocessing import StandardScaler
-                                                            from sklearn.decomposition import PCA
-                                                            
-                                                            X = data[features].dropna()
-                                                            
-                                                            # Scale the data
-                                                            scaler = StandardScaler()
-                                                            X_scaled = scaler.fit_transform(X)
-                                                            
-                                                            # Perform PCA
-                                                            pca = PCA(n_components=n_components)
-                                                            X_pca = pca.fit_transform(X_scaled)
-                                                            
-                                                            # Create dataframe with PCA results
-                                                            pca_df = pd.DataFrame(
-                                                                X_pca, 
-                                                                columns=[f'PC{i+1}' for i in range(n_components)]
-                                                            )
-                                                            
-                                                            # Display PCA results
-                                                            st.write("#### Sample of PCA Results")
-                                                            st.dataframe(pca_df.head(10))
-                                                            
-                                                            # Display explained variance
-                                                            explained_variance = pca.explained_variance_ratio_
-                                                            cum_explained_variance = np.cumsum(explained_variance)
-                                                            
-                                                            # Store for convergence analysis
-                                                            convergence_scores['pca_explained_variance'] = explained_variance
-                                                            
-                                                            var_df = pd.DataFrame({
-                                                                'Principal Component': [f'PC{i+1}' for i in range(n_components)],
-                                                                'Explained Variance (%)': explained_variance * 100,
-                                                                'Cumulative Variance (%)': cum_explained_variance * 100
-                                                            })
-                                                            
-                                                            st.write("#### Explained Variance")
-                                                            st.dataframe(var_df)
-                                                            
-                                                            # Visualize explained variance
-                                                            fig, ax = plt.subplots(figsize=(10, 6))
-                                                            ax.bar(
-                                                                range(1, n_components+1), 
-                                                                explained_variance * 100, 
-                                                                alpha=0.5, 
-                                                                label='Individual'
-                                                            )
-                                                            ax.step(
-                                                                range(1, n_components+1), 
-                                                                cum_explained_variance * 100, 
-                                                                where='mid', 
-                                                                label='Cumulative'
-                                                            )
-                                                            
-                                                            ax.set_xlabel('Principal Component')
-                                                            ax.set_ylabel('Explained Variance (%)')
-                                                            ax.set_title('Explained Variance by Principal Component')
-                                                            ax.set_xticks(range(1, n_components+1))
-                                                            ax.legend()
-                                                            plt.tight_layout()
-                                                            st.pyplot(fig)
-                                                            
-                                                            # Visualize first two components
-                                                            if n_components >= 2:
-                                                                fig, ax = plt.subplots(figsize=(10, 6))
-                                                                scatter = ax.scatter(
-                                                                    X_pca[:, 0], 
-                                                                    X_pca[:, 1], 
-                                                                    alpha=0.6
-                                                                )
-                                                                
-                                                                ax.set_title('First Two Principal Components')
-                                                                ax.set_xlabel(f'PC1 ({explained_variance[0]:.2%} var.)')
-                                                                ax.set_ylabel(f'PC2 ({explained_variance[1]:.2%} var.)')
-                                                                plt.tight_layout()
-                                                                st.pyplot(fig)
-                                                                
-                                                                # Display component loadings
-                                                                loadings = pca.components_
-                                                                loadings_df = pd.DataFrame(
-                                                                    loadings.T, 
-                                                                    index=features,
-                                                                    columns=[f'PC{i+1}' for i in range(n_components)]
-                                                                )
-                                                                
-                                                                st.write("#### Component Loadings")
-                                                                st.dataframe(loadings_df)
-                                                            
-                                                            # Store results
-                                                            method_results[method] = {
-                                                                'model': pca,
-                                                                'features': features,
-                                                                'n_components': n_components,
-                                                                'explained_variance': explained_variance,
-                                                                'loadings': pca.components_
-                                                            }
-                                                        
-                                                        elif method == "Correlation Analysis":
-                                                            # Perform correlation analysis on numeric columns
-                                                            numeric_data = data.select_dtypes(include=np.number)
-                                                            
-                                                            # Calculate correlation matrix
-                                                            corr_matrix = numeric_data.corr()
-                                                            
-                                                            # Display correlation matrix
-                                                            st.write("#### Correlation Matrix")
-                                                            st.dataframe(corr_matrix)
-                                                            
-                                                            # Visualize correlation matrix
-                                                            fig, ax = plt.subplots(figsize=(12, 10))
-                                                            mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
-                                                            cmap = sns.diverging_palette(230, 20, as_cmap=True)
-                                                            
-                                                            sns.heatmap(
-                                                                corr_matrix, 
-                                                                mask=mask, 
-                                                                cmap=cmap, 
-                                                                vmax=1, 
-                                                                vmin=-1, 
-                                                                center=0,
-                                                                square=True, 
-                                                                linewidths=.5, 
-                                                                annot=True, 
-                                                                fmt=".2f"
-                                                            )
-                                                            
-                                                            plt.title('Correlation Matrix')
-                                                            plt.tight_layout()
-                                                            st.pyplot(fig)
-                                                            
-                                                            # Store results
-                                                            method_results[method] = {
-                                                                'correlation_matrix': corr_matrix
-                                                            }
-                                                            
-                                                            # Store for convergence
-                                                            convergence_scores['correlation_mean'] = corr_matrix.abs().mean().mean()
-                                                        
-                                                        elif method == "Statistical Hypothesis Testing":
-                                                            # Perform basic hypothesis tests on numeric columns
-                                                            numeric_data = data.select_dtypes(include=np.number)
-                                                            
-                                                            # Normality tests (Shapiro-Wilk)
-                                                            st.write("#### Normality Tests (Shapiro-Wilk)")
-                                                            normality_results = []
-                                                            
-                                                            for col in numeric_data.columns:
-                                                                # Drop NaN values
-                                                                values = numeric_data[col].dropna()
-                                                                
-                                                                # Only test if we have enough data (3-5000 samples)
-                                                                if len(values) >= 3 and len(values) <= 5000:
-                                                                    stat, p = stats.shapiro(values)
-                                                                    normality_results.append({
-                                                                        'Column': col,
-                                                                        'Statistic': stat,
-                                                                        'p-value': p,
-                                                                        'Normal Distribution': 'Yes' if p > 0.05 else 'No'
-                                                                    })
-                                                                else:
-                                                                    normality_results.append({
-                                                                        'Column': col,
-                                                                        'Statistic': None,
-                                                                        'p-value': None,
-                                                                        'Normal Distribution': 'Not tested (insufficient samples)'
-                                                                    })
-                                                            
-                                                            st.dataframe(pd.DataFrame(normality_results))
-                                                            
-                                                            # Store results
-                                                            method_results[method] = {
-                                                                'normality_tests': normality_results
-                                                            }
-                                                            
-                                                            # Calculate how many variables follow normal distribution
-                                                            normal_count = sum(1 for result in normality_results 
-                                                                            if result['Normal Distribution'] == 'Yes')
-                                                            
-                                                            total_tested = sum(1 for result in normality_results 
-                                                                            if result['Normal Distribution'] not in ['Not tested (insufficient samples)'])
-                                                            
-                                                            if total_tested > 0:
-                                                                normal_pct = (normal_count / total_tested) * 100
-                                                                convergence_scores['normality_percentage'] = normal_pct
+                                                    params = method_params[method]
                                                     
-                                                    # Save the results to the session state
-                                                    new_analysis = {
-                                                        'id': len(st.session_state.convergence_datasets) + 1,
-                                                        'name': f"Analysis {len(st.session_state.convergence_datasets) + 1}",
-                                                        'methods': selected_methods,
-                                                        'method_results': method_results,
-                                                        'convergence_scores': convergence_scores,
-                                                        'data': data,
-                                                        'timestamp': pd.Timestamp.now()
+                                                    # Get the target and features
+                                                    target = params["target"]
+                                                    features = params["features"]
+                                                    test_size = params["test_size"]
+                                                    
+                                                    # Check if we have enough data
+                                                    if len(features) == 0:
+                                                        st.error(f"Need at least one feature for {method}.")
+                                                        continue
+                                                        
+                                                    # Prepare the data
+                                                    from sklearn.model_selection import train_test_split
+                                                    X = data[features]
+                                                    y = data[target]
+                                                    
+                                                    # Drop any rows with NaN values
+                                                    valid_indices = ~(X.isna().any(axis=1) | y.isna())
+                                                    X = X[valid_indices]
+                                                    y = y[valid_indices]
+                                                    
+                                                    # Split the data
+                                                    X_train, X_test, y_train, y_test = train_test_split(
+                                                        X, y, test_size=test_size, random_state=42
+                                                    )
+                                                    
+                                                    # Train the model
+                                                    from sklearn.linear_model import LinearRegression
+                                                    from sklearn.metrics import r2_score, mean_squared_error
+                                                    
+                                                    model = LinearRegression()
+                                                    model.fit(X_train, y_train)
+                                                    
+                                                    # Make predictions
+                                                    y_train_pred = model.predict(X_train)
+                                                    y_test_pred = model.predict(X_test)
+                                                    
+                                                    # Compute metrics
+                                                    train_r2 = r2_score(y_train, y_train_pred)
+                                                    test_r2 = r2_score(y_test, y_test_pred)
+                                                    train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
+                                                    test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
+                                                    
+                                                    # Store metrics for convergence analysis
+                                                    convergence_scores['regression_train_r2'] = train_r2
+                                                    convergence_scores['regression_test_r2'] = test_r2
+                                                    
+                                                    # Display metrics
+                                                    metrics_df = pd.DataFrame({
+                                                        'Metric': ['R² Score', 'RMSE'],
+                                                        'Train': [train_r2, train_rmse],
+                                                        'Test': [test_r2, test_rmse]
+                                                    })
+                                                    st.dataframe(metrics_df)
+                                                    
+                                                    # Display coefficients
+                                                    coef_df = pd.DataFrame({
+                                                        'Feature': features,
+                                                        'Coefficient': model.coef_
+                                                    })
+                                                    st.write("#### Model Coefficients")
+                                                    st.dataframe(coef_df)
+                                                    
+                                                    # Visualize predictions vs actual
+                                                    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+                                                    ax[0].scatter(y_train, y_train_pred, alpha=0.5)
+                                                    ax[0].plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--')
+                                                    ax[0].set_xlabel('Actual')
+                                                    ax[0].set_ylabel('Predicted')
+                                                    ax[0].set_title('Train Set')
+                                                    
+                                                    ax[1].scatter(y_test, y_test_pred, alpha=0.5)
+                                                    ax[1].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+                                                    ax[1].set_xlabel('Actual')
+                                                    ax[1].set_ylabel('Predicted')
+                                                    ax[1].set_title('Test Set')
+                                                    
+                                                    plt.tight_layout()
+                                                    st.pyplot(fig)
+                                                    
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'model': model,
+                                                        'features': features,
+                                                        'target': target,
+                                                        'metrics': {
+                                                            'train_r2': train_r2,
+                                                            'test_r2': test_r2,
+                                                            'train_rmse': train_rmse,
+                                                            'test_rmse': test_rmse
+                                                        }
                                                     }
                                                     
-                                                    st.session_state.convergence_datasets.append(new_analysis)
+                                                elif method == "K-Means Clustering" and method in method_params:
+                                                    params = method_params[method]
                                                     
-                                                    st.success(f"Analysis complete. Results saved as Analysis {new_analysis['id']}.")
-                                                    st.info("Navigate to the Convergence Evaluation tab to evaluate convergence with multiple analyses.")
+                                                    # Get features for clustering
+                                                    features = params["features"]
+                                                    n_clusters = params["n_clusters"]
+                                                    
+                                                    # Check if we have enough data
+                                                    if len(features) < 2:
+                                                        st.error(f"Need at least two features for {method}.")
+                                                        continue
+                                                        
+                                                    # Prepare the data
+                                                    from sklearn.preprocessing import StandardScaler
+                                                    from sklearn.cluster import KMeans
+                                                    
+                                                    X = data[features].dropna()
+                                                    
+                                                    # Scale the data
+                                                    scaler = StandardScaler()
+                                                    X_scaled = scaler.fit_transform(X)
+                                                    
+                                                    # Perform clustering
+                                                    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+                                                    clusters = kmeans.fit_predict(X_scaled)
+                                                    
+                                                    # Add cluster labels to the original data
+                                                    clustered_data = X.copy()
+                                                    clustered_data['Cluster'] = clusters
+                                                    
+                                                    # Display clustered data
+                                                    st.write("#### Sample of Clustered Data")
+                                                    st.dataframe(clustered_data.head(10))
+                                                    
+                                                    # Display cluster statistics
+                                                    st.write("#### Cluster Statistics")
+                                                    cluster_stats = clustered_data.groupby('Cluster').agg(['mean', 'std'])
+                                                    st.dataframe(cluster_stats)
+                                                    
+                                                    # Store inertia for convergence analysis
+                                                    convergence_scores['kmeans_inertia'] = kmeans.inertia_
+                                                    
+                                                    # Visualize clusters (first two dimensions)
+                                                    if len(features) >= 2:
+                                                        fig, ax = plt.subplots(figsize=(10, 6))
+                                                        scatter = ax.scatter(
+                                                            X_scaled[:, 0], 
+                                                            X_scaled[:, 1], 
+                                                            c=clusters, 
+                                                            cmap='viridis', 
+                                                            alpha=0.6
+                                                        )
+                                                        
+                                                        # Add cluster centers
+                                                        centers = kmeans.cluster_centers_
+                                                        ax.scatter(
+                                                            centers[:, 0], 
+                                                            centers[:, 1], 
+                                                            s=200, 
+                                                            marker='X', 
+                                                            c='red', 
+                                                            alpha=0.8
+                                                        )
+                                                        
+                                                        ax.set_title('K-Means Clustering Results (Standardized Features)')
+                                                        ax.set_xlabel(f'Feature 1: {features[0]}')
+                                                        ax.set_ylabel(f'Feature 2: {features[1]}')
+                                                        plt.colorbar(scatter, label='Cluster')
+                                                        plt.tight_layout()
+                                                        st.pyplot(fig)
+                                                    
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'model': kmeans,
+                                                        'features': features,
+                                                        'n_clusters': n_clusters,
+                                                        'scaler': scaler,
+                                                        'inertia': kmeans.inertia_,
+                                                        'cluster_centers': kmeans.cluster_centers_
+                                                    }
+                                                    
+                                                elif method == "PCA Factor Analysis" and method in method_params:
+                                                    params = method_params[method]
+                                                    
+                                                    # Get features for PCA
+                                                    features = params["features"]
+                                                    n_components = params["n_components"]
+                                                    
+                                                    # Check if we have enough data
+                                                    if len(features) < n_components:
+                                                        st.error(f"Need at least {n_components} features for PCA with {n_components} components.")
+                                                        continue
+                                                        
+                                                    # Prepare the data
+                                                    from sklearn.preprocessing import StandardScaler
+                                                    from sklearn.decomposition import PCA
+                                                    
+                                                    X = data[features].dropna()
+                                                    
+                                                    # Scale the data
+                                                    scaler = StandardScaler()
+                                                    X_scaled = scaler.fit_transform(X)
+                                                    
+                                                    # Perform PCA
+                                                    pca = PCA(n_components=n_components)
+                                                    X_pca = pca.fit_transform(X_scaled)
+                                                    
+                                                    # Create dataframe with PCA results
+                                                    pca_df = pd.DataFrame(
+                                                        X_pca, 
+                                                        columns=[f'PC{i+1}' for i in range(n_components)]
+                                                    )
+                                                    
+                                                    # Display PCA results
+                                                    st.write("#### Sample of PCA Results")
+                                                    st.dataframe(pca_df.head(10))
+                                                    
+                                                    # Display explained variance
+                                                    explained_variance = pca.explained_variance_ratio_
+                                                    cum_explained_variance = np.cumsum(explained_variance)
+                                                    
+                                                    # Store for convergence analysis
+                                                    convergence_scores['pca_explained_variance'] = explained_variance
+                                                    
+                                                    var_df = pd.DataFrame({
+                                                        'Principal Component': [f'PC{i+1}' for i in range(n_components)],
+                                                        'Explained Variance (%)': explained_variance * 100,
+                                                        'Cumulative Variance (%)': cum_explained_variance * 100
+                                                    })
+                                                    
+                                                    st.write("#### Explained Variance")
+                                                    st.dataframe(var_df)
+                                                    
+                                                    # Visualize explained variance
+                                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                                    ax.bar(
+                                                        range(1, n_components+1), 
+                                                        explained_variance * 100, 
+                                                        alpha=0.5, 
+                                                        label='Individual'
+                                                    )
+                                                    ax.step(
+                                                        range(1, n_components+1), 
+                                                        cum_explained_variance * 100, 
+                                                        where='mid', 
+                                                        label='Cumulative'
+                                                    )
+                                                    
+                                                    ax.set_xlabel('Principal Component')
+                                                    ax.set_ylabel('Explained Variance (%)')
+                                                    ax.set_title('Explained Variance by Principal Component')
+                                                    ax.set_xticks(range(1, n_components+1))
+                                                    ax.legend()
+                                                    plt.tight_layout()
+                                                    st.pyplot(fig)
+                                                    
+                                                    # Visualize first two components
+                                                    if n_components >= 2:
+                                                        fig, ax = plt.subplots(figsize=(10, 6))
+                                                        scatter = ax.scatter(
+                                                            X_pca[:, 0], 
+                                                            X_pca[:, 1], 
+                                                            alpha=0.6
+                                                        )
+                                                        
+                                                        ax.set_title('First Two Principal Components')
+                                                        ax.set_xlabel(f'PC1 ({explained_variance[0]:.2%} var.)')
+                                                        ax.set_ylabel(f'PC2 ({explained_variance[1]:.2%} var.)')
+                                                        plt.tight_layout()
+                                                        st.pyplot(fig)
+                                                        
+                                                        # Display component loadings
+                                                        loadings = pca.components_
+                                                        loadings_df = pd.DataFrame(
+                                                            loadings.T, 
+                                                            index=features,
+                                                            columns=[f'PC{i+1}' for i in range(n_components)]
+                                                        )
+                                                        
+                                                        st.write("#### Component Loadings")
+                                                        st.dataframe(loadings_df)
+                                                    
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'model': pca,
+                                                        'features': features,
+                                                        'n_components': n_components,
+                                                        'explained_variance': explained_variance,
+                                                        'loadings': pca.components_
+                                                    }
+                                                    
+                                                elif method == "Correlation Analysis":
+                                                    # Perform correlation analysis on numeric columns
+                                                    numeric_data = data.select_dtypes(include=np.number)
+                                                    
+                                                    # Calculate correlation matrix
+                                                    corr_matrix = numeric_data.corr()
+                                                    
+                                                    # Display correlation matrix
+                                                    st.write("#### Correlation Matrix")
+                                                    st.dataframe(corr_matrix)
+                                                    
+                                                    # Visualize correlation matrix
+                                                    fig, ax = plt.subplots(figsize=(12, 10))
+                                                    mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+                                                    cmap = sns.diverging_palette(230, 20, as_cmap=True)
+                                                    
+                                                    sns.heatmap(
+                                                        corr_matrix, 
+                                                        mask=mask, 
+                                                        cmap=cmap, 
+                                                        vmax=1, 
+                                                        vmin=-1, 
+                                                        center=0,
+                                                        square=True, 
+                                                        linewidths=.5, 
+                                                        annot=True, 
+                                                        fmt=".2f"
+                                                    )
+                                                    
+                                                    plt.title('Correlation Matrix')
+                                                    plt.tight_layout()
+                                                    st.pyplot(fig)
+                                                    
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'correlation_matrix': corr_matrix
+                                                    }
+                                                    
+                                                    # Store for convergence
+                                                    convergence_scores['correlation_mean'] = corr_matrix.abs().mean().mean()
+                                                
+                                                elif method == "Statistical Hypothesis Testing":
+                                                    # Perform basic hypothesis tests on numeric columns
+                                                    numeric_data = data.select_dtypes(include=np.number)
+                                                    
+                                                    # Normality tests (Shapiro-Wilk)
+                                                    st.write("#### Normality Tests (Shapiro-Wilk)")
+                                                    normality_results = []
+                                                    
+                                                    for col in numeric_data.columns:
+                                                        # Drop NaN values
+                                                        values = numeric_data[col].dropna()
+                                                        
+                                                        # Only test if we have enough data (3-5000 samples)
+                                                        if len(values) >= 3 and len(values) <= 5000:
+                                                            stat, p = stats.shapiro(values)
+                                                            normality_results.append({
+                                                                'Column': col,
+                                                                'Statistic': stat,
+                                                                'p-value': p,
+                                                                'Normal Distribution': 'Yes' if p > 0.05 else 'No'
+                                                            })
+                                                        else:
+                                                            normality_results.append({
+                                                                'Column': col,
+                                                                'Statistic': None,
+                                                                'p-value': None,
+                                                                'Normal Distribution': 'Not tested (insufficient samples)'
+                                                            })
+                                                    
+                                                    st.dataframe(pd.DataFrame(normality_results))
+                                                    
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'normality_tests': normality_results
+                                                    }
+                                                    
+                                                    # Calculate how many variables follow normal distribution
+                                                    normal_count = sum(1 for result in normality_results 
+                                                                    if result['Normal Distribution'] == 'Yes')
+                                                    
+                                                    total_tested = sum(1 for result in normality_results 
+                                                                    if result['Normal Distribution'] not in ['Not tested (insufficient samples)'])
+                                                    
+                                                    if total_tested > 0:
+                                                        normal_pct = (normal_count / total_tested) * 100
+                                                        convergence_scores['normality_percentage'] = normal_pct
+                                            
+                                            # Save the results to the session state
+                                            new_analysis = {
+                                                'id': len(st.session_state.convergence_datasets) + 1,
+                                                'name': f"Analysis {len(st.session_state.convergence_datasets) + 1}",
+                                                'methods': selected_methods,
+                                                'method_results': method_results,
+                                                'convergence_scores': convergence_scores,
+                                                'data': data,
+                                                'timestamp': pd.Timestamp.now()
+                                            }
+                                            
+                                            st.session_state.convergence_datasets.append(new_analysis)
+                                            
+                                            st.success(f"Analysis complete. Results saved as Analysis {new_analysis['id']}.")
+                                            st.info("Navigate to the Convergence Evaluation tab to evaluate convergence with multiple analyses.")
                                 else:
                                     st.warning("Please select at least one analytical method to continue.")
                                 

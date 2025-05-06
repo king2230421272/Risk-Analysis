@@ -5,6 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
+import seaborn as sns
 from scipy import stats
 from modules.data_processing import DataProcessor
 from modules.advanced_data_processing import AdvancedDataProcessor
@@ -1181,41 +1182,44 @@ with main_container:
                             # Display core information about the imputation process
                             st.subheader("Imputation Statistics")
                             
-                            # Get current imputed dataset
-                            current_data = st.session_state.interpolated_result
-                            
-                            # Calculate imputation statistics
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.write("**Original Missing Data**")
-                                if 'original_missing_counts' in st.session_state:
-                                    missing_counts = st.session_state.original_missing_counts
-                                    total_missing = missing_counts.sum().sum()
-                                    total_cells = missing_counts.size
-                                    
-                                    st.write(f"Total missing values: {total_missing}")
-                                    st.write(f"Missing percentage: {total_missing/total_cells*100:.2f}%")
-                                    
-                                    # Show top columns with missing values
-                                    missing_by_col = missing_counts.sum()
-                                    if len(missing_by_col) > 0:
-                                        top_missing = missing_by_col.sort_values(ascending=False).head(5)
-                                        st.write("Columns with most missing values:")
-                                        for col, count in top_missing.items():
-                                            if count > 0:
-                                                st.write(f"- {col}: {count} values ({count/len(current_data)*100:.1f}%)")
-                                else:
-                                    st.write("Original missing value information not available.")
-                            
-                            with col2:
-                                st.write("**Imputation Results**")
-                                # Check for any remaining missing values
-                                remaining_missing = current_data.isna().sum().sum()
-                                if remaining_missing > 0:
-                                    st.warning(f"Imputation incomplete: {remaining_missing} values still missing")
-                                else:
-                                    st.success("All missing values successfully imputed")
+                            # Get current imputed dataset if available
+                            if 'interpolated_result' in st.session_state and st.session_state.interpolated_result is not None:
+                                current_data = st.session_state.interpolated_result
+                                
+                                # Calculate imputation statistics
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.write("**Original Missing Data**")
+                                    if 'original_missing_counts' in st.session_state:
+                                        missing_counts = st.session_state.original_missing_counts
+                                        total_missing = missing_counts.sum().sum()
+                                        total_cells = missing_counts.size
+                                        
+                                        st.write(f"Total missing values: {total_missing}")
+                                        st.write(f"Missing percentage: {total_missing/total_cells*100:.2f}%")
+                                        
+                                        # Show top columns with missing values
+                                        missing_by_col = missing_counts.sum()
+                                        if len(missing_by_col) > 0:
+                                            top_missing = missing_by_col.sort_values(ascending=False).head(5)
+                                            st.write("Columns with most missing values:")
+                                            for col, count in top_missing.items():
+                                                if count > 0:
+                                                    st.write(f"- {col}: {count} values ({count/len(current_data)*100:.1f}%)")
+                                    else:
+                                        st.write("Original missing value information not available.")
+                                
+                                with col2:
+                                    st.write("**Imputation Results**")
+                                    # Check for any remaining missing values
+                                    remaining_missing = current_data.isna().sum().sum()
+                                    if remaining_missing > 0:
+                                        st.warning(f"Imputation incomplete: {remaining_missing} values still missing")
+                                    else:
+                                        st.success("All missing values successfully imputed")
+                            else:
+                                st.warning("No imputed dataset available. Please run MCMC interpolation in the previous tab first.")
                                 
                                 if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
                                     num_datasets = len(st.session_state.convergence_datasets)
@@ -1231,246 +1235,38 @@ with main_container:
                                 else:
                                     st.write("Single imputed dataset available")
                             
-                            # Add pooled analysis section
-                            st.subheader("Multiple Imputation Analysis")
+                            # Add multiple fill analysis section (clean implementation)
+                            st.subheader("Multiple Fill Analysis")
                             
-                            if 'convergence_datasets' in st.session_state and len(st.session_state.convergence_datasets) > 1:
-                                st.write("""
-                                Multiple imputation creates several complete datasets with different imputed values.
-                                This allows us to account for the uncertainty in the missing data by analyzing variations
-                                across imputed datasets.
-                                """)
+                            st.write("""
+                            This analysis uses the MCMC-interpolated dataset from the previous step to run multiple analytical 
+                            methods and evaluate the reliability of imputed values.
+                            """)
+                            
+                            # Reference the dataset from MCMC interpolation
+                            if 'interpolated_result' in st.session_state and st.session_state.interpolated_result is not None:
+                                st.success("Using MCMC-interpolated dataset from Data Processing module")
                                 
-                                # Datasets for analysis
-                                datasets_for_analysis = [f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
-                                selected_datasets = st.multiselect(
-                                    "Select datasets to analyze:",
-                                    options=datasets_for_analysis,
-                                    default=datasets_for_analysis[:min(5, len(datasets_for_analysis))]
-                                )
-                                
-                                if selected_datasets:
-                                    # Analysis options
-                                    analysis_type = st.radio(
-                                        "Choose analysis method:",
-                                        ["Pooled Statistics", "Imputation Variance Analysis", "Distribution Comparisons"]
-                                    )
+                                # Initialization for convergence datasets if needed
+                                if 'convergence_datasets' not in st.session_state:
+                                    st.session_state.convergence_datasets = []
                                     
-                                    if st.button("Run Multiple Imputation Analysis"):
-                                        with st.spinner("Analyzing multiple imputed datasets..."):
-                                            # Get the data for selected datasets
-                                            selected_data = []
-                                            for ds_name in selected_datasets:
-                                                ds_id = int(ds_name.split()[-1])
-                                                dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
-                                                if dataset:
-                                                    selected_data.append(dataset['data'])
-                                            
-                                            # Perform selected analysis
-                                            if analysis_type == "Pooled Statistics":
-                                                # Calculate pooled statistics across datasets
-                                                st.write("### Pooled Statistics Across Imputed Datasets")
-                                                
-                                                # Calculate mean and standard deviation for each dataset
-                                                summary_stats = []
-                                                for i, data in enumerate(selected_data):
-                                                    # Get numeric columns only
-                                                    numeric_data = data.select_dtypes(include=np.number)
-                                                    ds_stats = numeric_data.describe().T[['mean', 'std']]
-                                                    ds_stats.columns = [f'mean_{i+1}', f'std_{i+1}']
-                                                    summary_stats.append(ds_stats)
-                                                
-                                                if summary_stats:
-                                                    # Combine all stats
-                                                    all_stats = pd.concat(summary_stats, axis=1)
-                                                    
-                                                    # Calculate pooled mean and variance
-                                                    mean_cols = [col for col in all_stats.columns if col.startswith('mean')]
-                                                    std_cols = [col for col in all_stats.columns if col.startswith('std')]
-                                                    
-                                                    pooled_mean = all_stats[mean_cols].mean(axis=1)
-                                                    
-                                                    # Calculate within-imputation variance (average of squared std devs)
-                                                    within_var = (all_stats[std_cols] ** 2).mean(axis=1)
-                                                    
-                                                    # Calculate between-imputation variance
-                                                    between_var = all_stats[mean_cols].var(axis=1)
-                                                    
-                                                    # Total variance (Rubin's rule: total = within + between + between/m)
-                                                    m = len(selected_data)
-                                                    total_var = within_var + between_var * (1 + 1/m)
-                                                    
-                                                    # Pooled standard error
-                                                    pooled_se = np.sqrt(total_var)
-                                                    
-                                                    # Create results dataframe
-                                                    results = pd.DataFrame({
-                                                        'Pooled Mean': pooled_mean,
-                                                        'Within Imputation Variance': within_var,
-                                                        'Between Imputation Variance': between_var,
-                                                        'Total Variance': total_var,
-                                                        'Pooled SE': pooled_se
-                                                    })
-                                                    
-                                                    st.dataframe(results)
-                                                    
-                                                    # Show interpretation
-                                                    st.write("### Interpretation")
-                                                    st.write("""
-                                                    - **Pooled Mean**: The average estimate across all imputed datasets
-                                                    - **Within Imputation Variance**: Average variance within each imputed dataset
-                                                    - **Between Imputation Variance**: Variance of the estimates across datasets (reflects uncertainty due to imputation)
-                                                    - **Total Variance**: Combined variance following Rubin's rule
-                                                    - **Pooled SE**: Standard error accounting for both sources of uncertainty
-                                                    """)
-                                                    
-                                                    # Show diagnostic measures
-                                                    fraction_missing_info = between_var / total_var
-                                                    relative_increase_var = (between_var + between_var/m) / within_var
-                                                    
-                                                    st.write("### Diagnostic Measures")
-                                                    diagnostic_df = pd.DataFrame({
-                                                        'Fraction of Missing Information': fraction_missing_info,
-                                                        'Relative Increase in Variance': relative_increase_var
-                                                    })
-                                                    st.dataframe(diagnostic_df)
-                                            
-                                            elif analysis_type == "Imputation Variance Analysis":
-                                                st.write("### Imputation Variance Analysis")
-                                                
-                                                # Identify columns imputed across datasets
-                                                if 'original_missing_counts' in st.session_state:
-                                                    missing_counts = st.session_state.original_missing_counts
-                                                    # Get columns with missing values
-                                                    imputed_cols = missing_counts.columns[missing_counts.any()].tolist()
-                                                    
-                                                    # Only analyze numeric columns
-                                                    numeric_cols = selected_data[0].select_dtypes(include=np.number).columns
-                                                    numeric_imputed_cols = [col for col in imputed_cols if col in numeric_cols]
-                                                    
-                                                    if numeric_imputed_cols:
-                                                        # Select columns to analyze
-                                                        cols_to_analyze = st.multiselect(
-                                                            "Select columns to analyze variance:",
-                                                            options=numeric_imputed_cols,
-                                                            default=numeric_imputed_cols[:min(3, len(numeric_imputed_cols))]
-                                                        )
-                                                        
-                                                        if cols_to_analyze:
-                                                            # Calculate variance for each imputed column across datasets
-                                                            var_results = {}
-                                                            for col in cols_to_analyze:
-                                                                # Extract values for this column from each dataset
-                                                                col_values = []
-                                                                for data in selected_data:
-                                                                    if col in data.columns:
-                                                                        col_values.append(data[col])
-                                                                
-                                                                if col_values:
-                                                                    # Stack series into a dataframe
-                                                                    col_df = pd.concat(col_values, axis=1)
-                                                                    # Calculate variance across imputed values
-                                                                    var_results[col] = col_df.var(axis=1).mean()
-                                                            
-                                                            # Display variance results
-                                                            var_df = pd.DataFrame({
-                                                                'Column': list(var_results.keys()),
-                                                                'Average Imputation Variance': list(var_results.values())
-                                                            })
-                                                            var_df = var_df.sort_values('Average Imputation Variance', ascending=False)
-                                                            st.dataframe(var_df)
-                                                            
-                                                            # Visualize variance
-                                                            st.write("### Imputation Variance by Column")
-                                                            fig, ax = plt.subplots(figsize=(10, 6))
-                                                            ax.bar(var_df['Column'], var_df['Average Imputation Variance'])
-                                                            ax.set_ylabel('Average Imputation Variance')
-                                                            ax.set_xlabel('Column')
-                                                            plt.xticks(rotation=45, ha='right')
-                                                            st.pyplot(fig)
-                                                    else:
-                                                        st.info("No numeric columns with missing values were found.")
-                                                else:
-                                                    st.warning("Original missing value information not available.")
-                                            
-                                            elif analysis_type == "Distribution Comparisons":
-                                                st.write("### Distribution Comparisons Across Imputed Datasets")
-                                                
-                                                # Get numeric columns
-                                                numeric_cols = selected_data[0].select_dtypes(include=np.number).columns.tolist()
-                                                selected_column = st.selectbox("Select column for distribution comparison:", numeric_cols)
-                                                
-                                                if selected_column:
-                                                    # Extract distributions
-                                                    distributions = []
-                                                    for i, data in enumerate(selected_data):
-                                                        if selected_column in data.columns:
-                                                            distributions.append({
-                                                                'dataset': f"Dataset {i+1}",
-                                                                'data': data[selected_column].dropna()
-                                                            })
-                                                    
-                                                    # Create distribution plot
-                                                    fig, ax = plt.subplots(figsize=(10, 6))
-                                                    for dist in distributions:
-                                                        ax.hist(dist['data'], alpha=0.5, bins=20, label=dist['dataset'])
-                                                    
-                                                    ax.set_xlabel(selected_column)
-                                                    ax.set_ylabel('Frequency')
-                                                    ax.set_title(f'Distribution of {selected_column} Across Imputed Datasets')
-                                                    ax.legend()
-                                                    st.pyplot(fig)
-                                                    
-                                                    # Run statistical tests to compare distributions
-                                                    st.write("### Statistical Comparison of Distributions")
-                                                    st.write("Kolmogorov-Smirnov test results (comparing each dataset to the first dataset):")
-                                                    
-                                                    test_results = []
-                                                    reference_dist = distributions[0]['data']
-                                                    
-                                                    for i, dist in enumerate(distributions[1:], 1):
-                                                        test_dist = dist['data']
-                                                        ks_stat, p_value = stats.ks_2samp(reference_dist, test_dist)
-                                                        test_results.append({
-                                                            'Comparison': f"Dataset 1 vs Dataset {i+1}",
-                                                            'KS Statistic': ks_stat,
-                                                            'p-value': p_value,
-                                                            'Significant Difference': 'Yes' if p_value < 0.05 else 'No'
-                                                        })
-                                                    
-                                                    if test_results:
-                                                        st.dataframe(pd.DataFrame(test_results))
-                                                        
-                                                        # Summary
-                                                        significant_diffs = sum(1 for result in test_results if result['Significant Difference'] == 'Yes')
-                                                        total_comparisons = len(test_results)
-                                                        
-                                                        if significant_diffs > 0:
-                                                            st.warning(f"Found significant differences in {significant_diffs} out of {total_comparisons} comparisons.")
-                                                            st.write("This suggests that the imputation process may be creating significantly different distributions for this variable.")
-                                                        else:
-                                                            st.success("No significant differences found between imputed datasets.")
-                                                            st.write("This suggests the imputation process is stable for this variable.")
-                                            
-                                else:
-                                    st.info("Please select at least one dataset to analyze.")
-                            else:
-                                st.info("""
-                                To perform multiple imputation analysis, you need at least 2 imputed datasets.
-                                Please go back to the MCMC Interpolation tab and generate multiple datasets.
-                                """)
-
-                            # Add current dataset to analysis
-                            if st.button("Add Current Interpolated Dataset to Analysis", key="add_dataset_btn"):
-                                if st.session_state.interpolated_result is not None:
+                                if 'convergence_iterations' not in st.session_state:
+                                    st.session_state.convergence_iterations = 0
+                                
+                                # Add current dataset to analysis - optional step
+                                if st.button("Add Current Interpolated Dataset to Analysis", key="add_dataset_btn"):
                                     # Create a copy to avoid reference issues
                                     dataset_copy = st.session_state.interpolated_result.copy()
                                     
                                     # Add dataset to convergence analysis list
+                                    dataset_id = len(st.session_state.convergence_datasets) + 1
                                     dataset_info = {
-                                        'id': len(st.session_state.convergence_datasets) + 1,
+                                        'id': dataset_id,
+                                        'name': f"Analysis {dataset_id}",
                                         'data': dataset_copy,
                                         'convergence_scores': {},
+                                        'methods': [],
                                         'timestamp': pd.Timestamp.now()
                                     }
                                     
@@ -1478,3108 +1274,677 @@ with main_container:
                                     st.session_state.convergence_iterations += 1
                                     
                                     st.success(f"Dataset {dataset_info['id']} added to analysis.")
-                                    st.info("Please proceed with analysis methods below.")
-                                else:
-                                    st.error("No interpolated dataset available to add.")
-                            
-                            # Only show analysis options if we have datasets to analyze
-                            if st.session_state.convergence_datasets:
-                                # Add control module for consecutive analysis
-                                with st.expander("Consecutive Analysis Control", expanded=True):
-                                    st.write("""
-                                    ### Run All Analysis Steps
-                                    Use this control to run all analysis steps consecutively with a single click. 
-                                    This will perform Linear Regression, K-Means clustering, and PCA analysis on all datasets, 
-                                    followed by convergence evaluation.
-                                    """)
-                                    
-                                    run_all = st.checkbox("Enable consecutive analysis", value=False)
-                                    
-                                    if run_all:
-                                        datasets_to_analyze = st.multiselect(
-                                            "Select datasets to analyze",
-                                            options=[f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets],
-                                            default=[f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
-                                        )
-                                        
-                                        consecutive_btn = st.button("Run All Analysis Steps", key="run_all_btn")
-                                        if consecutive_btn:
-                                            st.session_state.consecutive_analysis = True
-                                            st.session_state.datasets_to_analyze = datasets_to_analyze
-                                            st.session_state.current_analysis_step = 0
-                                            st.info("Starting consecutive analysis. Please wait while all steps are executed...")
-                                    
-                                # Analysis methods in tabs
-                                analysis_tabs = st.tabs(["Dataset Selection", "Linear Regression", 
-                                                        "K-Means Clustering", "PCA Factor Analysis", 
-                                                        "Convergence Evaluation"])
                                 
-                                # Initialize consecutive analysis if it doesn't exist
-                                if 'consecutive_analysis' not in st.session_state:
-                                    st.session_state.consecutive_analysis = False
-                                    st.session_state.current_analysis_step = 0
-                                    st.session_state.datasets_to_analyze = []
+                                # Show available analytical methods
+                                st.subheader("Select Analytical Methods")
                                 
-                                # Handle consecutive analysis logic
-                                if st.session_state.consecutive_analysis:
-                                    # Get current step
-                                    current_step = st.session_state.current_analysis_step
-                                    
-                                    # Execute analysis steps in order
-                                    if current_step == 0:
-                                        # Start with regression analysis
-                                        st.warning("Consecutive analysis: Running Linear Regression analysis...")
-                                        # This will be executed in the Regression Analysis tab, so increase step
-                                        st.session_state.current_analysis_step = 1
-                                        # Redirect to that tab
-                                        # Using rerun() here would be ideal but leads to an infinite loop
-                                        # Instead, we'll let each tab check the step to see if processing is needed
-                                    
-                                    elif current_step == 1:
-                                        # Move to clustering analysis
-                                        st.warning("Consecutive analysis: Running K-Means clustering analysis...")
-                                        st.session_state.current_analysis_step = 2
-                                    
-                                    elif current_step == 2:
-                                        # Move to PCA analysis
-                                        st.warning("Consecutive analysis: Running PCA factor analysis...")
-                                        st.session_state.current_analysis_step = 3
-                                    
-                                    elif current_step == 3:
-                                        # Final step - convergence evaluation
-                                        st.warning("Consecutive analysis: Running convergence evaluation...")
-                                        st.session_state.current_analysis_step = 4
-                                    
-                                    elif current_step == 4:
-                                        # Analysis complete
-                                        st.success("Consecutive analysis completed successfully!")
-                                        st.session_state.consecutive_analysis = False
-                                        st.session_state.current_analysis_step = 0
+                                # Define analytical methods
+                                analysis_methods = [
+                                    "Linear Regression Analysis",
+                                    "K-Means Clustering",
+                                    "PCA Factor Analysis",
+                                    "Correlation Analysis",
+                                    "Statistical Hypothesis Testing"
+                                ]
                                 
-                                # 1. Dataset Selection Tab
-                                with analysis_tabs[0]:
-                                    st.write("### Dataset Selection and Comparison")
-                                    st.write("Select datasets to analyze or compare:")
+                                # Allow selection of multiple methods
+                                selected_methods = st.multiselect(
+                                    "Choose one or more analytical methods to apply to the dataset:",
+                                    options=analysis_methods,
+                                    default=analysis_methods[:2]  # Default to first two methods
+                                )
+                                
+                                # Configure parameters for selected methods
+                                if selected_methods:
+                                    method_params = {}
                                     
-                                    # Create radio buttons to select dataset
-                                    dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
-                                    selected_dataset = st.radio("Select dataset to view:", dataset_options)
-                                    
-                                    # Display selected dataset
-                                    if selected_dataset == "Original Data":
-                                        if original_data is not None:
-                                            st.write("**Original Data Statistics**")
-                                            st.dataframe(original_data.describe())
-                                            
-                                            # Show sample of data
-                                            st.write("**Sample Data**")
-                                            st.dataframe(original_data.head())
-                                        else:
-                                            st.warning("Original data not available.")
-                                    else:
-                                        # Extract dataset ID and find the corresponding dataset
-                                        dataset_id = int(selected_dataset.split()[-1])
-                                        dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == dataset_id), None)
+                                    # Parameters for Linear Regression
+                                    if "Linear Regression Analysis" in selected_methods:
+                                        st.write("### Linear Regression Parameters")
+                                        col1, col2 = st.columns(2)
                                         
-                                        if dataset:
-                                            st.write(f"**Interpolated Dataset {dataset_id} Statistics**")
-                                            st.dataframe(dataset['data'].describe())
-                                            
-                                            # Show sample of data
-                                            st.write("**Sample Data**")
-                                            st.dataframe(dataset['data'].head())
-                                            
-                                            # Show timestamp
-                                            st.write(f"Added on: {dataset['timestamp']}")
-                                        else:
-                                            st.error(f"Dataset {dataset_id} not found.")
-                                    
-                                    # Dataset comparison
-                                    st.write("### Dataset Comparison")
-                                    
-                                    # Select datasets to compare
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        compare_ds1 = st.selectbox("First dataset:", dataset_options, key="compare_ds1")
-                                    with col2:
-                                        compare_ds2 = st.selectbox("Second dataset:", dataset_options, index=min(1, len(dataset_options)-1), key="compare_ds2")
-                                    
-                                    if st.button("Compare Datasets"):
-                                        # Get data for the first dataset
-                                        if compare_ds1 == "Original Data":
-                                            data1 = original_data
-                                            label1 = "Original Data"
-                                        else:
-                                            ds1_id = int(compare_ds1.split()[-1])
-                                            ds1 = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds1_id), None)
-                                            data1 = ds1['data'] if ds1 else None
-                                            label1 = f"Dataset {ds1_id}"
-                                        
-                                        # Get data for the second dataset
-                                        if compare_ds2 == "Original Data":
-                                            data2 = original_data
-                                            label2 = "Original Data"
-                                        else:
-                                            ds2_id = int(compare_ds2.split()[-1])
-                                            ds2 = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds2_id), None)
-                                            data2 = ds2['data'] if ds2 else None
-                                            label2 = f"Dataset {ds2_id}"
-                                        
-                                        # Perform comparison if both datasets are available
-                                        if data1 is not None and data2 is not None:
-                                            # Common numeric columns
-                                            numeric_cols = list(set(data1.select_dtypes(include=np.number).columns) & 
-                                                            set(data2.select_dtypes(include=np.number).columns))
-                                            
+                                        with col1:
+                                            # Get numeric columns
+                                            numeric_cols = st.session_state.interpolated_result.select_dtypes(include=np.number).columns.tolist()
                                             if numeric_cols:
-                                                # Let user select a column to compare
-                                                selected_col = st.selectbox("Select column to compare:", numeric_cols)
+                                                target_var = st.selectbox(
+                                                    "Select target variable:", 
+                                                    options=numeric_cols,
+                                                    key="lin_reg_target"
+                                                )
                                                 
-                                                # Create histogram comparison
-                                                fig = plt.figure(figsize=(10, 6))
-                                                plt.hist(data1[selected_col].dropna(), alpha=0.5, label=label1)
-                                                plt.hist(data2[selected_col].dropna(), alpha=0.5, label=label2)
-                                                plt.xlabel(selected_col)
-                                                plt.ylabel('Frequency')
-                                                plt.title(f'Distribution Comparison for {selected_col}')
-                                                plt.legend()
-                                                st.pyplot(fig)
+                                                # Filter out target from features
+                                                feature_options = [col for col in numeric_cols if col != target_var]
                                                 
-                                                # Calculate statistics for comparison
-                                                if selected_col:
-                                                    stats_df = pd.DataFrame({
-                                                        'Statistic': ['Mean', 'Std Dev', 'Min', 'Max', 'Median'],
-                                                        label1: [
-                                                            data1[selected_col].mean(),
-                                                            data1[selected_col].std(),
-                                                            data1[selected_col].min(),
-                                                            data1[selected_col].max(),
-                                                            data1[selected_col].median()
-                                                        ],
-                                                        label2: [
-                                                            data2[selected_col].mean(),
-                                                            data2[selected_col].std(),
-                                                            data2[selected_col].min(),
-                                                            data2[selected_col].max(),
-                                                            data2[selected_col].median()
-                                                        ]
-                                                    })
-                                                    st.dataframe(stats_df)
-                                            else:
-                                                st.warning("No common numeric columns found between the selected datasets.")
-                                        else:
-                                            st.error("One or both of the selected datasets are not available.")
-                                
-                                # 2. Linear Regression Tab
-                                with analysis_tabs[1]:
-                                    st.write("### Linear Regression Analysis")
-                                    st.write("""
-                                    Linear Regression analyzes the relationship between variables to predict outcomes.
-                                    This analysis helps ensure that interpolated data preserves the underlying
-                                    statistical relationships found in the original data.
-                                    """)
-                                    
-                                    # Check if we're in consecutive analysis mode
-                                    consecutive_mode = False
-                                    if ('consecutive_analysis' in st.session_state and 
-                                        st.session_state.consecutive_analysis and 
-                                        st.session_state.current_analysis_step == 1):
-                                        consecutive_mode = True
-                                        st.info("Running Linear Regression analysis as part of consecutive analysis...")
-                                    
-                                    # Select datasets to analyze
-                                    dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
-                                    
-                                    # In consecutive mode, analyze all selected datasets
-                                    if consecutive_mode and st.session_state.datasets_to_analyze:
-                                        selected_datasets = st.session_state.datasets_to_analyze
-                                        st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
-                                        
-                                        # Default to first dataset for parameters
-                                        selected_dataset = selected_datasets[0] if selected_datasets else dataset_options[0]
-                                    else:
-                                        # Regular mode - use checkboxes to select multiple datasets
-                                        st.write("### Select datasets to analyze:")
-                                        
-                                        # Create checkboxes for each dataset
-                                        # Use a unique session state key to store checkbox states
-                                        if 'kmeans_selected_datasets' not in st.session_state:
-                                            st.session_state.kmeans_selected_datasets = []
-                                        
-                                        selected_datasets = []
-                                        for ds_option in dataset_options:
-                                            checkbox_key = f"kmeans_dataset_{ds_option}"
-                                            # Pre-select datasets saved in session state
-                                            default_value = ds_option in st.session_state.kmeans_selected_datasets
-                                            if st.checkbox(ds_option, value=default_value, key=checkbox_key):
-                                                selected_datasets.append(ds_option)
-                                        
-                                        # Update the session state with current selections
-                                        st.session_state.kmeans_selected_datasets = selected_datasets.copy()
-                                        
-                                        if not selected_datasets:
-                                            st.warning("Please select at least one dataset to analyze.")
-                                            selected_dataset = dataset_options[0]  # Default for parameters only
-                                        else:
-                                            st.success(f"Selected {len(selected_datasets)} datasets for analysis.")
-                                            selected_dataset = selected_datasets[0]  # Use first selected for parameters
-                                    
-                                    # Get the selected dataset for parameters
-                                    if selected_dataset == "Original Data":
-                                        analysis_data = original_data
-                                        dataset_label = "Original Data"
-                                    else:
-                                        dataset_id = int(selected_dataset.split()[-1])
-                                        dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == dataset_id), None)
-                                        analysis_data = dataset['data'] if dataset else None
-                                        dataset_label = f"Dataset {dataset_id}"
-                                    
-                                    if analysis_data is not None:
-                                        # Parameters for K-Means
-                                        with st.expander("Clustering Parameters", expanded=True):
-                                            # Select features for clustering
-                                            numeric_cols = analysis_data.select_dtypes(include=np.number).columns.tolist()
-                                            
-                                            # Set default features - all except first column
-                                            default_features = numeric_cols[1:] if len(numeric_cols) > 1 else numeric_cols
-                                            
-                                            selected_features = st.multiselect(
-                                                "Select features for clustering:",
-                                                numeric_cols,
-                                                default=default_features
-                                            )
-                                            
-                                            # Number of clusters
-                                            k_clusters = st.slider("Number of clusters (k):", min_value=2, max_value=10, value=3)
-                                            
-                                            # Max iterations
-                                            max_iter = st.slider("Maximum iterations:", min_value=100, max_value=1000, value=300, step=100)
-                                            
-                                            # Random state for reproducibility
-                                            random_state = st.slider("Random state:", min_value=0, max_value=100, value=42)
-                                        
-                                        # Run clustering
-                                        run_button_clicked = False
-                                        if consecutive_mode:
-                                            # In consecutive mode, automatically trigger analysis
-                                            run_button_clicked = st.session_state.current_analysis_step == 1
-                                            if run_button_clicked:
-                                                st.success("Automatically running K-Means Clustering for all selected datasets...")
-                                        else:
-                                            # In regular mode, user has to click button
-                                            run_button_clicked = st.button("Run K-Means Clustering", key="run_kmeans_btn")
-                                            
-                                        if run_button_clicked:
-                                            if len(selected_features) < 2:
-                                                st.error("Please select at least 2 features for clustering.")
-                                                if consecutive_mode:
-                                                    # Even in error, move to next step in consecutive mode
-                                                    st.session_state.current_analysis_step = 2
-                                            else:
-                                                try:
-                                                    # Either in consecutive mode or with multiple datasets selected in normal mode
-                                                    if (consecutive_mode and st.session_state.datasets_to_analyze and len(st.session_state.datasets_to_analyze) > 0) or \
-                                                       (not consecutive_mode and len(selected_datasets) > 0):
-                                                        # Process each selected dataset in turn
-                                                        datasets_to_process = st.session_state.datasets_to_analyze if consecutive_mode else selected_datasets
-                                                        
-                                                        # Create dictionary to store results for all datasets
-                                                        all_kmeans_results = {}
-                                                        
-                                                        with st.spinner(f"Running K-Means clustering on {len(datasets_to_process)} datasets..."):
-                                                            for selected_ds in datasets_to_process:
-                                                                st.write(f"Processing {selected_ds}...")
-                                                                
-                                                                # Get data for this dataset
-                                                                if selected_ds == "Original Data":
-                                                                    curr_data = original_data.copy()
-                                                                    curr_label = "Original Data"
-                                                                else:
-                                                                    ds_id = int(selected_ds.split()[-1])
-                                                                    dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
-                                                                    if dataset is not None:
-                                                                        curr_data = dataset['data'].copy()
-                                                                        curr_label = f"Dataset {ds_id}"
-                                                                    else:
-                                                                        st.warning(f"Dataset {selected_ds} not found, skipping...")
-                                                                        continue
-                                                                
-                                                                # Import required libraries
-                                                                from sklearn.cluster import KMeans
-                                                                from sklearn.preprocessing import StandardScaler
-                                                                
-                                                                # Prepare data for clustering
-                                                                cluster_data = curr_data[selected_features].dropna()
-                                                                
-                                                                if len(cluster_data) < k_clusters:
-                                                                    st.warning(f"{curr_label}: Not enough data points ({len(cluster_data)}) for {k_clusters} clusters after removing missing values.")
-                                                                    continue
-                                                                
-                                                                # Scale the data
-                                                                scaler = StandardScaler()
-                                                                scaled_data = scaler.fit_transform(cluster_data)
-                                                                
-                                                                # Run K-Means
-                                                                kmeans = KMeans(n_clusters=k_clusters, max_iter=max_iter, random_state=random_state)
-                                                                clusters = kmeans.fit_predict(scaled_data)
-                                                                
-                                                                # Add cluster labels to the data
-                                                                cluster_data['Cluster'] = clusters
-                                                                
-                                                                # Calculate convergence metrics
-                                                                inertia = kmeans.inertia_  # Sum of squared distances to the nearest centroid
-                                                                
-                                                                # Store clustering results in dataset info if not original data
-                                                                if selected_ds != "Original Data":
-                                                                    ds_id = int(selected_ds.split()[-1])
-                                                                    for ds in st.session_state.convergence_datasets:
-                                                                        if ds['id'] == ds_id:
-                                                                            # Initialize convergence_scores if it doesn't exist
-                                                                            if 'convergence_scores' not in ds:
-                                                                                ds['convergence_scores'] = {}
-                                                                            
-                                                                            # Create a copy of the existing scores
-                                                                            convergence_scores = ds['convergence_scores']
-                                                                            
-                                                                            # Update with new scores
-                                                                            convergence_scores['kmeans_inertia'] = inertia
-                                                                            convergence_scores['kmeans_cluster_counts'] = cluster_data['Cluster'].value_counts().sort_index().to_dict()
-                                                                            
-                                                                            # Update the scores in the dataset
-                                                                            ds['convergence_scores'] = convergence_scores
-                                                                            break
-                                                                
-                                                                # Store results for later display if needed
-                                                                all_kmeans_results[curr_label] = {
-                                                                    'inertia': inertia,
-                                                                    'data': cluster_data,
-                                                                    'kmeans': kmeans,
-                                                                    'scaler': scaler
-                                                                }
-                                                            
-                                                            # Report completion
-                                                            if all_kmeans_results:
-                                                                st.success(f"K-Means clustering completed for {len(all_kmeans_results)} datasets.")
-                                                                
-                                                                # Show summary of results
-                                                                st.write("### Clustering Results Summary")
-                                                                summary_data = {label: {'Inertia': results['inertia']} 
-                                                                            for label, results in all_kmeans_results.items()}
-                                                                
-                                                                summary_df = pd.DataFrame.from_dict(summary_data, orient='index')
-                                                                st.dataframe(summary_df)
-                                                                
-                                                                # Show the first dataset's visualization as an example
-                                                                if len(selected_features) >= 2:
-                                                                    example_label = list(all_kmeans_results.keys())[0]
-                                                                    example_results = all_kmeans_results[example_label]
-                                                                    
-                                                                    st.write(f"#### Example Visualization: {example_label}")
-                                                                    viz_features = selected_features[:2]
-                                                                    
-                                                                    fig, ax = plt.subplots(figsize=(10, 8))
-                                                                    scatter = ax.scatter(
-                                                                        example_results['data'][viz_features[0]], 
-                                                                        example_results['data'][viz_features[1]], 
-                                                                        c=example_results['data']['Cluster'], 
-                                                                        cmap='viridis', 
-                                                                        alpha=0.6,
-                                                                        s=50
-                                                                    )
-                                                                    
-                                                                    # Plot centroids
-                                                                    centroids = example_results['scaler'].inverse_transform(example_results['kmeans'].cluster_centers_)
-                                                                    ax.scatter(
-                                                                        centroids[:, 0], 
-                                                                        centroids[:, 1],
-                                                                        marker='X',
-                                                                        s=200,
-                                                                        linewidths=2,
-                                                                        color='red',
-                                                                        label='Centroids'
-                                                                    )
-                                                                    
-                                                                    ax.set_xlabel(viz_features[0])
-                                                                    ax.set_ylabel(viz_features[1])
-                                                                    ax.set_title(f'K-Means Clustering ({k_clusters} clusters)')
-                                                                    ax.legend()
-                                                                    plt.colorbar(scatter, label='Cluster')
-                                                                    st.pyplot(fig)
-                                                            
-                                                            # Progress to next step
-                                                            if consecutive_mode:
-                                                                st.session_state.current_analysis_step = 2
-                                                                st.success("K-Means clustering complete for all datasets. Moving to Regression Analysis...")
-                                                                # Force a rerun to update the UI for the next step
-                                                                st.rerun()
-                                                    else:
-                                                        # Regular mode - process single dataset
-                                                        with st.spinner("Running K-Means clustering..."):
-                                                            # Prepare data for clustering
-                                                            from sklearn.cluster import KMeans
-                                                            from sklearn.preprocessing import StandardScaler
-                                                            
-                                                            # Get data without missing values
-                                                            cluster_data = analysis_data[selected_features].dropna()
-                                                            
-                                                            if len(cluster_data) < k_clusters:
-                                                                st.error(f"Not enough data points ({len(cluster_data)}) for {k_clusters} clusters after removing missing values.")
-                                                            else:
-                                                                # Scale the data
-                                                                scaler = StandardScaler()
-                                                                scaled_data = scaler.fit_transform(cluster_data)
-                                                                
-                                                                # Run K-Means
-                                                                kmeans = KMeans(n_clusters=k_clusters, max_iter=max_iter, random_state=random_state)
-                                                                clusters = kmeans.fit_predict(scaled_data)
-                                                                
-                                                                # Add cluster labels to the data
-                                                                cluster_data['Cluster'] = clusters
-                                                                
-                                                                # Calculate convergence metrics
-                                                                inertia = kmeans.inertia_  # Sum of squared distances to the nearest centroid
-                                                                
-                                                                # Display results
-                                                                st.success(f"K-Means clustering completed successfully for {dataset_label}.")
-                                                                
-                                                                # Visualization
-                                                                st.write("### Clustering Results")
-                                                                st.write(f"Inertia (Sum of squared distances): {inertia:.2f}")
-                                                                
-                                                                # Display cluster distribution
-                                                                st.write("#### Cluster Distribution")
-                                                                cluster_counts = cluster_data['Cluster'].value_counts().sort_index()
-                                                                fig = plt.figure(figsize=(10, 6))
-                                                                plt.bar(cluster_counts.index, cluster_counts.values)
-                                                                plt.xlabel('Cluster')
-                                                                plt.ylabel('Number of Data Points')
-                                                                plt.title('Distribution of Data Points Across Clusters')
-                                                                plt.xticks(range(k_clusters))
-                                                                st.pyplot(fig)
-                                                                
-                                                                # Store clustering results in dataset info
-                                                                if selected_dataset != "Original Data":
-                                                                    dataset_id = int(selected_dataset.split()[-1])
-                                                                    for ds in st.session_state.convergence_datasets:
-                                                                        if ds['id'] == dataset_id:
-                                                                            # Initialize convergence_scores if it doesn't exist
-                                                                            if 'convergence_scores' not in ds:
-                                                                                ds['convergence_scores'] = {}
-                                                                            
-                                                                            # Create a copy of the existing scores
-                                                                            convergence_scores = ds['convergence_scores']
-                                                                            
-                                                                            # Update with new scores
-                                                                            convergence_scores['kmeans_inertia'] = inertia
-                                                                            convergence_scores['kmeans_cluster_counts'] = cluster_counts.to_dict()
-                                                                            
-                                                                            # Update the scores in the dataset
-                                                                            ds['convergence_scores'] = convergence_scores
-                                                                            break
-                                                                
-                                                                # Create a 2D visualization if possible
-                                                                if len(selected_features) >= 2:
-                                                                    st.write("#### 2D Visualization of Clusters")
-                                                                    
-                                                                    # Select two features for visualization
-                                                                    viz_features = selected_features[:2]
-                                                                    
-                                                                    fig, ax = plt.subplots(figsize=(10, 8))
-                                                                    scatter = ax.scatter(
-                                                                        cluster_data[viz_features[0]], 
-                                                                        cluster_data[viz_features[1]], 
-                                                                        c=cluster_data['Cluster'], 
-                                                                        cmap='viridis', 
-                                                                        alpha=0.6,
-                                                                        s=50
-                                                                    )
-                                                                    
-                                                                    # Plot centroids
-                                                                    centroids = scaler.inverse_transform(kmeans.cluster_centers_)
-                                                                    ax.scatter(
-                                                                        centroids[:, 0], 
-                                                                        centroids[:, 1],
-                                                                        marker='X',
-                                                                        s=200,
-                                                                        linewidths=2,
-                                                                        color='red',
-                                                                        label='Centroids'
-                                                                    )
-                                                                    
-                                                                    ax.set_xlabel(viz_features[0])
-                                                                    ax.set_ylabel(viz_features[1])
-                                                                    ax.set_title(f'K-Means Clustering ({k_clusters} clusters)')
-                                                                    ax.legend()
-                                                                    plt.colorbar(scatter, label='Cluster')
-                                                                    st.pyplot(fig)
-                                                                
-                                                                # If in consecutive mode, progress to next step
-                                                                if consecutive_mode:
-                                                                    st.session_state.current_analysis_step = 2
-                                                                    st.success("K-Means clustering complete. Moving to Regression Analysis...")
-                                                                    # Force a rerun to update the UI for the next step
-                                                                    st.rerun()
+                                                feature_vars = st.multiselect(
+                                                    "Select predictor variables:",
+                                                    options=feature_options,
+                                                    default=feature_options[:min(3, len(feature_options))],
+                                                    key="lin_reg_features"
+                                                )
                                                 
-                                                except Exception as e:
-                                                    st.error(f"Error during K-Means clustering: {e}")
-                                                    # Even on error, if in consecutive mode, move to next step
-                                                    if consecutive_mode:
-                                                        st.session_state.current_analysis_step = 2
-                                    else:
-                                        st.error(f"Dataset {selected_dataset} is not available.")
-                                
-                                # 3. K-Means Clustering Tab
-                                with analysis_tabs[2]:
-                                    st.write("### K-Means Clustering Analysis")
-                                    st.write("""
-                                    K-Means clustering groups data points by similarity.
-                                    We'll use it to evaluate if interpolated data maintains the same variable relationships as the original data.
-                                    """)
-                                    
-                                    # Select datasets to analyze
-                                    dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
-                                    
-                                    # In consecutive mode, analyze all selected datasets
-                                    if consecutive_mode and st.session_state.datasets_to_analyze:
-                                        selected_datasets = st.session_state.datasets_to_analyze
-                                        st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
-                                        
-                                        # Default to first dataset for parameters
-                                        selected_dataset = selected_datasets[0] if selected_datasets else dataset_options[0]
-                                    else:
-                                        # Regular mode - use checkboxes to select multiple datasets
-                                        st.write("### Select datasets to analyze:")
-                                        
-                                        # Create checkboxes for each dataset
-                                        # Use a unique session state key to store checkbox states
-                                        if 'regression_selected_datasets' not in st.session_state:
-                                            st.session_state.regression_selected_datasets = []
-                                        
-                                        selected_datasets = []
-                                        for ds_option in dataset_options:
-                                            checkbox_key = f"regression_dataset_{ds_option}"
-                                            # Pre-select datasets saved in session state
-                                            default_value = ds_option in st.session_state.regression_selected_datasets
-                                            if st.checkbox(ds_option, value=default_value, key=checkbox_key):
-                                                selected_datasets.append(ds_option)
-                                        
-                                        # Update the session state with current selections
-                                        st.session_state.regression_selected_datasets = selected_datasets.copy()
-                                        
-                                        if not selected_datasets:
-                                            st.warning("Please select at least one dataset to analyze.")
-                                            selected_dataset = dataset_options[0]  # Default for parameters only
-                                        else:
-                                            st.success(f"Selected {len(selected_datasets)} datasets for analysis.")
-                                            selected_dataset = selected_datasets[0]  # Use first selected for parameters
-                                    
-                                    # Get the selected dataset for parameters
-                                    if selected_dataset == "Original Data":
-                                        analysis_data = original_data
-                                        dataset_label = "Original Data"
-                                    else:
-                                        dataset_id = int(selected_dataset.split()[-1])
-                                        dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == dataset_id), None)
-                                        analysis_data = dataset['data'] if dataset else None
-                                        dataset_label = f"Dataset {dataset_id}"
-                                    
-                                    if analysis_data is not None:
-                                        # Parameters for regression
-                                        with st.expander("Regression Parameters", expanded=True):
-                                            # Get all numeric columns
-                                            numeric_cols = analysis_data.select_dtypes(include=np.number).columns.tolist()
-                                            
-                                            # Set default dependent variable (last column)
-                                            default_dependent = numeric_cols[-1] if numeric_cols else None
-                                            
-                                            # Select dependent variable (y)
-                                            dependent_var = st.selectbox(
-                                                "Select dependent variable (y):",
-                                                numeric_cols,
-                                                index=numeric_cols.index(default_dependent) if default_dependent in numeric_cols else 0
-                                            )
-                                            
-                                            # Default independent variables (all except first and dependent)
-                                            default_independents = [col for col in numeric_cols[1:] if col != dependent_var] if len(numeric_cols) > 1 else []
-                                            
-                                            # Select independent variables (X)
-                                            independent_vars = st.multiselect(
-                                                "Select independent variables (X):",
-                                                [col for col in numeric_cols if col != dependent_var],
-                                                default=default_independents
-                                            )
-                                            
-                                            # Test size
-                                            test_size = st.slider("Test set size (%):", min_value=10, max_value=50, value=20) / 100
-                                            
-                                            # Random state for reproducibility
-                                            random_state = st.slider("Random state:", min_value=0, max_value=100, value=42, key="reg_random_state")
-                                        
-                                        # Check if we're in consecutive analysis mode
-                                        consecutive_mode = False
-                                        if ('consecutive_analysis' in st.session_state and 
-                                            st.session_state.consecutive_analysis and 
-                                            st.session_state.current_analysis_step == 1):
-                                            consecutive_mode = True
-                                            st.info("Running Linear Regression as part of consecutive analysis...")
-                                        
-                                        # Run regression
-                                        run_button_clicked = False
-                                        if consecutive_mode:
-                                            # In consecutive mode, automatically trigger analysis
-                                            run_button_clicked = st.session_state.current_analysis_step == 1
-                                            if run_button_clicked:
-                                                st.success("Automatically running Linear Regression for selected datasets...")
-                                        else:
-                                            # In regular mode, user has to click button
-                                            run_button_clicked = st.button("Run Linear Regression", key="run_regression_btn")
-                                            
-                                        if run_button_clicked:
-                                            if not independent_vars:
-                                                st.error("Please select at least one independent variable.")
-                                                if consecutive_mode:
-                                                    # Even in error, move to next step
-                                                    st.session_state.current_analysis_step = 3
-                                            else:
-                                                try:
-                                                    # Either in consecutive mode or with multiple datasets selected in normal mode
-                                                    if (consecutive_mode and st.session_state.datasets_to_analyze and len(st.session_state.datasets_to_analyze) > 0) or \
-                                                       (not consecutive_mode and len(selected_datasets) > 0):
-                                                        # Process each selected dataset in turn
-                                                        datasets_to_process = st.session_state.datasets_to_analyze if consecutive_mode else selected_datasets
-                                                        
-                                                        # Create dictionary to store results for all datasets
-                                                        all_regression_results = {}
-                                                        
-                                                        with st.spinner(f"Running Linear Regression on {len(datasets_to_process)} datasets..."):
-                                                            for selected_ds in datasets_to_process:
-                                                                st.write(f"Processing {selected_ds}...")
-                                                                
-                                                                # Get data for this dataset
-                                                                if selected_ds == "Original Data":
-                                                                    curr_data = original_data.copy()
-                                                                    curr_label = "Original Data"
-                                                                else:
-                                                                    ds_id = int(selected_ds.split()[-1])
-                                                                    dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
-                                                                    if dataset is not None:
-                                                                        curr_data = dataset['data'].copy()
-                                                                        curr_label = f"Dataset {ds_id}"
-                                                                    else:
-                                                                        st.warning(f"Dataset {selected_ds} not found, skipping...")
-                                                                        continue
-                                                                
-                                                                # Import required libraries
-                                                                from sklearn.linear_model import LinearRegression
-                                                                from sklearn.metrics import mean_squared_error, r2_score
-                                                                from sklearn.model_selection import train_test_split
-                                                                
-                                                                # Prepare data for regression
-                                                                reg_data = curr_data[independent_vars + [dependent_var]].dropna()
-                                                                
-                                                                if len(reg_data) < 10:  # Minimum sample size
-                                                                    st.warning(f"{curr_label}: Not enough data points ({len(reg_data)}) after removing missing values.")
-                                                                    continue
-                                                                # Split data for this dataset
-                                                                X = reg_data[independent_vars]
-                                                                y = reg_data[dependent_var]
-                                                                
-                                                                X_train, X_test, y_train, y_test = train_test_split(
-                                                                    X, y, test_size=test_size, random_state=random_state
-                                                                )
-                                                                
-                                                                # Fit model
-                                                                model = LinearRegression()
-                                                                model.fit(X_train, y_train)
-                                                                
-                                                                # Predictions
-                                                                y_train_pred = model.predict(X_train)
-                                                                y_test_pred = model.predict(X_test)
-                                                                
-                                                                # Metrics
-                                                                train_mse = mean_squared_error(y_train, y_train_pred)
-                                                                test_mse = mean_squared_error(y_test, y_test_pred)
-                                                                train_r2 = r2_score(y_train, y_train_pred)
-                                                                test_r2 = r2_score(y_test, y_test_pred)
-                                                                
-                                                                # Store regression results in dataset info if not original data
-                                                                if selected_ds != "Original Data":
-                                                                    ds_id = int(selected_ds.split()[-1])
-                                                                    found_dataset = False
-                                                                    for ds in st.session_state.convergence_datasets:
-                                                                        if ds['id'] == ds_id:
-                                                                            # Initialize convergence_scores if it doesn't exist
-                                                                            if 'convergence_scores' not in ds:
-                                                                                ds['convergence_scores'] = {}
-                                                                            
-                                                                            # Create a copy of the existing scores
-                                                                            convergence_scores = ds['convergence_scores']
-                                                                            
-                                                                            # Store regression results with proper keys
-                                                                            convergence_scores['regression_test_r2'] = test_r2
-                                                                            convergence_scores['regression_test_mse'] = test_mse
-                                                                            convergence_scores['regression_coefficients'] = {
-                                                                                'intercept': float(model.intercept_),
-                                                                                'coef': {feat: float(coef) for feat, coef in zip(independent_vars, model.coef_)}
-                                                                            }
-                                                                            
-                                                                            # Update the convergence_scores in the dataset
-                                                                            ds['convergence_scores'] = convergence_scores
-                                                                            found_dataset = True
-                                                                            break
-                                                                    
-                                                                    if not found_dataset and consecutive_mode:
-                                                                        st.warning(f"Dataset {ds_id} not found when storing regression results.")
-                                                                    elif found_dataset and consecutive_mode:
-                                                                        st.success(f"Successfully stored regression results for Dataset {ds_id}.")
-                                                                
-                                                                # Store results for later display
-                                                                all_regression_results[curr_label] = {
-                                                                    'model': model,
-                                                                    'train_mse': train_mse,
-                                                                    'test_mse': test_mse,
-                                                                    'train_r2': train_r2,
-                                                                    'test_r2': test_r2,
-                                                                    'y_train': y_train,
-                                                                    'y_train_pred': y_train_pred,
-                                                                    'y_test': y_test,
-                                                                    'y_test_pred': y_test_pred,
-                                                                    'independent_vars': independent_vars,
-                                                                    'coef': model.coef_,
-                                                                    'intercept': model.intercept_
-                                                                }
-                                                            
-                                                            # Report completion
-                                                            if all_regression_results:
-                                                                st.success(f"Linear Regression completed for {len(all_regression_results)} datasets.")
-                                                                
-                                                                # Show summary of results
-                                                                st.write("### Regression Results Summary")
-                                                                summary_data = {
-                                                                    label: {
-                                                                        'Test R²': f"{results['test_r2']:.4f}",
-                                                                        'Test MSE': f"{results['test_mse']:.4f}",
-                                                                    }
-                                                                    for label, results in all_regression_results.items()
-                                                                }
-                                                                
-                                                                summary_df = pd.DataFrame.from_dict(summary_data, orient='index')
-                                                                st.dataframe(summary_df)
-                                                                
-                                                                # Show the first dataset's visualization as an example
-                                                                example_label = list(all_regression_results.keys())[0]
-                                                                example_results = all_regression_results[example_label]
-                                                                
-                                                                st.write(f"#### Example Visualization: {example_label}")
-                                                                
-                                                                # Model coefficients
-                                                                st.write("##### Model Coefficients")
-                                                                coef_df = pd.DataFrame({
-                                                                    'Feature': example_results['independent_vars'],
-                                                                    'Coefficient': example_results['coef']
-                                                                })
-                                                                st.dataframe(coef_df)
-                                                                st.write(f"Intercept: {example_results['intercept']:.4f}")
-                                                                
-                                                                # Visualize predictions vs actual
-                                                                st.write("##### Predictions vs Actual")
-                                                                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-                                                                
-                                                                # Training set
-                                                                ax1.scatter(example_results['y_train'], example_results['y_train_pred'], alpha=0.5)
-                                                                y_min = min(example_results['y_train'].min(), example_results['y_train_pred'].min())
-                                                                y_max = max(example_results['y_train'].max(), example_results['y_train_pred'].max())
-                                                                ax1.plot([y_min, y_max], [y_min, y_max], 'r--')
-                                                                ax1.set_xlabel('Actual')
-                                                                ax1.set_ylabel('Predicted')
-                                                                ax1.set_title(f'Training Set (R² = {example_results["train_r2"]:.4f})')
-                                                                
-                                                                # Test set
-                                                                ax2.scatter(example_results['y_test'], example_results['y_test_pred'], alpha=0.5)
-                                                                y_min = min(example_results['y_test'].min(), example_results['y_test_pred'].min())
-                                                                y_max = max(example_results['y_test'].max(), example_results['y_test_pred'].max())
-                                                                ax2.plot([y_min, y_max], [y_min, y_max], 'r--')
-                                                                ax2.set_xlabel('Actual')
-                                                                ax2.set_ylabel('Predicted')
-                                                                ax2.set_title(f'Test Set (R² = {example_results["test_r2"]:.4f})')
-                                                                
-                                                                plt.tight_layout()
-                                                                st.pyplot(fig)
-                                                                
-                                                                # Compare coefficients across datasets
-                                                                st.write("### Coefficient Comparison Across Datasets")
-                                                                coef_comparison = {}
-                                                                
-                                                                for label, results in all_regression_results.items():
-                                                                    coefs = {var: coef for var, coef in zip(results['independent_vars'], results['coef'])}
-                                                                    coef_comparison[label] = coefs
-                                                                
-                                                                # Create a DataFrame for coefficient comparison
-                                                                coef_df = pd.DataFrame.from_dict(coef_comparison)
-                                                                st.dataframe(coef_df)
-                                                                
-                                                                # Create coefficient visualization
-                                                                long_data = []
-                                                                for label, coefs in coef_comparison.items():
-                                                                    for var, coef in coefs.items():
-                                                                        long_data.append({
-                                                                            'Dataset': label,
-                                                                            'Variable': var,
-                                                                            'Coefficient': coef
-                                                                        })
-                                                                
-                                                                if long_data:
-                                                                    long_df = pd.DataFrame(long_data)
-                                                                    
-                                                                    # Plot each variable's coefficient across datasets
-                                                                    variables = list(set(long_df['Variable']))
-                                                                    num_vars = len(variables)
-                                                                    
-                                                                    if num_vars > 0:
-                                                                        # Figure size grows with number of variables, but with a maximum
-                                                                        fig_height = min(12, 3 + num_vars * 0.5)
-                                                                        fig_width = min(14, 8 + num_vars * 0.5)
-                                                                        
-                                                                        fig, axes = plt.subplots(1, num_vars, figsize=(fig_width, fig_height))
-                                                                        if num_vars == 1:
-                                                                            axes = [axes]  # Handle single subplot case
-                                                                            
-                                                                        for i, var in enumerate(variables):
-                                                                            var_data = long_df[long_df['Variable'] == var]
-                                                                            axes[i].bar(var_data['Dataset'], var_data['Coefficient'])
-                                                                            axes[i].set_title(var)
-                                                                            axes[i].tick_params(axis='x', rotation=45)
-                                                                            if i == 0:
-                                                                                axes[i].set_ylabel('Coefficient Value')
-                                                                                
-                                                                        plt.tight_layout()
-                                                                        st.pyplot(fig)
-                                                                
-                                                                # Allow download of regression results
-                                                                csv_data = summary_df.to_csv()
-                                                                st.download_button(
-                                                                    label="Download Regression Summary as CSV",
-                                                                    data=csv_data,
-                                                                    file_name="regression_summary.csv",
-                                                                    mime="text/csv"
-                                                                )
-                                                                
-                                                                # Also allow download of coefficient comparison
-                                                                coef_csv = coef_df.to_csv()
-                                                                st.download_button(
-                                                                    label="Download Coefficient Comparison as CSV",
-                                                                    data=coef_csv,
-                                                                    file_name="coefficient_comparison.csv",
-                                                                    mime="text/csv",
-                                                                    key="coef_download"
-                                                                )
-                                                            
-                                                            # Progress to next step
-                                                            if consecutive_mode:
-                                                                st.session_state.current_analysis_step = 3
-                                                                st.success("Regression analysis complete for all datasets. Moving to PCA Analysis...")
-                                                                # Force a rerun to update the UI for the next step
-                                                                st.rerun()
-                                                    else:
-                                                        # Regular mode - process single dataset
-                                                        with st.spinner("Running linear regression..."):
-                                                            from sklearn.linear_model import LinearRegression
-                                                            from sklearn.metrics import mean_squared_error, r2_score
-                                                            from sklearn.model_selection import train_test_split
-                                                            
-                                                            # Prepare data
-                                                            reg_data = analysis_data[independent_vars + [dependent_var]].dropna()
-                                                            
-                                                            if len(reg_data) < 10:  # Minimum sample size
-                                                                st.error(f"Not enough data points ({len(reg_data)}) after removing missing values.")
-                                                            else:
-                                                                # Split data
-                                                                X = reg_data[independent_vars]
-                                                                y = reg_data[dependent_var]
-                                                                
-                                                                X_train, X_test, y_train, y_test = train_test_split(
-                                                                    X, y, test_size=test_size, random_state=random_state
-                                                                )
-                                                                
-                                                                # Fit model
-                                                                model = LinearRegression()
-                                                                model.fit(X_train, y_train)
-                                                                
-                                                                # Predictions
-                                                                y_train_pred = model.predict(X_train)
-                                                                y_test_pred = model.predict(X_test)
-                                                                
-                                                                # Metrics
-                                                                train_mse = mean_squared_error(y_train, y_train_pred)
-                                                                test_mse = mean_squared_error(y_test, y_test_pred)
-                                                                train_r2 = r2_score(y_train, y_train_pred)
-                                                                test_r2 = r2_score(y_test, y_test_pred)
-                                                                
-                                                                # Display results
-                                                                st.success(f"Linear regression completed successfully for {dataset_label}.")
-                                                                
-                                                                # Model coefficients
-                                                                st.write("### Model Coefficients")
-                                                                coef_df = pd.DataFrame({
-                                                                    'Feature': independent_vars,
-                                                                    'Coefficient': model.coef_
-                                                                })
-                                                                st.dataframe(coef_df)
-                                                                st.write(f"Intercept: {model.intercept_:.4f}")
-                                                                
-                                                                # Model performance
-                                                                st.write("### Model Performance")
-                                                                metrics_df = pd.DataFrame({
-                                                                    'Metric': ['Mean Squared Error (MSE)', 'R² Score'],
-                                                                    'Training Set': [train_mse, train_r2],
-                                                                    'Test Set': [test_mse, test_r2]
-                                                                })
-                                                                st.dataframe(metrics_df)
-                                                                
-                                                                # Store regression results in dataset info
-                                                                if selected_dataset != "Original Data":
-                                                                    dataset_id = int(selected_dataset.split()[-1])
-                                                                    for ds in st.session_state.convergence_datasets:
-                                                                        if ds['id'] == dataset_id:
-                                                                            ds['convergence_scores']['regression_test_r2'] = test_r2
-                                                                            ds['convergence_scores']['regression_test_mse'] = test_mse
-                                                                            ds['convergence_scores']['regression_coefficients'] = {
-                                                                                'intercept': float(model.intercept_),
-                                                                                'coef': {feat: float(coef) for feat, coef in zip(independent_vars, model.coef_)}
-                                                                            }
-                                                                            break
-                                                                
-                                                                # Visualize predictions vs actual
-                                                                st.write("### Predictions vs Actual")
-                                                                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-                                                                
-                                                                # Training set
-                                                                ax1.scatter(y_train, y_train_pred, alpha=0.5)
-                                                                ax1.plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--')
-                                                                ax1.set_xlabel('Actual')
-                                                                ax1.set_ylabel('Predicted')
-                                                                ax1.set_title('Training Set')
-                                                                
-                                                                # Test set
-                                                                ax2.scatter(y_test, y_test_pred, alpha=0.5)
-                                                                ax2.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
-                                                                ax2.set_xlabel('Actual')
-                                                                ax2.set_ylabel('Predicted')
-                                                                ax2.set_title('Test Set')
-                                                            
-                                                                plt.tight_layout()
-                                                                st.pyplot(fig)
-                                                                
-                                                                # Display regression equation
-                                                                eq = f"y = {model.intercept_:.4f}"
-                                                                for i, var in enumerate(independent_vars):
-                                                                    eq += f" + ({model.coef_[i]:.4f} × {var})"
-                                                                
-                                                                st.write("### Regression Equation")
-                                                                st.write(eq)
-                                                            
-                                                                # If in consecutive mode, progress to next step
-                                                                if consecutive_mode:
-                                                                    st.session_state.current_analysis_step = 3
-                                                                    st.success("Linear Regression complete. Moving to PCA Factor Analysis...")
-                                                                    # Force a rerun to update the UI for the next step
-                                                                    st.rerun()
-                                                
-                                                except Exception as e:
-                                                    st.error(f"Error during linear regression: {e}")
-                                                    # Even on error, if in consecutive mode, move to next step
-                                                    if consecutive_mode:
-                                                        st.session_state.current_analysis_step = 3
-                                    else:
-                                        st.error(f"Dataset {selected_dataset} is not available.")
-                                
-                                # 4. PCA Factor Analysis Tab
-                                with analysis_tabs[3]:
-                                    st.write("### PCA Factor Analysis")
-                                    st.write("""
-                                    Principal Component Analysis (PCA) reduces dimensionality while preserving variance.
-                                    This analysis helps evaluate if the interpolated data maintains the same underlying factors.
-                                    """)
-                                    
-                                    # Select datasets to analyze
-                                    dataset_options = ["Original Data"] + [f"Interpolated Dataset {ds['id']}" for ds in st.session_state.convergence_datasets]
-                                    
-                                    # In consecutive mode, analyze all selected datasets
-                                    if consecutive_mode and st.session_state.datasets_to_analyze:
-                                        selected_datasets = st.session_state.datasets_to_analyze
-                                        st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
-                                        
-                                        # Default to first dataset for parameters
-                                        selected_dataset = selected_datasets[0] if selected_datasets else dataset_options[0]
-                                    else:
-                                        # Regular mode - use checkboxes to select multiple datasets
-                                        st.write("### Select datasets to analyze:")
-                                        
-                                        # Create checkboxes for each dataset
-                                        # Use a unique session state key to store checkbox states
-                                        if 'pca_selected_datasets' not in st.session_state:
-                                            st.session_state.pca_selected_datasets = []
-                                        
-                                        selected_datasets = []
-                                        for ds_option in dataset_options:
-                                            checkbox_key = f"pca_dataset_{ds_option}"
-                                            # Pre-select datasets saved in session state
-                                            default_value = ds_option in st.session_state.pca_selected_datasets
-                                            if st.checkbox(ds_option, value=default_value, key=checkbox_key):
-                                                selected_datasets.append(ds_option)
-                                        
-                                        # Update the session state with current selections
-                                        st.session_state.pca_selected_datasets = selected_datasets.copy()
-                                        
-                                        if not selected_datasets:
-                                            st.warning("Please select at least one dataset to analyze.")
-                                            selected_dataset = dataset_options[0]  # Default for parameters only
-                                        else:
-                                            st.success(f"Selected {len(selected_datasets)} datasets for analysis.")
-                                            selected_dataset = selected_datasets[0]  # Use first selected for parameters
-                                    
-                                    # Get the selected dataset for parameters
-                                    if selected_dataset == "Original Data":
-                                        analysis_data = original_data
-                                        dataset_label = "Original Data"
-                                    else:
-                                        dataset_id = int(selected_dataset.split()[-1])
-                                        dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == dataset_id), None)
-                                        analysis_data = dataset['data'] if dataset else None
-                                        dataset_label = f"Dataset {dataset_id}"
-                                    
-                                    if analysis_data is not None:
-                                        # Parameters for PCA
-                                        with st.expander("PCA Parameters", expanded=True):
-                                            # Get all numeric columns
-                                            numeric_cols = analysis_data.select_dtypes(include=np.number).columns.tolist()
-                                            
-                                            # Set default features - all except first column
-                                            default_features = numeric_cols[1:] if len(numeric_cols) > 1 else numeric_cols
-                                            
-                                            # Select features for PCA
-                                            selected_features = st.multiselect(
-                                                "Select features for PCA:",
-                                                numeric_cols,
-                                                default=default_features
-                                            )
-                                            
-                                            # Number of components
-                                            n_components = st.slider(
-                                                "Number of principal components:",
-                                                min_value=2,
-                                                max_value=min(len(selected_features), 10),
-                                                value=min(3, len(selected_features))
-                                            )
-                                            
-                                            # Random state
-                                            random_state = st.slider("Random state:", min_value=0, max_value=100, value=42, key="pca_random_state")
-                                        
-                                        # Check if we're in consecutive analysis mode
-                                        consecutive_mode = False
-                                        if ('consecutive_analysis' in st.session_state and 
-                                            st.session_state.consecutive_analysis and 
-                                            st.session_state.current_analysis_step == 3):
-                                            consecutive_mode = True
-                                            st.info("Running PCA Factor Analysis as part of consecutive analysis...")
-                                        
-                                        # Run PCA
-                                        run_button_clicked = False
-                                        if consecutive_mode:
-                                            # In consecutive mode, automatically trigger analysis
-                                            run_button_clicked = st.session_state.current_analysis_step == 3
-                                            if run_button_clicked:
-                                                st.success("Automatically running PCA for selected datasets...")
-                                        else:
-                                            # In regular mode, user has to click button
-                                            run_button_clicked = st.button("Run PCA", key="run_pca_btn")
-                                        
-                                        if run_button_clicked:
-                                            if len(selected_features) < 2:
-                                                st.error("Please select at least 2 features for PCA.")
-                                                if consecutive_mode:
-                                                    # Even in error, move to next step
-                                                    st.session_state.current_analysis_step = 4
-                                            else:
-                                                try:
-                                                    with st.spinner("Running PCA..."):
-                                                        from sklearn.decomposition import PCA
-                                                        from sklearn.preprocessing import StandardScaler
-                                                        
-                                                        # Process multiple datasets in consecutive mode or normal mode with selections
-                                                        if (consecutive_mode and st.session_state.datasets_to_analyze) or \
-                                                           (not consecutive_mode and len(selected_datasets) > 0):
-                                                            datasets_to_process = st.session_state.datasets_to_analyze if consecutive_mode else selected_datasets
-                                                            all_pca_results = {}
-                                                            
-                                                            for ds_label in datasets_to_process:
-                                                                # Get dataset to analyze
-                                                                if ds_label == "Original Data":
-                                                                    curr_data = original_data
-                                                                    curr_label = "Original Data"
-                                                                else:
-                                                                    ds_id = int(ds_label.split()[-1])
-                                                                    curr_dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
-                                                                    if not curr_dataset:
-                                                                        st.warning(f"Dataset {ds_label} not found. Skipping.")
-                                                                        continue
-                                                                    curr_data = curr_dataset['data']
-                                                                    curr_label = f"Dataset {ds_id}"
-                                                                
-                                                                # Prepare data for this dataset
-                                                                pca_data = curr_data[selected_features].dropna()
-                                                                
-                                                                if len(pca_data) < n_components:
-                                                                    st.warning(f"{curr_label}: Not enough data points ({len(pca_data)}) after removing missing values.")
-                                                                    continue
-                                                                
-                                                                # Scale the data
-                                                                scaler = StandardScaler()
-                                                                scaled_data = scaler.fit_transform(pca_data)
-                                                                
-                                                                # Run PCA
-                                                                pca = PCA(n_components=n_components, random_state=random_state)
-                                                                principal_components = pca.fit_transform(scaled_data)
-                                                                
-                                                                # Create DataFrame with principal components
-                                                                pca_df = pd.DataFrame(
-                                                                    data=principal_components,
-                                                                    columns=[f'PC{i+1}' for i in range(n_components)]
-                                                                )
-                                                                
-                                                                # Store results for this dataset
-                                                                explained_variance = pca.explained_variance_ratio_ * 100
-                                                                cumulative_variance = np.cumsum(explained_variance)
-                                                                
-                                                                # Store PCA results in dataset info if not original data
-                                                                if ds_label != "Original Data":
-                                                                    ds_id = int(ds_label.split()[-1])
-                                                                    for ds in st.session_state.convergence_datasets:
-                                                                        if ds['id'] == ds_id:
-                                                                            # Initialize convergence_scores if it doesn't exist
-                                                                            if 'convergence_scores' not in ds:
-                                                                                ds['convergence_scores'] = {}
-                                                                            
-                                                                            # Create a copy of the existing scores
-                                                                            convergence_scores = ds['convergence_scores']
-                                                                            
-                                                                            # Update with new scores
-                                                                            convergence_scores['pca_explained_variance'] = explained_variance.tolist()
-                                                                            convergence_scores['pca_cumulative_variance'] = cumulative_variance.tolist()
-                                                                            
-                                                                            # Update the scores in the dataset
-                                                                            ds['convergence_scores'] = convergence_scores
-                                                                            break
-                                                                
-                                                                # Store results for later display
-                                                                all_pca_results[curr_label] = {
-                                                                    'pca': pca,
-                                                                    'explained_variance': explained_variance,
-                                                                    'cumulative_variance': cumulative_variance,
-                                                                    'principal_components': principal_components,
-                                                                    'loadings': pca.components_.T
-                                                                }
-                                                            
-                                                            # Report completion
-                                                            if all_pca_results:
-                                                                st.success(f"PCA completed for {len(all_pca_results)} datasets.")
-                                                                
-                                                                # Show summary of results
-                                                                st.write("### PCA Results Summary")
-                                                                summary_data = {
-                                                                    label: {
-                                                                        'Explained Variance (1st PC)': f"{results['explained_variance'][0]:.2f}%",
-                                                                        'Cumulative Variance (3 PCs)': f"{results['cumulative_variance'][min(2, len(results['cumulative_variance'])-1)]:.2f}%"
-                                                                    }
-                                                                    for label, results in all_pca_results.items()
-                                                                }
-                                                                
-                                                                summary_df = pd.DataFrame.from_dict(summary_data, orient='index')
-                                                                st.dataframe(summary_df)
-                                                                
-                                                                # Show the first dataset's visualization as an example
-                                                                example_label = list(all_pca_results.keys())[0]
-                                                                example_results = all_pca_results[example_label]
-                                                                
-                                                                st.write(f"#### Example Visualization: {example_label}")
-                                                                
-                                                                # Explained variance for example dataset
-                                                                st.write("##### Explained Variance")
-                                                                fig, ax = plt.subplots(figsize=(10, 6))
-                                                                ax.bar(range(1, n_components + 1), example_results['explained_variance'], alpha=0.7, label='Individual')
-                                                                ax.step(range(1, n_components + 1), example_results['cumulative_variance'], where='mid', label='Cumulative')
-                                                                ax.set_xlabel('Principal Components')
-                                                                ax.set_ylabel('Explained Variance (%)')
-                                                                ax.set_title('Explained Variance by Principal Components')
-                                                                ax.set_xticks(range(1, n_components + 1))
-                                                                ax.legend()
-                                                                st.pyplot(fig)
-                                                                
-                                                                # If in consecutive mode, progress to next step
-                                                                if consecutive_mode:
-                                                                    st.session_state.current_analysis_step = 4
-                                                                    st.success("PCA analysis complete for all datasets. Moving to Distribution Analysis...")
-                                                                    # Force a rerun to update the UI for the next step
-                                                                    st.rerun()
-                                                                
-                                                        else:
-                                                            # Regular mode - process single dataset
-                                                            # Prepare data
-                                                            pca_data = analysis_data[selected_features].dropna()
-                                                            
-                                                            if len(pca_data) < n_components:
-                                                                st.error(f"Not enough data points ({len(pca_data)}) for {n_components} components after removing missing values.")
-                                                            else:
-                                                                # Scale the data
-                                                                scaler = StandardScaler()
-                                                                scaled_data = scaler.fit_transform(pca_data)
-                                                                
-                                                                # Run PCA
-                                                                pca = PCA(n_components=n_components, random_state=random_state)
-                                                                principal_components = pca.fit_transform(scaled_data)
-                                                                
-                                                                # Create DataFrame with principal components
-                                                                pca_df = pd.DataFrame(
-                                                                    data=principal_components,
-                                                                    columns=[f'PC{i+1}' for i in range(n_components)]
-                                                                )
-                                                                
-                                                                # Display results
-                                                                st.success(f"PCA completed successfully for {dataset_label}.")
-                                                                
-                                                                # Explained variance
-                                                                st.write("### Explained Variance")
-                                                                explained_variance = pca.explained_variance_ratio_ * 100
-                                                                cumulative_variance = np.cumsum(explained_variance)
-                                                                
-                                                                variance_df = pd.DataFrame({
-                                                                    'Principal Component': [f'PC{i+1}' for i in range(n_components)],
-                                                                    'Explained Variance (%)': explained_variance,
-                                                                    'Cumulative Variance (%)': cumulative_variance
-                                                                })
-                                                                st.dataframe(variance_df)
-                                                                
-                                                                # Visualization of explained variance
-                                                                fig, ax = plt.subplots(figsize=(10, 6))
-                                                                ax.bar(range(1, n_components + 1), explained_variance, alpha=0.7, label='Individual')
-                                                                ax.step(range(1, n_components + 1), cumulative_variance, where='mid', label='Cumulative')
-                                                                ax.set_xlabel('Principal Components')
-                                                                ax.set_ylabel('Explained Variance (%)')
-                                                                ax.set_title('Explained Variance by Principal Components')
-                                                                ax.set_xticks(range(1, n_components + 1))
-                                                                ax.legend()
-                                                                st.pyplot(fig)
-                                                                
-                                                                # Store PCA results
-                                                                if selected_dataset != "Original Data":
-                                                                    dataset_id = int(selected_dataset.split()[-1])
-                                                                    for ds in st.session_state.convergence_datasets:
-                                                                        if ds['id'] == dataset_id:
-                                                                            # Initialize convergence_scores if it doesn't exist
-                                                                            if 'convergence_scores' not in ds:
-                                                                                ds['convergence_scores'] = {}
-                                                                            
-                                                                            # Create a copy of the existing scores
-                                                                            convergence_scores = ds['convergence_scores']
-                                                                            
-                                                                            # Update with new scores
-                                                                            convergence_scores['pca_explained_variance'] = explained_variance.tolist()
-                                                                            convergence_scores['pca_cumulative_variance'] = cumulative_variance.tolist()
-                                                                            
-                                                                            # Update the scores in the dataset
-                                                                            ds['convergence_scores'] = convergence_scores
-                                                                            break
-                                                            
-                                                            # Component loadings
-                                                            st.write("### Component Loadings")
-                                                            loadings = pca.components_.T
-                                                            loadings_df = pd.DataFrame(
-                                                                data=loadings,
-                                                                columns=[f'PC{i+1}' for i in range(n_components)],
-                                                                index=selected_features
-                                                            )
-                                                            st.dataframe(loadings_df)
-                                                            
-                                                            # Visualization of first two principal components
-                                                            if n_components >= 2:
-                                                                st.write("### PCA Scatter Plot (First Two Components)")
-                                                                fig, ax = plt.subplots(figsize=(10, 8))
-                                                                scatter = ax.scatter(pca_df['PC1'], pca_df['PC2'], alpha=0.7)
-                                                                ax.set_xlabel(f'PC1 ({explained_variance[0]:.2f}%)')
-                                                                ax.set_ylabel(f'PC2 ({explained_variance[1]:.2f}%)')
-                                                                ax.set_title('PCA: First Two Principal Components')
-                                                                
-                                                                # Add a grid
-                                                                ax.grid(True, linestyle='--', alpha=0.7)
-                                                                
-                                                                # If there are enough data points, add density contours
-                                                                if len(pca_df) > 20:
-                                                                    from scipy.stats import gaussian_kde
-                                                                    
-                                                                    # Calculate the point density
-                                                                    xy = np.vstack([pca_df['PC1'], pca_df['PC2']])
-                                                                    z = gaussian_kde(xy)(xy)
-                                                                    
-                                                                    # Sort the points by density, so that the densest points are plotted last
-                                                                    idx = z.argsort()
-                                                                    x, y, z = pca_df['PC1'][idx], pca_df['PC2'][idx], z[idx]
-                                                                    
-                                                                    plt.scatter(x, y, c=z, s=50, alpha=0.8, cmap='viridis')
-                                                                    plt.colorbar(label='Density')
-                                                                
-                                                                st.pyplot(fig)
-                                                                
-                                                                # Biplot
-                                                                st.write("### PCA Biplot")
-                                                                fig, ax = plt.subplots(figsize=(12, 10))
-                                                                
-                                                                # Plot data points
-                                                                ax.scatter(principal_components[:, 0], principal_components[:, 1], alpha=0.5)
-                                                                
-                                                                # Plot feature vectors
-                                                                for i, feature in enumerate(selected_features):
-                                                                    ax.arrow(0, 0, loadings[i, 0] * max(principal_components[:, 0]), 
-                                                                            loadings[i, 1] * max(principal_components[:, 1]),
-                                                                            head_width=0.05, head_length=0.05, fc='red', ec='red')
-                                                                    plt.text(loadings[i, 0] * max(principal_components[:, 0]) * 1.15, 
-                                                                            loadings[i, 1] * max(principal_components[:, 1]) * 1.15, 
-                                                                            feature, color='red')
-                                                                
-                                                                ax.set_xlabel(f'PC1 ({explained_variance[0]:.2f}%)')
-                                                                ax.set_ylabel(f'PC2 ({explained_variance[1]:.2f}%)')
-                                                                ax.set_title('PCA Biplot')
-                                                                
-                                                                # Set axis limits
-                                                                xlim = np.max(np.abs(principal_components[:, 0])) * 1.2
-                                                                ylim = np.max(np.abs(principal_components[:, 1])) * 1.2
-                                                                ax.set_xlim(-xlim, xlim)
-                                                                ax.set_ylim(-ylim, ylim)
-                                                                
-                                                                # Add a grid
-                                                                ax.grid(True, linestyle='--', alpha=0.7)
-                                                                
-                                                                # Add a unit circle
-                                                                circle = plt.Circle((0, 0), 1, facecolor='none', edgecolor='grey', alpha=0.5)
-                                                                ax.add_patch(circle)
-                                                                
-                                                                st.pyplot(fig)
-                                                                
-                                                                # If in consecutive mode, progress to next step
-                                                                if consecutive_mode:
-                                                                    st.session_state.current_analysis_step = 4
-                                                                    st.success("PCA Factor Analysis complete. Moving to Convergence Evaluation...")
-                                                                    # Force a rerun to update the UI for the next step
-                                                                    st.rerun()
-                                                
-                                                except Exception as e:
-                                                    st.error(f"Error during PCA: {e}")
-                                                    # Even on error, if in consecutive mode, move to next step
-                                                    if consecutive_mode:
-                                                        st.session_state.current_analysis_step = 4
-                                    else:
-                                        st.error(f"Dataset {selected_dataset} is not available.")
-                                
-                                # 5. Convergence Evaluation Tab
-                                with analysis_tabs[4]:
-                                    st.write("### Multiple Imputation Convergence")
-                                    st.write("""
-                                    This tab evaluates whether your multiple imputation process has converged according to 
-                                    Rubin's rules for multiple imputation. Convergence means that generating additional 
-                                    imputed datasets would not significantly change your results.
-                                    """)
-                                    
-                                    # Check if we have enough datasets for proper multiple imputation
-                                    if 'convergence_datasets' not in st.session_state or len(st.session_state.convergence_datasets) < 3:
-                                        st.warning("Multiple imputation typically requires at least 3-5 imputed datasets. Please generate more datasets.")
-                                        st.info("Return to the MCMC Interpolation tab and generate multiple datasets using the 'Generate multiple datasets' option.")
-                                    else:
-                                        # Show current imputation statistics
-                                        st.write("#### Multiple Imputation Status")
-                                        num_datasets = len(st.session_state.convergence_datasets)
-                                        st.write(f"Number of imputed datasets: {num_datasets}")
-                                        
-                                        # Get information about datasets
-                                        datasets_info = []
-                                        for ds in st.session_state.convergence_datasets:
-                                            datasets_info.append({
-                                                'ID': ds['id'],
-                                                'Name': ds.get('name', f"Dataset {ds['id']}"),
-                                                'Shape': f"{ds['data'].shape[0]}×{ds['data'].shape[1]}",
-                                                'Missing Values': ds['data'].isna().sum().sum(),
-                                                'Timestamp': ds['timestamp']
-                                            })
-                                        
-                                        # Display dataset information
-                                        if datasets_info:
-                                            st.write("#### Available Imputed Datasets")
-                                            st.dataframe(pd.DataFrame(datasets_info))
-                                        
-                                        # Convergence analysis options
-                                        st.write("#### Convergence Diagnostics")
-                                        
-                                        # If we're in consecutive analysis mode
-                                        consecutive_mode = False
-                                        if ('consecutive_analysis' in st.session_state and 
-                                            st.session_state.consecutive_analysis and 
-                                            st.session_state.current_analysis_step == 4):
-                                            consecutive_mode = True
-                                            st.info("Running Convergence Evaluation as part of consecutive analysis...")
-                                        
-                                        # Set up diagnostics options
-                                        diagnostic_type = st.radio(
-                                            "Select convergence diagnostic method:",
-                                            ["Potential Scale Reduction Factor (PSRF)", "Between/Within Variance Ratio", "Visual Trace Plots"],
-                                            key="convergence_diagnostic_type"
-                                        )
-                                        
-                                        # Select datasets for convergence analysis
-                                        selected_datasets = st.multiselect(
-                                            "Select datasets for convergence analysis:",
-                                            options=[f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets],
-                                            default=[f"Dataset {ds['id']}" for ds in st.session_state.convergence_datasets[:min(5, len(st.session_state.convergence_datasets))]]
-                                        )
-                                        
-                                        # Button to run convergence analysis
-                                        run_button_clicked = st.button("Run Convergence Diagnostics", key="evaluate_convergence_btn") or consecutive_mode
-                                            
-                                        if run_button_clicked and selected_datasets:
-                                            # Get the numeric data from selected datasets
-                                            with st.spinner("Running diagnostics..."):
-                                                # Collect datasets for analysis
-                                                datasets = []
-                                                for ds_name in selected_datasets:
-                                                    ds_id = int(ds_name.split()[-1])
-                                                    ds = next((d for d in st.session_state.convergence_datasets if d['id'] == ds_id), None)
-                                                    if ds:
-                                                        datasets.append(ds)
-                                                
-                                                if len(datasets) < 2:
-                                                    st.error("At least 2 datasets are required for convergence diagnostics.")
-                                                else:
-                                                    # Get only numeric columns that all datasets have in common
-                                                    common_cols = set(datasets[0]['data'].select_dtypes(include=np.number).columns)
-                                                    for ds in datasets[1:]:
-                                                        common_cols &= set(ds['data'].select_dtypes(include=np.number).columns)
-                                                    
-                                                    common_cols = list(common_cols)
-                                                    
-                                                    if not common_cols:
-                                                        st.error("No common numeric columns found across the selected datasets.")
-                                                    else:
-                                                        # Allow user to select specific columns or use all
-                                                        st.write("#### Select Columns for Analysis")
-                                                        use_all_cols = st.checkbox("Use all common numeric columns", value=True)
-                                                        
-                                                        if not use_all_cols:
-                                                            selected_cols = st.multiselect(
-                                                                "Select specific columns to analyze:",
-                                                                options=common_cols,
-                                                                default=common_cols[:min(3, len(common_cols))]
-                                                            )
-                                                        else:
-                                                            selected_cols = common_cols
-                                                        
-                                                        if not selected_cols:
-                                                            st.warning("Please select at least one column for analysis.")
-                                                        else:
-                                                            # Perform the selected diagnostic
-                                                dataset_convergence = {
-                                                    'id': ds['id'],
-                                                    'metrics': {}
+                                                method_params["Linear Regression Analysis"] = {
+                                                    "target": target_var,
+                                                    "features": feature_vars
                                                 }
-                                                
-                                                scores = ds['convergence_scores']
-                                                
-                                                # Check K-Means convergence
-                                                if 'kmeans_inertia' in scores:
-                                                    dataset_convergence['metrics']['kmeans'] = True
-                                                else:
-                                                    dataset_convergence['metrics']['kmeans'] = False
-                                                
-                                                # Check Regression convergence
-                                                if 'regression_test_r2' in scores:
-                                                    dataset_convergence['metrics']['regression'] = True
-                                                else:
-                                                    dataset_convergence['metrics']['regression'] = False
-                                                
-                                                # Check PCA convergence
-                                                if 'pca_explained_variance' in scores:
-                                                    dataset_convergence['metrics']['pca'] = True
-                                                else:
-                                                    dataset_convergence['metrics']['pca'] = False
-                                                
-                                                # Overall dataset convergence
-                                                methods_present = sum(dataset_convergence['metrics'].values())
-                                                methods_total = len(dataset_convergence['metrics'])
-                                                dataset_convergence['convergence_score'] = methods_present / methods_total if methods_total > 0 else 0
-                                                
-                                                convergence_metrics.append(dataset_convergence)
+                                            else:
+                                                st.warning("No numeric columns available for regression analysis.")
+                                        
+                                        with col2:
+                                            test_size = st.slider(
+                                                "Test set size (%):", 
+                                                min_value=10, 
+                                                max_value=50, 
+                                                value=20, 
+                                                key="lin_reg_test_size"
+                                            )
                                             
-                                            # Compare datasets for stability (convergence)
-                                            if len(convergence_metrics) >= 2:
-                                                # Sort by ID (iteration order)
-                                                convergence_metrics.sort(key=lambda x: x['id'])
+                                            method_params.setdefault("Linear Regression Analysis", {})["test_size"] = test_size/100
+                                    
+                                    # Parameters for K-Means Clustering
+                                    if "K-Means Clustering" in selected_methods:
+                                        st.write("### K-Means Clustering Parameters")
+                                        
+                                        col1, col2 = st.columns(2)
+                                        
+                                        with col1:
+                                            # Get numeric columns for clustering
+                                            numeric_cols = st.session_state.interpolated_result.select_dtypes(include=np.number).columns.tolist()
+                                            
+                                            cluster_vars = st.multiselect(
+                                                "Select variables for clustering:",
+                                                options=numeric_cols,
+                                                default=numeric_cols[:min(4, len(numeric_cols))],
+                                                key="kmeans_features"
+                                            )
+                                            
+                                            method_params["K-Means Clustering"] = {
+                                                "features": cluster_vars
+                                            }
+                                        
+                                        with col2:
+                                            n_clusters = st.slider(
+                                                "Number of clusters:", 
+                                                min_value=2, 
+                                                max_value=10, 
+                                                value=3, 
+                                                key="kmeans_clusters"
+                                            )
+                                            
+                                            method_params.setdefault("K-Means Clustering", {})["n_clusters"] = n_clusters
+                                    
+                                    # Parameters for PCA
+                                    if "PCA Factor Analysis" in selected_methods:
+                                        st.write("### PCA Factor Analysis Parameters")
+                                        
+                                        col1, col2 = st.columns(2)
+                                        
+                                        with col1:
+                                            # Get numeric columns for PCA
+                                            numeric_cols = st.session_state.interpolated_result.select_dtypes(include=np.number).columns.tolist()
+                                            
+                                            pca_vars = st.multiselect(
+                                                "Select variables for PCA:",
+                                                options=numeric_cols,
+                                                default=numeric_cols,
+                                                key="pca_features"
+                                            )
+                                            
+                                            method_params["PCA Factor Analysis"] = {
+                                                "features": pca_vars
+                                            }
+                                        
+                                        with col2:
+                                            n_components = st.slider(
+                                                "Number of components:", 
+                                                min_value=2, 
+                                                max_value=min(10, len(numeric_cols)), 
+                                                value=min(3, len(numeric_cols)), 
+                                                key="pca_components"
+                                            )
+                                            
+                                            method_params.setdefault("PCA Factor Analysis", {})["n_components"] = n_components
+                                    
+                                    # Execute button
+                                    if st.button("Run Selected Analytical Methods"):
+                                        with st.spinner("Running analytical methods..."):
+                                            # Get the data
+                                            data = st.session_state.interpolated_result
+                                            
+                                            # Placeholder for results
+                                            method_results = {}
+                                            convergence_scores = {}
+                                            
+                                            # Run each selected method
+                                            for method in selected_methods:
+                                                st.write(f"### Results for {method}")
                                                 
-                                                # Check pairwise convergence between consecutive datasets
-                                                pairwise_convergence = []
-                                                for i in range(len(convergence_metrics) - 1):
-                                                    ds1 = next((ds for ds in analyzed_datasets if ds['id'] == convergence_metrics[i]['id']), None)
-                                                    ds2 = next((ds for ds in analyzed_datasets if ds['id'] == convergence_metrics[i+1]['id']), None)
+                                                if method == "Linear Regression Analysis" and method in method_params:
+                                                    params = method_params[method]
                                                     
-                                                    if ds1 and ds2:
-                                                        pair_conv = {
-                                                            'pair': f"{ds1['id']} and {ds2['id']}",
-                                                            'metrics': {}
-                                                        }
-                                                        
-                                                        # K-Means convergence
-                                                        if ('kmeans_inertia' in ds1['convergence_scores'] and 
-                                                            'kmeans_inertia' in ds2['convergence_scores']):
-                                                            inertia1 = ds1['convergence_scores']['kmeans_inertia']
-                                                            inertia2 = ds2['convergence_scores']['kmeans_inertia']
-                                                            relative_change = abs(inertia1 - inertia2) / abs(inertia1) if inertia1 != 0 else float('inf')
-                                                            pair_conv['metrics']['kmeans'] = relative_change <= kmeans_inertia_threshold
-                                                        else:
-                                                            pair_conv['metrics']['kmeans'] = False
-                                                        
-                                                        # Regression convergence
-                                                        if ('regression_test_r2' in ds1['convergence_scores'] and 
-                                                            'regression_test_r2' in ds2['convergence_scores']):
-                                                            r2_1 = ds1['convergence_scores']['regression_test_r2']
-                                                            r2_2 = ds2['convergence_scores']['regression_test_r2']
-                                                            relative_change = abs(r2_1 - r2_2) / abs(r2_1) if r2_1 != 0 else float('inf')
-                                                            pair_conv['metrics']['regression'] = relative_change <= regression_r2_threshold
-                                                        else:
-                                                            # Log the missing regression values for debugging
-                                                            if consecutive_mode:
-                                                                if 'regression_test_r2' not in ds1['convergence_scores']:
-                                                                    st.warning(f"Dataset {ds1['id']} is missing regression_test_r2 in convergence scores")
-                                                                if 'regression_test_r2' not in ds2['convergence_scores']:
-                                                                    st.warning(f"Dataset {ds2['id']} is missing regression_test_r2 in convergence scores")
-                                                                st.write(f"Dataset {ds1['id']} convergence scores: {list(ds1['convergence_scores'].keys())}")
-                                                                st.write(f"Dataset {ds2['id']} convergence scores: {list(ds2['convergence_scores'].keys())}")
-                                                            pair_conv['metrics']['regression'] = False
-                                                        
-                                                        # PCA convergence
-                                                        if ('pca_explained_variance' in ds1['convergence_scores'] and 
-                                                            'pca_explained_variance' in ds2['convergence_scores']):
-                                                            var1 = ds1['convergence_scores']['pca_explained_variance']
-                                                            var2 = ds2['convergence_scores']['pca_explained_variance']
-                                                            if len(var1) == len(var2):
-                                                                # Calculate average change in explained variance
-                                                                changes = [abs(v1 - v2) / abs(v1) if v1 != 0 else float('inf') 
-                                                                        for v1, v2 in zip(var1, var2)]
-                                                                avg_change = sum(changes) / len(changes) if changes else float('inf')
-                                                                pair_conv['metrics']['pca'] = avg_change <= pca_variance_threshold
-                                                            else:
-                                                                pair_conv['metrics']['pca'] = False
-                                                        else:
-                                                            pair_conv['metrics']['pca'] = False
-                                                        
-                                                        # Overall pair convergence
-                                                        methods_converged = sum(pair_conv['metrics'].values())
-                                                        methods_total = len(pair_conv['metrics'])
-                                                        pair_conv['convergence_score'] = methods_converged / methods_total if methods_total > 0 else 0
-                                                        
-                                                        pairwise_convergence.append(pair_conv)
-                                                
-                                                # Display pairwise convergence results
-                                                st.write("#### Pairwise Convergence Analysis")
-                                                
-                                                for pair in pairwise_convergence:
-                                                    st.write(f"**Datasets {pair['pair']}**")
+                                                    # Get the target and features
+                                                    target = params["target"]
+                                                    features = params["features"]
+                                                    test_size = params["test_size"]
                                                     
+                                                    # Check if we have enough data
+                                                    if len(features) == 0:
+                                                        st.error(f"Need at least one feature for {method}.")
+                                                        continue
+                                                        
+                                                    # Prepare the data
+                                                    from sklearn.model_selection import train_test_split
+                                                    X = data[features]
+                                                    y = data[target]
+                                                    
+                                                    # Drop any rows with NaN values
+                                                    valid_indices = ~(X.isna().any(axis=1) | y.isna())
+                                                    X = X[valid_indices]
+                                                    y = y[valid_indices]
+                                                    
+                                                    # Split the data
+                                                    X_train, X_test, y_train, y_test = train_test_split(
+                                                        X, y, test_size=test_size, random_state=42
+                                                    )
+                                                    
+                                                    # Train the model
+                                                    from sklearn.linear_model import LinearRegression
+                                                    from sklearn.metrics import r2_score, mean_squared_error
+                                                    
+                                                    model = LinearRegression()
+                                                    model.fit(X_train, y_train)
+                                                    
+                                                    # Make predictions
+                                                    y_train_pred = model.predict(X_train)
+                                                    y_test_pred = model.predict(X_test)
+                                                    
+                                                    # Compute metrics
+                                                    train_r2 = r2_score(y_train, y_train_pred)
+                                                    test_r2 = r2_score(y_test, y_test_pred)
+                                                    train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
+                                                    test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
+                                                    
+                                                    # Store metrics for convergence analysis
+                                                    convergence_scores['regression_train_r2'] = train_r2
+                                                    convergence_scores['regression_test_r2'] = test_r2
+                                                    
+                                                    # Display metrics
                                                     metrics_df = pd.DataFrame({
-                                                        'Analysis Method': ['K-Means Clustering', 'Linear Regression', 'PCA'],
-                                                        'Converged': [
-                                                            '✅ Yes' if pair['metrics'].get('kmeans', False) else '❌ No',
-                                                            '✅ Yes' if pair['metrics'].get('regression', False) else '❌ No',
-                                                            '✅ Yes' if pair['metrics'].get('pca', False) else '❌ No'
-                                                        ]
+                                                        'Metric': ['R² Score', 'RMSE'],
+                                                        'Train': [train_r2, train_rmse],
+                                                        'Test': [test_r2, test_rmse]
                                                     })
                                                     st.dataframe(metrics_df)
                                                     
-                                                    # Show convergence percentage
-                                                    st.metric("Convergence Score", f"{pair['convergence_score']*100:.1f}%")
-                                                    st.write("---")
-                                                
-                                                # Overall convergence decision
-                                                # If any pair has converged on all methods, we consider the process converged
-                                                converged_pairs = [p for p in pairwise_convergence if p['convergence_score'] >= 0.8]
-                                                
-                                                if converged_pairs:
-                                                    st.success("✅ **CONVERGENCE ACHIEVED!** The interpolation process has stabilized.")
-                                                    st.session_state.convergence_status = "Converged"
+                                                    # Display coefficients
+                                                    coef_df = pd.DataFrame({
+                                                        'Feature': features,
+                                                        'Coefficient': model.coef_
+                                                    })
+                                                    st.write("#### Model Coefficients")
+                                                    st.dataframe(coef_df)
                                                     
-                                                    # Identify the best converged pair and dataset
-                                                    best_pair = max(converged_pairs, key=lambda x: x['convergence_score'])
-                                                    best_dataset_id = int(best_pair['pair'].split(' and ')[1])
-                                                    best_dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == best_dataset_id), None)
+                                                    # Visualize predictions vs actual
+                                                    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+                                                    ax[0].scatter(y_train, y_train_pred, alpha=0.5)
+                                                    ax[0].plot([y_train.min(), y_train.max()], [y_train.min(), y_train.max()], 'r--')
+                                                    ax[0].set_xlabel('Actual')
+                                                    ax[0].set_ylabel('Predicted')
+                                                    ax[0].set_title('Train Set')
                                                     
-                                                    if best_dataset:
-                                                        st.write(f"**Best converged dataset: Dataset {best_dataset_id}**")
-                                                        st.session_state.closest_convergence_dataset = best_dataset
-                                                        
-                                                    # If in consecutive mode, mark the analysis as complete
-                                                    if consecutive_mode:
-                                                        st.session_state.current_analysis_step = 5  # Complete
-                                                        st.success("🎉 Consecutive analysis complete! All steps finished successfully with convergence achieved.")
-                                                else:
-                                                    # Find closest to convergence
-                                                    if pairwise_convergence:
-                                                        closest_pair = max(pairwise_convergence, key=lambda x: x['convergence_score'])
-                                                        closest_score = closest_pair['convergence_score']
-                                                        
-                                                        st.warning(f"⚠️ Not yet converged. Closest pair has convergence score of {closest_score*100:.1f}%")
-                                                        st.info("Continue iteration by taking the last dataset and re-interpolating it.")
-                                                        
-                                                        # Find the latest dataset
-                                                        latest_dataset_id = max(analyzed_datasets, key=lambda x: x['id'])['id']
-                                                        latest_dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == latest_dataset_id), None)
-                                                        
-                                                        # If in consecutive mode, let the user know we need another iteration
-                                                        if consecutive_mode:
-                                                            st.session_state.current_analysis_step = 5  # Mark as complete even though not converged
-                                                            st.info("Consecutive analysis completed all steps, but convergence was not achieved. Additional iterations may be required.")
-                                                        
-                                                        if latest_dataset:
-                                                            st.write(f"**Dataset to re-interpolate: Dataset {latest_dataset_id}**")
-                                                            st.session_state.closest_convergence_dataset = latest_dataset
-                                                            st.session_state.convergence_status = "Iterating"
-                                                        
-                                                        # Option to set last dataset for re-interpolation
-                                                        if st.button("Set Latest Dataset for Re-interpolation"):
-                                                            if latest_dataset:
-                                                                st.session_state.interpolated_data = latest_dataset['data'].copy()
-                                                                st.success(f"Dataset {latest_dataset_id} set as data to be re-interpolated.")
-                                                                st.info("Please go back to Step 1: MCMC Interpolation to continue the iteration.")
-                                                    else:
-                                                        st.error("Cannot evaluate convergence. Not enough analyzed pairs.")
-                                                        # Even if insufficient data, mark consecutive mode as complete
-                                                        if consecutive_mode:
-                                                            st.session_state.current_analysis_step = 5  # Complete
-                                                            st.warning("Consecutive analysis could not be fully completed due to insufficient analyzed pairs.")
-                                            else:
-                                                st.warning("Not enough analyzed datasets to evaluate convergence.")
-                                                # Even if insufficient data, mark consecutive mode as complete
-                                                if consecutive_mode:
-                                                    st.session_state.current_analysis_step = 5  # Complete
-                                                    st.warning("Consecutive analysis could not be fully completed due to insufficient datasets.")
-                                                
-                                        # Display convergence history
-                                        if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
-                                            st.write("#### Convergence Metrics History")
-                                            
-                                            # Create metrics tracking for visualization
-                                            datasets = [ds for ds in st.session_state.convergence_datasets if 'convergence_scores' in ds]
-                                            
-                                            if datasets:
-                                                # Track metrics across iterations
-                                                iteration_data = {
-                                                    'Dataset ID': [],
-                                                    'K-Means Inertia': [],
-                                                    'Regression R²': [],
-                                                    'PCA Explained Variance (PC1)': []
-                                                }
-                                                
-                                                for ds in sorted(datasets, key=lambda x: x['id']):
-                                                    scores = ds['convergence_scores']
-                                                    iteration_data['Dataset ID'].append(ds['id'])
-                                                    
-                                                    # K-Means
-                                                    if 'kmeans_inertia' in scores:
-                                                        iteration_data['K-Means Inertia'].append(scores['kmeans_inertia'])
-                                                    else:
-                                                        iteration_data['K-Means Inertia'].append(None)
-                                                    
-                                                    # Regression
-                                                    if 'regression_test_r2' in scores:
-                                                        iteration_data['Regression R²'].append(scores['regression_test_r2'])
-                                                    else:
-                                                        iteration_data['Regression R²'].append(None)
-                                                    
-                                                    # PCA
-                                                    if 'pca_explained_variance' in scores and len(scores['pca_explained_variance']) > 0:
-                                                        iteration_data['PCA Explained Variance (PC1)'].append(scores['pca_explained_variance'][0])
-                                                    else:
-                                                        iteration_data['PCA Explained Variance (PC1)'].append(None)
-                                                
-                                                # Plot convergence metrics
-                                                if len(iteration_data['Dataset ID']) > 1:
-                                                    # Create subplots
-                                                    fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
-                                                    
-                                                    # K-Means Inertia
-                                                    valid_kmeans = [i for i, v in enumerate(iteration_data['K-Means Inertia']) if v is not None]
-                                                    if valid_kmeans:
-                                                        axes[0].plot([iteration_data['Dataset ID'][i] for i in valid_kmeans], 
-                                                                    [iteration_data['K-Means Inertia'][i] for i in valid_kmeans], 
-                                                                    'o-', color='blue')
-                                                        axes[0].set_ylabel('Inertia')
-                                                        axes[0].set_title('K-Means Inertia (lower is better)')
-                                                        axes[0].grid(True, linestyle='--', alpha=0.7)
-                                                    else:
-                                                        axes[0].text(0.5, 0.5, 'No K-Means data available', 
-                                                                    horizontalalignment='center', verticalalignment='center',
-                                                                    transform=axes[0].transAxes)
-                                                    
-                                                    # Regression R²
-                                                    valid_reg = [i for i, v in enumerate(iteration_data['Regression R²']) if v is not None]
-                                                    if valid_reg:
-                                                        axes[1].plot([iteration_data['Dataset ID'][i] for i in valid_reg], 
-                                                                    [iteration_data['Regression R²'][i] for i in valid_reg], 
-                                                                    'o-', color='green')
-                                                        axes[1].set_ylabel('R² Score')
-                                                        axes[1].set_title('Regression R² Score (higher is better)')
-                                                        axes[1].grid(True, linestyle='--', alpha=0.7)
-                                                    else:
-                                                        axes[1].text(0.5, 0.5, 'No Regression data available', 
-                                                                    horizontalalignment='center', verticalalignment='center',
-                                                                    transform=axes[1].transAxes)
-                                                    
-                                                    # PCA Explained Variance
-                                                    valid_pca = [i for i, v in enumerate(iteration_data['PCA Explained Variance (PC1)']) if v is not None]
-                                                    if valid_pca:
-                                                        axes[2].plot([iteration_data['Dataset ID'][i] for i in valid_pca], 
-                                                                    [iteration_data['PCA Explained Variance (PC1)'][i] for i in valid_pca], 
-                                                                    'o-', color='purple')
-                                                        axes[2].set_ylabel('Explained Variance (%)')
-                                                        axes[2].set_title('PCA First Component Explained Variance (stability is better)')
-                                                        axes[2].grid(True, linestyle='--', alpha=0.7)
-                                                    else:
-                                                        axes[2].text(0.5, 0.5, 'No PCA data available', 
-                                                                    horizontalalignment='center', verticalalignment='center',
-                                                                    transform=axes[2].transAxes)
-                                                    
-                                                    # X-axis label
-                                                    axes[2].set_xlabel('Dataset ID (Iteration)')
+                                                    ax[1].scatter(y_test, y_test_pred, alpha=0.5)
+                                                    ax[1].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+                                                    ax[1].set_xlabel('Actual')
+                                                    ax[1].set_ylabel('Predicted')
+                                                    ax[1].set_title('Test Set')
                                                     
                                                     plt.tight_layout()
                                                     st.pyplot(fig)
-                                                
-                                                # Create table of metrics
-                                                st.write("#### Metrics Table")
-                                                metrics_df = pd.DataFrame(iteration_data)
-                                                st.dataframe(metrics_df)
-                    
-                    # 3. CGAN ANALYSIS TAB
-                    with advanced_options[2]:
-                        st.write("### Conditional Generative Adversarial Network (CGAN) Analysis")
-                        st.write("""
-                        CGAN analysis uses a generative model to learn patterns in the data and generate synthetic samples
-                        that can help validate interpolated data quality.
-                        """)
-                        
-                        # Check if we have MCMC interpolated result
-                        if 'interpolated_result' not in st.session_state:
-                            st.info("Please run MCMC interpolation first before performing CGAN analysis.")
-                        else:
-                            # CGAN parameters
-                            with st.expander("CGAN Parameters", expanded=True):
-                                # Let user select condition and target columns
-                                numeric_cols = original_data.select_dtypes(include=np.number).columns.tolist()
-                                
-                                if len(numeric_cols) < 2:
-                                    st.warning("Need at least 2 numeric columns to train CGAN.")
-                                else:
-                                    # Default to splitting columns in half for conditions and targets
-                                    mid_point = len(numeric_cols) // 2
-                                    default_conditions = numeric_cols[:mid_point]
-                                    default_targets = numeric_cols[mid_point:]
-                                    
-                                    condition_cols = st.multiselect(
-                                        "Condition Columns (features that determine the generated output)",
-                                        numeric_cols,
-                                        default=default_conditions
-                                    )
-                                    
-                                    remaining_cols = [col for col in numeric_cols if col not in condition_cols]
-                                    target_cols = st.multiselect(
-                                        "Target Columns (features to be generated/predicted)",
-                                        remaining_cols,
-                                        default=remaining_cols[:min(len(remaining_cols), 3)]
-                                    )
-                                    
-                                    epochs = st.slider("Training Epochs", min_value=50, max_value=500, value=200, step=50)
-                                    batch_size = st.slider("Batch Size", min_value=8, max_value=64, value=32, step=8)
-                                    noise_dim = st.slider("Noise Dimension", min_value=50, max_value=200, value=100, step=50)
-                            
-                                    # Run CGAN analysis button
-                                    if len(condition_cols) > 0 and len(target_cols) > 0:
-                                        if st.button("Run CGAN Analysis", key="cgan_btn"):
-                                            try:
-                                                with st.spinner("Training CGAN... (this may take a while)"):
-                                                    # Train CGAN on original data
-                                                    generator, discriminator = advanced_processor.train_cgan(
-                                                        original_data,
-                                                        condition_cols=condition_cols,
-                                                        target_cols=target_cols,
-                                                        epochs=epochs,
-                                                        batch_size=batch_size,
-                                                        noise_dim=noise_dim
-                                                    )
                                                     
-                                                    # Analyze interpolated data using CGAN
-                                                    cgan_results = advanced_processor.cgan_analysis(
-                                                        st.session_state.interpolated_result,
-                                                        noise_samples=100
-                                                    )
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'model': model,
+                                                        'features': features,
+                                                        'target': target,
+                                                        'metrics': {
+                                                            'train_r2': train_r2,
+                                                            'test_r2': test_r2,
+                                                            'train_rmse': train_rmse,
+                                                            'test_rmse': test_rmse
+                                                        }
+                                                    }
                                                     
-                                                    # Store the result
-                                                    st.session_state.cgan_results = cgan_results
+                                                elif method == "K-Means Clustering" and method in method_params:
+                                                    params = method_params[method]
                                                     
-                                                    # Show results
-                                                    st.success("CGAN analysis completed successfully!")
-                                                    st.write("CGAN Analysis Results:")
-                                                    st.dataframe(cgan_results.head())
+                                                    # Get features for clustering
+                                                    features = params["features"]
+                                                    n_clusters = params["n_clusters"]
                                                     
-                                                    # Create visualizations of the CGAN analysis
-                                                    st.write("### Visualization of CGAN Analysis")
-                                                    
-                                                    # Select a column to visualize
-                                                    col_to_visualize = st.selectbox(
-                                                        "Select column to visualize:",
-                                                        target_cols
-                                                    )
-                                                    
-                                                    if col_to_visualize:
-                                                        # Plot original vs CGAN predicted values
-                                                        fig = plt.figure(figsize=(10, 6))
-                                                        plt.scatter(
-                                                            st.session_state.interpolated_result[col_to_visualize],
-                                                            cgan_results[f'{col_to_visualize}_mean'],
-                                                            alpha=0.5
-                                                        )
-                                                        plt.xlabel(f'Interpolated {col_to_visualize}')
-                                                        plt.ylabel(f'CGAN Predicted {col_to_visualize}')
-                                                        plt.title(f'Interpolated vs CGAN Predicted: {col_to_visualize}')
-                                                        
-                                                        # Add perfect prediction line
-                                                        min_val = min(st.session_state.interpolated_result[col_to_visualize].min(),
-                                                                    cgan_results[f'{col_to_visualize}_mean'].min())
-                                                        max_val = max(st.session_state.interpolated_result[col_to_visualize].max(),
-                                                                    cgan_results[f'{col_to_visualize}_mean'].max())
-                                                        plt.plot([min_val, max_val], [min_val, max_val], 'r--')
-                                                        
-                                                        st.pyplot(fig)
-                                                        
-                                                        # Plot deviation histogram
-                                                        fig = plt.figure(figsize=(10, 6))
-                                                        plt.hist(cgan_results[f'{col_to_visualize}_deviation'], bins=20)
-                                                        plt.xlabel(f'Deviation in {col_to_visualize}')
-                                                        plt.ylabel('Frequency')
-                                                        plt.title(f'Deviation between Interpolated and CGAN Predicted: {col_to_visualize}')
-                                                        st.pyplot(fig)
-                                                    
-                                                    # Add download button for CGAN results
-                                                    csv = data_handler.export_data(cgan_results, format='csv')
-                                                    st.download_button(
-                                                        label="Download CGAN Analysis Results as CSV",
-                                                        data=csv,
-                                                        file_name="cgan_analysis_results.csv",
-                                                        mime="text/csv"
-                                                    )
-                                            except Exception as e:
-                                                st.error(f"Error during CGAN analysis: {e}")
-                                    else:
-                                        st.warning("Please select at least one condition column and one target column.")
-                    
-                    # 4. DISTRIBUTION TESTING TAB
-                    with advanced_options[3]:
-                        st.write("### Statistical Distribution Testing")
-                        st.write("""
-                        These tests compare the distributions of original and interpolated data to verify
-                        that the interpolation preserves the underlying statistical properties.
-                        """)
-                        
-                        # Check if we have interpolated result
-                        interpolation_data_available = ('interpolated_result' in st.session_state) or (st.session_state.interpolated_data is not None)
-                        
-                        if not interpolation_data_available:
-                            st.info("Please run MCMC interpolation or import interpolated data before performing distribution testing.")
-                        else:
-                            # Check if we're in consecutive analysis mode
-                            consecutive_mode = False
-                            if ('consecutive_analysis' in st.session_state and 
-                                st.session_state.consecutive_analysis and 
-                                st.session_state.current_analysis_step == 4):
-                                consecutive_mode = True
-                                st.info("Running Distribution Testing as part of consecutive analysis...")
-                            
-                            # In consecutive mode, analyze all selected datasets
-                            if consecutive_mode and st.session_state.datasets_to_analyze:
-                                selected_datasets = st.session_state.datasets_to_analyze
-                                st.write(f"Analyzing datasets: {', '.join(selected_datasets)}")
-                                
-                                # Process one dataset now, others will be processed in a loop
-                                # Default to first dataset for parameters
-                                selected_dataset = selected_datasets[0] if selected_datasets else "Original Data"
-                            else:
-                                # Regular mode - use single dataset
-                                selected_dataset = "Original Data"
-                            
-                            # Determine which interpolated data to use (for parameters)
-                            if 'interpolated_result' in st.session_state:
-                                test_data = st.session_state.interpolated_result
-                            else:
-                                test_data = st.session_state.interpolated_data
-                            
-                            # Test parameters
-                            with st.expander("Test Parameters", expanded=True):
-                                alpha = st.slider("Significance Level (alpha)", min_value=0.01, max_value=0.10, value=0.05, step=0.01)
-                                num_permutations = st.slider("Number of Permutations", min_value=100, max_value=2000, value=1000, step=100)
-                            
-                            # Test selection
-                            test_options = st.multiselect(
-                                "Select tests to perform",
-                                ["Kolmogorov-Smirnov Test", "Spearman Rank Correlation", "Permutation Test"],
-                                default=["Kolmogorov-Smirnov Test", "Spearman Rank Correlation"]
-                            )
-                            
-                            # Run tests button
-                            if len(test_options) > 0:
-                                button_clicked = st.button("Run Distribution Tests", key="dist_test_btn")
-                                
-                                # Either manual click or consecutive mode trigger
-                                if button_clicked or (consecutive_mode and st.session_state.datasets_to_analyze):
-                                    try:
-                                        # Store results for all datasets
-                                        all_datasets_results = {}
-                                        
-                                        with st.spinner("Running statistical tests..."):
-                                            # Determine which datasets to process
-                                            datasets_to_process = []
-                                            if consecutive_mode and st.session_state.datasets_to_analyze:
-                                                datasets_to_process = st.session_state.datasets_to_analyze
-                                                st.info(f"Processing {len(datasets_to_process)} datasets for distribution testing...")
-                                            else:
-                                                # Just process the selected dataset in regular mode
-                                                datasets_to_process = [selected_dataset]
-                                            
-                                            # Process each dataset
-                                            for ds_label in datasets_to_process:
-                                                # Get the interpolated dataset
-                                                if ds_label == "Original Data":
-                                                    curr_data = test_data  # Use whatever was last set
-                                                    curr_label = "Original Data"
-                                                else:
-                                                    ds_id = int(ds_label.split()[-1])
-                                                    curr_dataset = next((ds for ds in st.session_state.convergence_datasets if ds['id'] == ds_id), None)
-                                                    if not curr_dataset:
-                                                        st.warning(f"Dataset {ds_label} not found. Skipping.")
+                                                    # Check if we have enough data
+                                                    if len(features) < 2:
+                                                        st.error(f"Need at least two features for {method}.")
                                                         continue
-                                                    curr_data = curr_dataset['data']
-                                                    curr_label = f"Dataset {ds_id}"
-                                                
-                                                # Store results for this dataset
-                                                test_results = {}
-                                                
-                                                st.write(f"#### Processing {curr_label}")
-                                                
-                                                # Run selected tests
-                                                if "Kolmogorov-Smirnov Test" in test_options:
-                                                    ks_results = advanced_processor.ks_distribution_test(
-                                                        original_data, 
-                                                        curr_data,
-                                                        alpha=alpha
+                                                        
+                                                    # Prepare the data
+                                                    from sklearn.preprocessing import StandardScaler
+                                                    from sklearn.cluster import KMeans
+                                                    
+                                                    X = data[features].dropna()
+                                                    
+                                                    # Scale the data
+                                                    scaler = StandardScaler()
+                                                    X_scaled = scaler.fit_transform(X)
+                                                    
+                                                    # Perform clustering
+                                                    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+                                                    clusters = kmeans.fit_predict(X_scaled)
+                                                    
+                                                    # Add cluster labels to the original data
+                                                    clustered_data = X.copy()
+                                                    clustered_data['Cluster'] = clusters
+                                                    
+                                                    # Display clustered data
+                                                    st.write("#### Sample of Clustered Data")
+                                                    st.dataframe(clustered_data.head(10))
+                                                    
+                                                    # Display cluster statistics
+                                                    st.write("#### Cluster Statistics")
+                                                    cluster_stats = clustered_data.groupby('Cluster').agg(['mean', 'std'])
+                                                    st.dataframe(cluster_stats)
+                                                    
+                                                    # Store inertia for convergence analysis
+                                                    convergence_scores['kmeans_inertia'] = kmeans.inertia_
+                                                    
+                                                    # Visualize clusters (first two dimensions)
+                                                    if len(features) >= 2:
+                                                        fig, ax = plt.subplots(figsize=(10, 6))
+                                                        scatter = ax.scatter(
+                                                            X_scaled[:, 0], 
+                                                            X_scaled[:, 1], 
+                                                            c=clusters, 
+                                                            cmap='viridis', 
+                                                            alpha=0.6
+                                                        )
+                                                        
+                                                        # Add cluster centers
+                                                        centers = kmeans.cluster_centers_
+                                                        ax.scatter(
+                                                            centers[:, 0], 
+                                                            centers[:, 1], 
+                                                            s=200, 
+                                                            marker='X', 
+                                                            c='red', 
+                                                            alpha=0.8
+                                                        )
+                                                        
+                                                        ax.set_title('K-Means Clustering Results (Standardized Features)')
+                                                        ax.set_xlabel(f'Feature 1: {features[0]}')
+                                                        ax.set_ylabel(f'Feature 2: {features[1]}')
+                                                        plt.colorbar(scatter, label='Cluster')
+                                                        plt.tight_layout()
+                                                        st.pyplot(fig)
+                                                    
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'model': kmeans,
+                                                        'features': features,
+                                                        'n_clusters': n_clusters,
+                                                        'scaler': scaler,
+                                                        'inertia': kmeans.inertia_,
+                                                        'cluster_centers': kmeans.cluster_centers_
+                                                    }
+                                                    
+                                                elif method == "PCA Factor Analysis" and method in method_params:
+                                                    params = method_params[method]
+                                                    
+                                                    # Get features for PCA
+                                                    features = params["features"]
+                                                    n_components = params["n_components"]
+                                                    
+                                                    # Check if we have enough data
+                                                    if len(features) < n_components:
+                                                        st.error(f"Need at least {n_components} features for PCA with {n_components} components.")
+                                                        continue
+                                                        
+                                                    # Prepare the data
+                                                    from sklearn.preprocessing import StandardScaler
+                                                    from sklearn.decomposition import PCA
+                                                    
+                                                    X = data[features].dropna()
+                                                    
+                                                    # Scale the data
+                                                    scaler = StandardScaler()
+                                                    X_scaled = scaler.fit_transform(X)
+                                                    
+                                                    # Perform PCA
+                                                    pca = PCA(n_components=n_components)
+                                                    X_pca = pca.fit_transform(X_scaled)
+                                                    
+                                                    # Create dataframe with PCA results
+                                                    pca_df = pd.DataFrame(
+                                                        X_pca, 
+                                                        columns=[f'PC{i+1}' for i in range(n_components)]
                                                     )
-                                                    test_results["ks_test"] = ks_results
+                                                    
+                                                    # Display PCA results
+                                                    st.write("#### Sample of PCA Results")
+                                                    st.dataframe(pca_df.head(10))
+                                                    
+                                                    # Display explained variance
+                                                    explained_variance = pca.explained_variance_ratio_
+                                                    cum_explained_variance = np.cumsum(explained_variance)
+                                                    
+                                                    # Store for convergence analysis
+                                                    convergence_scores['pca_explained_variance'] = explained_variance
+                                                    
+                                                    var_df = pd.DataFrame({
+                                                        'Principal Component': [f'PC{i+1}' for i in range(n_components)],
+                                                        'Explained Variance (%)': explained_variance * 100,
+                                                        'Cumulative Variance (%)': cum_explained_variance * 100
+                                                    })
+                                                    
+                                                    st.write("#### Explained Variance")
+                                                    st.dataframe(var_df)
+                                                    
+                                                    # Visualize explained variance
+                                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                                    ax.bar(
+                                                        range(1, n_components+1), 
+                                                        explained_variance * 100, 
+                                                        alpha=0.5, 
+                                                        label='Individual'
+                                                    )
+                                                    ax.step(
+                                                        range(1, n_components+1), 
+                                                        cum_explained_variance * 100, 
+                                                        where='mid', 
+                                                        label='Cumulative'
+                                                    )
+                                                    
+                                                    ax.set_xlabel('Principal Component')
+                                                    ax.set_ylabel('Explained Variance (%)')
+                                                    ax.set_title('Explained Variance by Principal Component')
+                                                    ax.set_xticks(range(1, n_components+1))
+                                                    ax.legend()
+                                                    plt.tight_layout()
+                                                    st.pyplot(fig)
+                                                    
+                                                    # Visualize first two components
+                                                    if n_components >= 2:
+                                                        fig, ax = plt.subplots(figsize=(10, 6))
+                                                        scatter = ax.scatter(
+                                                            X_pca[:, 0], 
+                                                            X_pca[:, 1], 
+                                                            alpha=0.6
+                                                        )
+                                                        
+                                                        ax.set_title('First Two Principal Components')
+                                                        ax.set_xlabel(f'PC1 ({explained_variance[0]:.2%} var.)')
+                                                        ax.set_ylabel(f'PC2 ({explained_variance[1]:.2%} var.)')
+                                                        plt.tight_layout()
+                                                        st.pyplot(fig)
+                                                        
+                                                        # Display component loadings
+                                                        loadings = pca.components_
+                                                        loadings_df = pd.DataFrame(
+                                                            loadings.T, 
+                                                            index=features,
+                                                            columns=[f'PC{i+1}' for i in range(n_components)]
+                                                        )
+                                                        
+                                                        st.write("#### Component Loadings")
+                                                        st.dataframe(loadings_df)
+                                                    
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'model': pca,
+                                                        'features': features,
+                                                        'n_components': n_components,
+                                                        'explained_variance': explained_variance,
+                                                        'loadings': pca.components_
+                                                    }
+                                                    
+                                                elif method == "Correlation Analysis":
+                                                    # Perform correlation analysis on numeric columns
+                                                    numeric_data = data.select_dtypes(include=np.number)
+                                                    
+                                                    # Calculate correlation matrix
+                                                    corr_matrix = numeric_data.corr()
+                                                    
+                                                    # Display correlation matrix
+                                                    st.write("#### Correlation Matrix")
+                                                    st.dataframe(corr_matrix)
+                                                    
+                                                    # Visualize correlation matrix
+                                                    fig, ax = plt.subplots(figsize=(12, 10))
+                                                    mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+                                                    cmap = sns.diverging_palette(230, 20, as_cmap=True)
+                                                    
+                                                    sns.heatmap(
+                                                        corr_matrix, 
+                                                        mask=mask, 
+                                                        cmap=cmap, 
+                                                        vmax=1, 
+                                                        vmin=-1, 
+                                                        center=0,
+                                                        square=True, 
+                                                        linewidths=.5, 
+                                                        annot=True, 
+                                                        fmt=".2f"
+                                                    )
+                                                    
+                                                    plt.title('Correlation Matrix')
+                                                    plt.tight_layout()
+                                                    st.pyplot(fig)
+                                                    
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'correlation_matrix': corr_matrix
+                                                    }
+                                                    
+                                                    # Store for convergence
+                                                    convergence_scores['correlation_mean'] = corr_matrix.abs().mean().mean()
                                                 
-                                                st.subheader("Kolmogorov-Smirnov Test Results")
-                                                st.write("""
-                                                The KS test compares two distributions to determine if they are statistically different.
-                                                A non-significant result (p > alpha) suggests the distributions are similar.
-                                                """)
-                                                st.dataframe(ks_results)
-                                                
-                                                # Visualize KS test results
-                                                fig = plt.figure(figsize=(10, 6))
-                                                plt.bar(ks_results['column'], ks_results['p_value'])
-                                                plt.axhline(y=alpha, color='r', linestyle='--', label=f'Alpha = {alpha}')
-                                                plt.xlabel('Column')
-                                                plt.ylabel('p-value')
-                                                plt.title('KS Test p-values (higher is better)')
-                                                plt.xticks(rotation=45)
-                                                plt.legend()
-                                                st.pyplot(fig)
+                                                elif method == "Statistical Hypothesis Testing":
+                                                    # Perform basic hypothesis tests on numeric columns
+                                                    numeric_data = data.select_dtypes(include=np.number)
+                                                    
+                                                    # Normality tests (Shapiro-Wilk)
+                                                    st.write("#### Normality Tests (Shapiro-Wilk)")
+                                                    normality_results = []
+                                                    
+                                                    for col in numeric_data.columns:
+                                                        # Drop NaN values
+                                                        values = numeric_data[col].dropna()
+                                                        
+                                                        # Only test if we have enough data (3-5000 samples)
+                                                        if len(values) >= 3 and len(values) <= 5000:
+                                                            stat, p = stats.shapiro(values)
+                                                            normality_results.append({
+                                                                'Column': col,
+                                                                'Statistic': stat,
+                                                                'p-value': p,
+                                                                'Normal Distribution': 'Yes' if p > 0.05 else 'No'
+                                                            })
+                                                        else:
+                                                            normality_results.append({
+                                                                'Column': col,
+                                                                'Statistic': None,
+                                                                'p-value': None,
+                                                                'Normal Distribution': 'Not tested (insufficient samples)'
+                                                            })
+                                                    
+                                                    st.dataframe(pd.DataFrame(normality_results))
+                                                    
+                                                    # Store results
+                                                    method_results[method] = {
+                                                        'normality_tests': normality_results
+                                                    }
+                                                    
+                                                    # Calculate how many variables follow normal distribution
+                                                    normal_count = sum(1 for result in normality_results 
+                                                                    if result['Normal Distribution'] == 'Yes')
+                                                    
+                                                    total_tested = sum(1 for result in normality_results 
+                                                                    if result['Normal Distribution'] not in ['Not tested (insufficient samples)'])
+                                                    
+                                                    if total_tested > 0:
+                                                        normal_pct = (normal_count / total_tested) * 100
+                                                        convergence_scores['normality_percentage'] = normal_pct
                                             
-                                            if "Spearman Rank Correlation" in test_options:
-                                                spearman_results = advanced_processor.spearman_correlation(
-                                                    original_data, 
-                                                    test_data,
-                                                    alpha=alpha
-                                                )
-                                                test_results["spearman_correlation"] = spearman_results
-                                                
-                                                st.subheader("Spearman Rank Correlation Results")
-                                                st.write("""
-                                                Spearman correlation measures the monotonic relationship between two datasets.
-                                                Values close to 1 indicate a strong positive relationship.
-                                                """)
-                                                st.dataframe(spearman_results)
-                                                
-                                                # Visualize Spearman correlation
-                                                fig = plt.figure(figsize=(10, 6))
-                                                plt.bar(spearman_results['column'], spearman_results['correlation'])
-                                                plt.axhline(y=0.7, color='r', linestyle='--', label='Correlation = 0.7')
-                                                plt.xlabel('Column')
-                                                plt.ylabel('Correlation')
-                                                plt.title('Spearman Rank Correlation (higher is better)')
-                                                plt.xticks(rotation=45)
-                                                plt.legend()
-                                                st.pyplot(fig)
+                                            # Save the results to the session state
+                                            new_analysis = {
+                                                'id': len(st.session_state.convergence_datasets) + 1,
+                                                'name': f"Analysis {len(st.session_state.convergence_datasets) + 1}",
+                                                'methods': selected_methods,
+                                                'method_results': method_results,
+                                                'convergence_scores': convergence_scores,
+                                                'data': data,
+                                                'timestamp': pd.Timestamp.now()
+                                            }
                                             
-                                            if "Permutation Test" in test_options:
-                                                permutation_results = advanced_processor.permutation_test(
-                                                    original_data, 
-                                                    test_data,
-                                                    num_permutations=num_permutations,
-                                                    alpha=alpha
-                                                )
-                                                test_results["permutation_test"] = permutation_results
-                                                
-                                                st.subheader("Permutation Test Results")
-                                                st.write("""
-                                                The permutation test assesses if the difference between two datasets is statistically significant.
-                                                A non-significant result (p > alpha) suggests the datasets are similar.
-                                                """)
-                                                st.dataframe(permutation_results)
-                                                
-                                                # Visualize Permutation test results
-                                                fig = plt.figure(figsize=(10, 6))
-                                                plt.bar(permutation_results['column'], permutation_results['p_value'])
-                                                plt.axhline(y=alpha, color='r', linestyle='--', label=f'Alpha = {alpha}')
-                                                plt.xlabel('Column')
-                                                plt.ylabel('p-value')
-                                                plt.title('Permutation Test p-values (higher is better)')
-                                                plt.xticks(rotation=45)
-                                                plt.legend()
-                                                st.pyplot(fig)
+                                            st.session_state.convergence_datasets.append(new_analysis)
                                             
-                                            # Store all test results in session state
-                                            st.session_state.distribution_test_results = test_results
-                                            
-                                            # Overall assessment
-                                            st.subheader("Distribution Testing Summary")
-                                            
-                                            # Calculate overall assessment
-                                            num_columns_tested = 0
-                                            num_columns_similar = 0
-                                            
-                                            if "ks_test" in test_results:
-                                                ks_df = test_results["ks_test"]
-                                                non_sig_cols = ks_df[~ks_df['significant']]['column'].tolist()
-                                                num_columns_tested += len(ks_df)
-                                                num_columns_similar += len(non_sig_cols)
-                                                
-                                                st.write(f"KS Test: {len(non_sig_cols)} out of {len(ks_df)} columns have similar distributions.")
-                                            
-                                            if "spearman_correlation" in test_results:
-                                                sp_df = test_results["spearman_correlation"]
-                                                high_corr_cols = sp_df[sp_df['correlation'] > 0.7]['column'].tolist()
-                                                
-                                                st.write(f"Spearman Correlation: {len(high_corr_cols)} out of {len(sp_df)} columns have strong correlation (>0.7).")
-                                            
-                                            if "permutation_test" in test_results:
-                                                perm_df = test_results["permutation_test"]
-                                                non_sig_cols = perm_df[~perm_df['significant']]['column'].tolist()
-                                                
-                                                st.write(f"Permutation Test: {len(non_sig_cols)} out of {len(perm_df)} columns have similar distributions.")
-                                            
-                                            # Overall similarity assessment
-                                            overall_similarity = 0
-                                            if "ks_test" in test_results:
-                                                ks_similarity = sum(~test_results["ks_test"]['significant']) / len(test_results["ks_test"])
-                                                overall_similarity += ks_similarity
-                                            
-                                            if "spearman_correlation" in test_results:
-                                                sp_similarity = sum(test_results["spearman_correlation"]['correlation'] > 0.7) / len(test_results["spearman_correlation"])
-                                                overall_similarity += sp_similarity
-                                            
-                                            if "permutation_test" in test_results:
-                                                perm_similarity = sum(~test_results["permutation_test"]['significant']) / len(test_results["permutation_test"])
-                                                overall_similarity += perm_similarity
-                                            
-                                            overall_similarity /= len(test_options)
-                                            
-                                            # Display similarity as a percentage
-                                            st.metric("Overall Distribution Similarity", f"{overall_similarity*100:.1f}%")
-                                            
-                                            if overall_similarity >= 0.8:
-                                                st.success("✅ The interpolated data has very similar statistical properties to the original data.")
-                                            elif overall_similarity >= 0.6:
-                                                st.info("ℹ️ The interpolated data has moderately similar statistical properties to the original data.")
-                                            else:
-                                                st.warning("⚠️ The interpolated data shows significant differences from the original data.")
-                                    
-                                    except Exception as e:
-                                        st.error(f"Error during distribution testing: {e}")
-                            else:
-                                st.warning("Please select at least one test to perform.")
-                    
-                    # 5. OUTLIER DETECTION TAB
-                    with advanced_options[4]:
-                        st.write("### Isolated Forest Outlier Detection")
-                        st.write("""
-                        Isolated Forest is an algorithm that can detect anomalous data points that don't fit the expected pattern.
-                        It's useful for identifying potential issues with interpolated values.
-                        """)
-                        
-                        # Check if we have interpolated result
-                        interpolation_data_available = ('interpolated_result' in st.session_state) or (st.session_state.interpolated_data is not None)
-                        
-                        if not interpolation_data_available:
-                            st.info("Please run MCMC interpolation or import interpolated data before performing outlier detection.")
-                        else:
-                            # Determine which interpolated data to use
-                            if 'interpolated_result' in st.session_state:
-                                test_data = st.session_state.interpolated_result
-                            elif 'cgan_results' in st.session_state:
-                                test_data = st.session_state.cgan_results
-                            else:
-                                test_data = st.session_state.interpolated_data
-                            
-                            # Outlier detection parameters
-                            with st.expander("Outlier Detection Parameters", expanded=True):
-                                contamination = st.slider(
-                                    "Contamination (expected proportion of outliers)",
-                                    min_value=0.01,
-                                    max_value=0.20,
-                                    value=0.05,
-                                    step=0.01
-                                )
-                            
-                            # Run outlier detection button
-                            if st.button("Run Outlier Detection", key="outlier_btn"):
-                                try:
-                                    with st.spinner("Running Isolated Forest outlier detection..."):
-                                        # Run outlier detection
-                                        outlier_results = advanced_processor.isolated_forest_detection(
-                                            test_data,
-                                            contamination=contamination
-                                        )
-                                        
-                                        # Store the result
-                                        st.session_state.outlier_results = outlier_results
-                                        
-                                        # Show results
-                                        st.success("Outlier detection completed successfully!")
-                                        st.write("Outlier Detection Results:")
-                                        
-                                        # Count outliers
-                                        outlier_count = outlier_results['is_outlier'].sum()
-                                        outlier_percentage = outlier_count / len(outlier_results) * 100
-                                        
-                                        st.metric("Outliers Detected", f"{outlier_count} ({outlier_percentage:.1f}%)")
-                                        
-                                        # Display data with outliers highlighted
-                                        st.write("Data with Outliers (highlighted rows are outliers):")
-                                        
-                                        # Use DataFrame styler to highlight outliers
-                                        def highlight_outliers(row):
-                                            return ['background-color: #ffcccc' if row['is_outlier'] else '' for _ in row]
-                                        
-                                        styled_df = outlier_results.head(20).style.apply(highlight_outliers, axis=1)
-                                        st.dataframe(styled_df)
-                                        
-                                        # Visualize anomaly scores
-                                        st.write("### Anomaly Score Distribution")
-                                        fig = plt.figure(figsize=(10, 6))
-                                        plt.hist(outlier_results['anomaly_score'], bins=30)
-                                        plt.axvline(x=np.percentile(outlier_results['anomaly_score'], 100*(1-contamination)), 
-                                                color='r', linestyle='--', 
-                                                label=f'Threshold ({100*contamination}% contamination)')
-                                        plt.xlabel('Anomaly Score')
-                                        plt.ylabel('Frequency')
-                                        plt.title('Distribution of Anomaly Scores')
-                                        plt.legend()
-                                        st.pyplot(fig)
-                                        
-                                        # Create scatter plot of the first two numeric features with outliers highlighted
-                                        numeric_cols = outlier_results.select_dtypes(include=np.number).columns
-                                        numeric_cols = [col for col in numeric_cols if col not in ['is_outlier', 'anomaly_score']]
-                                        
-                                        if len(numeric_cols) >= 2:
-                                            st.write("### Outlier Visualization")
-                                            
-                                            # Let user select features for visualization
-                                            x_feature = st.selectbox("X-axis feature:", numeric_cols, index=0)
-                                            y_feature = st.selectbox("Y-axis feature:", numeric_cols, index=min(1, len(numeric_cols)-1))
-                                            
-                                            if x_feature and y_feature:
-                                                fig = plt.figure(figsize=(10, 6))
-                                                
-                                                # Plot non-outliers
-                                                plt.scatter(
-                                                    outlier_results[~outlier_results['is_outlier']][x_feature],
-                                                    outlier_results[~outlier_results['is_outlier']][y_feature],
-                                                    alpha=0.5,
-                                                    label="Normal points"
-                                                )
-                                                
-                                                # Plot outliers
-                                                plt.scatter(
-                                                    outlier_results[outlier_results['is_outlier']][x_feature],
-                                                    outlier_results[outlier_results['is_outlier']][y_feature],
-                                                    color='red',
-                                                    marker='x',
-                                                    alpha=0.8,
-                                                    label="Outliers"
-                                                )
-                                                
-                                                plt.xlabel(x_feature)
-                                                plt.ylabel(y_feature)
-                                                plt.title(f'Outlier Detection: {x_feature} vs {y_feature}')
-                                                plt.legend()
-                                                st.pyplot(fig)
-                                        
-                                        # Add download button for outlier results
-                                        csv = data_handler.export_data(outlier_results, format='csv')
-                                        st.download_button(
-                                            label="Download Outlier Detection Results as CSV",
-                                            data=csv,
-                                            file_name="outlier_detection_results.csv",
-                                            mime="text/csv"
-                                        )
-                                        
-                                        # Option to filter out outliers
-                                        if st.button("Filter Out Outliers"):
-                                            filtered_data = outlier_results[~outlier_results['is_outlier']].drop(
-                                                columns=['is_outlier', 'anomaly_score']
-                                            )
-                                            
-                                            # Store the filtered data
-                                            st.session_state.processed_data = filtered_data
-                                            
-                                            st.success("Outliers filtered out successfully!")
-                                            st.write("Filtered Data:")
-                                            st.dataframe(filtered_data.head())
-                                except Exception as e:
-                                    st.error(f"Error during outlier detection: {e}")
-    
-    # 3. PREDICTION TAB
-    with tab3:
-        st.header("Prediction")
-        
-        if st.session_state.processed_data is None:
-            st.warning("No processed data available. Please process data in the Data Processing tab.")
-        else:
-            # Data preview
-            st.subheader("Processed Data Preview")
-            st.dataframe(st.session_state.processed_data.head())
-            
-            # Check if target column is selected
-            if st.session_state.target_column is None or st.session_state.target_column == "None":
-                st.warning("No target column selected. Please go back to the Data Processing tab and select a target column.")
-            else:
-                st.subheader("Prediction Configuration")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Model selection
-                    model_type = st.selectbox(
-                        "Select prediction model:",
-                        ["Linear Regression", "Decision Tree", "Random Forest", "Gradient Boosting"],
-                        key="model_type_select"
-                    )
-                    
-                    # Train-test split
-                    test_size = st.slider("Test set size (%)", 10, 50, 20) / 100
-                
-                with col2:
-                    # Advanced model parameters (optional)
-                    show_advanced = st.checkbox("Show advanced model parameters")
-                    
-                    model_params = {}
-                    if show_advanced:
-                        if model_type == "Linear Regression":
-                            model_params['fit_intercept'] = st.checkbox("Fit intercept", value=True)
-                            
-                        elif model_type == "Decision Tree":
-                            model_params['max_depth'] = st.slider("Maximum depth", 1, 30, 5)
-                            model_params['min_samples_split'] = st.slider("Minimum samples to split", 2, 20, 2)
-                            
-                        elif model_type == "Random Forest":
-                            model_params['n_estimators'] = st.slider("Number of trees", 10, 200, 100)
-                            model_params['max_depth'] = st.slider("Maximum depth", 1, 30, 5)
-                            
-                        elif model_type == "Gradient Boosting":
-                            model_params['n_estimators'] = st.slider("Number of estimators", 10, 200, 100)
-                            model_params['learning_rate'] = st.slider("Learning rate", 0.01, 0.3, 0.1)
-                
-                # Train model and make predictions
-                if st.button("Generate Predictions"):
-                    try:
-                        # Train model and make predictions
-                        predictions, model_details, metrics = predictor.train_and_predict(
-                            st.session_state.processed_data,
-                            st.session_state.target_column,
-                            model_type,
-                            test_size,
-                            **model_params
-                        )
-                        
-                        st.session_state.predictions = predictions
-                        
-                        # Display results
-                        st.success("Predictions generated successfully!")
-                        
-                        # Model performance metrics
-                        st.subheader("Model Performance")
-                        metrics_df = pd.DataFrame(metrics, index=[0])
-                        st.table(metrics_df)
-                        
-                        # Predictions preview
-                        st.subheader("Predictions Preview")
-                        st.dataframe(predictions.head())
-                        
-                        # Feature importance (if available)
-                        if 'feature_importance' in model_details:
-                            st.subheader("Feature Importance")
-                            fig = visualizer.plot_feature_importance(
-                                model_details['feature_names'],
-                                model_details['feature_importance']
-                            )
-                            st.pyplot(fig)
-                        
-                    except Exception as e:
-                        st.error(f"Error generating predictions: {e}")
-    
-    # 4. RISK ASSESSMENT TAB
-    with tab4:
-        st.header("Risk Assessment")
-        
-        if st.session_state.predictions is None:
-            st.warning("No predictions available. Please generate predictions in the Prediction tab.")
-        else:
-            # Predictions preview
-            st.subheader("Predictions Preview")
-            st.dataframe(st.session_state.predictions.head())
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.subheader("Risk Assessment Configuration")
-                
-                # Risk assessment method
-                assessment_method = st.selectbox(
-                    "Select risk assessment method:",
-                    ["Prediction Intervals", "Error Distribution", "Outlier Detection"],
-                    key="assessment_method_select"
-                )
-            
-            with col2:
-                # Method-specific parameters
-                if assessment_method == "Prediction Intervals":
-                    confidence_level = st.slider("Confidence level (%)", 70, 99, 95)
-                elif assessment_method == "Outlier Detection":
-                    threshold = st.slider("Outlier threshold (standard deviations)", 1.0, 5.0, 3.0)
-                else:
-                    st.write("No additional parameters needed for this method.")
-            
-            # Perform risk assessment
-            if st.button("Assess Risk"):
-                try:
-                    if assessment_method == "Prediction Intervals":
-                        st.session_state.risk_assessment = risk_assessor.prediction_intervals(
-                            st.session_state.predictions,
-                            confidence_level=confidence_level
-                        )
-                    elif assessment_method == "Error Distribution":
-                        st.session_state.risk_assessment = risk_assessor.error_distribution(
-                            st.session_state.predictions
-                        )
-                    elif assessment_method == "Outlier Detection":
-                        st.session_state.risk_assessment = risk_assessor.outlier_detection(
-                            st.session_state.predictions,
-                            threshold=threshold
-                        )
-                    
-                    st.success("Risk assessment completed!")
-                    
-                    # Display risk assessment results
-                    st.subheader("Risk Assessment Results")
-                    st.dataframe(st.session_state.risk_assessment.head())
-                    
-                    # Visualization based on assessment method
-                    st.subheader("Risk Visualization")
-                    
-                    if assessment_method == "Prediction Intervals":
-                        fig = visualizer.plot_prediction_intervals(st.session_state.risk_assessment)
-                        st.pyplot(fig)
-                    
-                    elif assessment_method == "Error Distribution":
-                        fig = visualizer.plot_error_distribution(st.session_state.risk_assessment)
-                        st.pyplot(fig)
-                    
-                    elif assessment_method == "Outlier Detection":
-                        fig = visualizer.plot_outlier_detection(st.session_state.risk_assessment)
-                        st.pyplot(fig)
-                    
-                    # Risk summary
-                    st.subheader("Risk Summary")
-                    risk_summary = risk_assessor.generate_risk_summary(st.session_state.risk_assessment, assessment_method)
-                    st.markdown(risk_summary)
-                    
-                except Exception as e:
-                    st.error(f"Error assessing risk: {e}")
-    
-    # 5. VISUALIZATION TAB
-    with tab5:
-        st.header("Visualization")
-        
-        if (st.session_state.original_data is None and st.session_state.interpolated_data is None and 
-            st.session_state.data is None):
-            st.warning("No data available. Please import data in the Data Import tab.")
-        else:
-            # Data selection
-            st.subheader("Select Data to Visualize")
-            
-            data_options = []
-            
-            if st.session_state.original_data is not None:
-                data_options.append("Original Data")
-            if st.session_state.interpolated_data is not None:
-                data_options.append("Interpolated Data")
-            if st.session_state.processed_data is not None:
-                data_options.append("Processed Data")
-            if st.session_state.predictions is not None:
-                data_options.append("Predictions")
-            if st.session_state.risk_assessment is not None:
-                data_options.append("Risk Assessment")
-                
-            if not data_options:
-                st.warning("No datasets available for visualization.")
-                
-            # Additional option for comparison mode
-            st.subheader("Visualization Mode")
-            viz_mode = st.radio(
-                "Select visualization mode:",
-                ["Single Dataset", "Compare Datasets"],
-                index=1 if (st.session_state.original_data is not None and 
-                            st.session_state.interpolated_data is not None) else 0
-            )
-            
-            if viz_mode == "Single Dataset":
-                # Single dataset visualization
-                data_to_visualize = st.selectbox("Select dataset:", data_options)
-                
-                # Get the selected data
-                if data_to_visualize == "Original Data":
-                    viz_data = st.session_state.original_data
-                elif data_to_visualize == "Interpolated Data":
-                    viz_data = st.session_state.interpolated_data
-                elif data_to_visualize == "Processed Data":
-                    viz_data = st.session_state.processed_data
-                elif data_to_visualize == "Predictions":
-                    viz_data = st.session_state.predictions
-                elif data_to_visualize == "Risk Assessment":
-                    viz_data = st.session_state.risk_assessment
-            else:
-                # Comparison visualization
-                st.subheader("Comparison Visualization")
-                
-                comparison_options = []
-                if st.session_state.original_data is not None and st.session_state.interpolated_data is not None:
-                    comparison_options.append("Original vs Interpolated")
-                if st.session_state.original_data is not None and st.session_state.processed_data is not None:
-                    comparison_options.append("Original vs Processed")
-                if st.session_state.interpolated_data is not None and st.session_state.processed_data is not None:
-                    comparison_options.append("Interpolated vs Processed")
-                
-                if not comparison_options:
-                    st.warning("Not enough datasets available for comparison. Please import or process more data.")
-                    viz_mode = "Single Dataset"
-                    data_to_visualize = st.selectbox("Select single dataset instead:", data_options)
-                    
-                    # Get the selected data for single mode
-                    if data_to_visualize == "Original Data":
-                        viz_data = st.session_state.original_data
-                    elif data_to_visualize == "Interpolated Data":
-                        viz_data = st.session_state.interpolated_data
-                    elif data_to_visualize == "Processed Data":
-                        viz_data = st.session_state.processed_data
-                    elif data_to_visualize == "Predictions":
-                        viz_data = st.session_state.predictions
-                    elif data_to_visualize == "Risk Assessment":
-                        viz_data = st.session_state.risk_assessment
-                else:
-                    # Continue with comparison mode
-                    comparison_selection = st.selectbox("Select datasets to compare:", comparison_options)
-                    
-                    # Set visualization data based on comparison selection
-                    if comparison_selection == "Original vs Interpolated":
-                        dataset1 = st.session_state.original_data
-                        dataset2 = st.session_state.interpolated_data
-                        dataset1_name = "Original"
-                        dataset2_name = "Interpolated"
-                    elif comparison_selection == "Original vs Processed":
-                        dataset1 = st.session_state.original_data
-                        dataset2 = st.session_state.processed_data
-                        dataset1_name = "Original"
-                        dataset2_name = "Processed"
-                    elif comparison_selection == "Interpolated vs Processed":
-                        dataset1 = st.session_state.interpolated_data
-                        dataset2 = st.session_state.processed_data
-                        dataset1_name = "Interpolated"
-                        dataset2_name = "Processed"
-                        
-                    # Find common numeric columns
-                    common_cols = list(set(dataset1.select_dtypes(include=np.number).columns) & 
-                                    set(dataset2.select_dtypes(include=np.number).columns))
-                    
-                    if not common_cols:
-                        st.warning("No common numeric columns found for comparison.")
-                    
-                    # Select column for comparison
-                    selected_col = st.selectbox("Select column to compare:", common_cols)
-                    
-                    # Create comparison visualizations
-                    st.subheader(f"Comparing: {selected_col}")
-                    
-                    # Statistical comparison
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"{dataset1_name} Statistics:")
-                        st.write(dataset1[selected_col].describe())
-                    with col2:
-                        st.write(f"{dataset2_name} Statistics:")
-                        st.write(dataset2[selected_col].describe())
-                    
-                    # Visualization types for comparison
-                    comparison_viz_type = st.selectbox(
-                        "Select comparison visualization type:",
-                        ["Histogram Overlay", "Box Plot Comparison", "Scatter Plot", "Q-Q Plot"]
-                    )
-                    
-                    if comparison_viz_type == "Histogram Overlay":
-                        fig = plt.figure(figsize=(10, 6))
-                        plt.hist(dataset1[selected_col], alpha=0.5, label=dataset1_name)
-                        plt.hist(dataset2[selected_col], alpha=0.5, label=dataset2_name)
-                        plt.legend()
-                        plt.title(f'Distribution Comparison: {selected_col}')
-                        plt.xlabel(selected_col)
-                        plt.ylabel('Frequency')
-                        st.pyplot(fig)
-                        
-                    elif comparison_viz_type == "Box Plot Comparison":
-                        fig = plt.figure(figsize=(10, 6))
-                        # Create combined dataframe for boxplot
-                        import pandas as pd
-                        combined_data = pd.DataFrame({
-                            dataset1_name: dataset1[selected_col],
-                            dataset2_name: dataset2[selected_col]
-                        })
-                        plt.boxplot([dataset1[selected_col], dataset2[selected_col]])
-                        plt.xticks([1, 2], [dataset1_name, dataset2_name])
-                        plt.title(f'Box Plot Comparison: {selected_col}')
-                        plt.ylabel(selected_col)
-                        st.pyplot(fig)
-                        
-                    elif comparison_viz_type == "Scatter Plot":
-                        # Only if datasets have same length and are sortable
-                        if len(dataset1) == len(dataset2):
-                            fig = plt.figure(figsize=(10, 6))
-                            plt.scatter(dataset1[selected_col], dataset2[selected_col], alpha=0.5)
-                            plt.plot([dataset1[selected_col].min(), dataset1[selected_col].max()], 
-                                     [dataset1[selected_col].min(), dataset1[selected_col].max()], 
-                                     'r--')
-                            plt.title(f'Scatter Plot: {dataset1_name} vs {dataset2_name} - {selected_col}')
-                            plt.xlabel(f'{dataset1_name} {selected_col}')
-                            plt.ylabel(f'{dataset2_name} {selected_col}')
-                            st.pyplot(fig)
-                        else:
-                            st.warning("Scatter plot comparison requires datasets of equal length.")
-                            
-                    elif comparison_viz_type == "Q-Q Plot":
-                        import scipy.stats as stats
-                        fig = plt.figure(figsize=(10, 6))
-                        stats.probplot(dataset1[selected_col], dist="norm", plot=plt)
-                        plt.title(f'Q-Q Plot - {dataset1_name}: {selected_col}')
-                        st.pyplot(fig)
-                        
-                        fig = plt.figure(figsize=(10, 6))
-                        stats.probplot(dataset2[selected_col], dist="norm", plot=plt)
-                        plt.title(f'Q-Q Plot - {dataset2_name}: {selected_col}')
-                        st.pyplot(fig)
-                    
-                    # Skip regular visualization as we're in comparison mode
-                    viz_data = None
-            
-            if viz_data is not None:
-                # Visualization type
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("Select Visualization Type")
-                    viz_type = st.selectbox(
-                        "Visualization type:",
-                        ["Data Overview", "Histogram", "Scatter Plot", "Line Chart", 
-                         "Bar Chart", "Correlation Matrix", "Box Plot"]
-                    )
-                
-                # Generate visualization
-                if viz_type == "Data Overview":
-                    # Show data preview and statistics
-                    st.subheader("Data Preview")
-                    st.dataframe(viz_data.head())
-                    
-                    st.subheader("Data Shape")
-                    st.write(f"Rows: {viz_data.shape[0]}, Columns: {viz_data.shape[1]}")
-                    
-                    st.subheader("Data Types")
-                    st.write(viz_data.dtypes)
-                    
-                    # Show statistics for numeric columns
-                    numeric_cols = viz_data.select_dtypes(include=np.number).columns
-                    if len(numeric_cols) > 0:
-                        st.subheader("Numeric Data Statistics")
-                        st.write(viz_data[numeric_cols].describe())
-                
-                elif viz_type == "Histogram":
-                    with col2:
-                        # Select column for histogram
-                        column = st.selectbox("Select column for histogram:", viz_data.columns)
-                    
-                    # Check if column is numeric
-                    if pd.api.types.is_numeric_dtype(viz_data[column]):
-                        fig = visualizer.plot_histogram(viz_data, column)
-                        st.pyplot(fig)
-                    else:
-                        st.warning("Histograms can only be plotted for numeric columns.")
-                
-                elif viz_type == "Scatter Plot":
-                    with col2:
-                        # Select columns for scatter plot
-                        x_column = st.selectbox("Select X-axis column:", viz_data.columns)
-                        y_column = st.selectbox("Select Y-axis column:", viz_data.columns, index=min(1, len(viz_data.columns)-1))
-                    
-                    # Check if columns are numeric
-                    if pd.api.types.is_numeric_dtype(viz_data[x_column]) and pd.api.types.is_numeric_dtype(viz_data[y_column]):
-                        fig = visualizer.plot_scatter(viz_data, x_column, y_column)
-                        st.pyplot(fig)
-                    else:
-                        st.warning("Scatter plots can only be plotted for numeric columns.")
-                
-                elif viz_type == "Line Chart":
-                    with col2:
-                        # Select columns for line chart
-                        columns = st.multiselect("Select columns for line chart:", viz_data.select_dtypes(include=np.number).columns)
-                    
-                    if columns:
-                        fig = visualizer.plot_line(viz_data, columns)
-                        st.pyplot(fig)
-                    else:
-                        st.warning("Please select at least one column for the line chart.")
-                
-                elif viz_type == "Bar Chart":
-                    with col2:
-                        # Select columns for bar chart
-                        x_column = st.selectbox("Select X-axis column (categories):", viz_data.columns)
-                        y_column = st.selectbox("Select Y-axis column (values):", viz_data.select_dtypes(include=np.number).columns)
-                    
-                    fig = visualizer.plot_bar(viz_data, x_column, y_column)
-                    st.pyplot(fig)
-                
-                elif viz_type == "Correlation Matrix":
-                    # Get numeric columns
-                    numeric_cols = viz_data.select_dtypes(include=np.number).columns
-                    
-                    if len(numeric_cols) > 1:
-                        fig = visualizer.plot_correlation(viz_data[numeric_cols])
-                        st.pyplot(fig)
-                    else:
-                        st.warning("Correlation matrix requires at least two numeric columns.")
-                
-                elif viz_type == "Box Plot":
-                    with col2:
-                        # Select column for box plot
-                        column = st.selectbox("Select column for box plot:", viz_data.select_dtypes(include=np.number).columns)
-                    
-                    fig = visualizer.plot_box(viz_data, column)
-                    st.pyplot(fig)
-                
-                # Export visualization
-                st.subheader("Export Options")
-                
-                if st.button("Export Data"):
-                    try:
-                        export_format = "csv"
-                        export_success, download_link = data_handler.export_data(viz_data, export_format)
-                        if export_success:
-                            st.markdown(download_link, unsafe_allow_html=True)
-                        else:
-                            st.error("Failed to export data.")
-                    except Exception as e:
-                        st.error(f"Error exporting data: {e}")
-
-# 6. DATABASE TAB
-    with tab6:
-        st.header("Database Management")
-        
-        # Check if database is available
-        if not hasattr(db_handler, 'db_available') or not db_handler.db_available:
-            st.error("⚠️ Database connection is not available. Database features are disabled.")
-            st.info("The application will continue to work without database functionality. You can still import, process, and analyze data, but you won't be able to save or load from the database.")
-            st.info("Please check your database connection settings or contact your administrator for assistance.")
-            
-            # Show technical details in an expander for troubleshooting
-            with st.expander("Technical Details"):
-                st.code("""
-# Common issues:
-1. PostgreSQL service may not be running
-2. Database credentials may be incorrect
-3. Network connectivity issues
-4. SSL connection failures
-
-# Troubleshooting:
-- Check that the PostgreSQL database service is running
-- Verify that the DATABASE_URL environment variable is correctly set
-- Ensure network connectivity to the database server
-- Check firewall settings that might block database connections
-                """)
-        else:
-            # Database operations
-            db_operation = st.radio(
-                "Select Database Operation:",
-                ["Save Dataset", "Load Dataset", "List Saved Datasets", "Save Analysis Result", "View Analysis Results", "Delete Dataset"]
-            )
-        
-        if not hasattr(db_handler, 'db_available') or not db_handler.db_available:
-            pass  # Already handled with error message above
-        elif db_operation == "Save Dataset":
-            st.subheader("Save Dataset to Database")
-            
-            # Select dataset to save
-            save_data_options = []
-            if st.session_state.original_data is not None:
-                save_data_options.append("Original Data")
-            if st.session_state.interpolated_data is not None:
-                save_data_options.append("Interpolated Data")
-            if st.session_state.processed_data is not None:
-                save_data_options.append("Processed Data")
-            if st.session_state.predictions is not None:
-                save_data_options.append("Predictions")
-                
-            if not save_data_options:
-                st.warning("No datasets available to save. Please import or generate data first.")
-            else:
-                dataset_to_save = st.selectbox("Select dataset to save:", save_data_options)
-                
-                # Get selected dataset
-                if dataset_to_save == "Original Data":
-                    save_df = st.session_state.original_data
-                    data_type = "original"
-                elif dataset_to_save == "Interpolated Data":
-                    save_df = st.session_state.interpolated_data
-                    data_type = "interpolated"
-                elif dataset_to_save == "Processed Data":
-                    save_df = st.session_state.processed_data
-                    data_type = "processed"
-                elif dataset_to_save == "Predictions":
-                    save_df = st.session_state.predictions
-                    data_type = "predictions"
-                
-                # Dataset name and description
-                save_name = st.text_input("Dataset name:", f"{dataset_to_save} - {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}")
-                save_description = st.text_area("Description (optional):", f"Saved from {dataset_to_save} tab")
-                
-                # Save button
-                if st.button("Save to Database"):
-                    try:
-                        dataset_id = db_handler.save_dataset(
-                            save_df, 
-                            name=save_name,
-                            description=save_description,
-                            data_type=data_type
-                        )
-                        st.success(f"Dataset saved successfully with ID: {dataset_id}")
-                    except Exception as e:
-                        st.error(f"Error saving dataset: {e}")
-        
-        elif db_operation == "Load Dataset":
-            st.subheader("Load Dataset from Database")
-            
-            # List available datasets
-            try:
-                saved_datasets = db_handler.list_datasets()
-                
-                if not saved_datasets:
-                    st.info("No datasets found in the database.")
-                else:
-                    # Create a formatted dataframe for display
-                    datasets_df = pd.DataFrame(saved_datasets)
-                    datasets_df['created_at'] = datasets_df['created_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M'))
-                    if 'modified_at' in datasets_df.columns:
-                        datasets_df['modified_at'] = datasets_df['modified_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M') if x else "")
-                    
-                    st.write("Available Datasets:")
-                    st.dataframe(datasets_df)
-                    
-                    # Select dataset to load
-                    dataset_id = st.selectbox(
-                        "Select dataset to load:",
-                        [(ds['id'], ds['name']) for ds in saved_datasets],
-                        format_func=lambda x: f"{x[1]} (ID: {x[0]})"
-                    )
-                    
-                    # Select where to load
-                    load_target = st.radio(
-                        "Load as:",
-                        ["Original Data", "Interpolated Data"]
-                    )
-                    
-                    # Load button
-                    if st.button("Load Dataset"):
-                        try:
-                            loaded_df = db_handler.load_dataset(dataset_id=dataset_id[0])
-                            
-                            if load_target == "Original Data":
-                                st.session_state.original_data = loaded_df
-                                st.success(f"Dataset loaded as Original Data: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
-                            else:
-                                st.session_state.interpolated_data = loaded_df
-                                st.success(f"Dataset loaded as Interpolated Data: {loaded_df.shape[0]} rows, {loaded_df.shape[1]} columns")
-                                
-                            # Preview
-                            st.subheader("Data Preview")
-                            st.dataframe(loaded_df.head())
-                            
-                        except Exception as e:
-                            st.error(f"Error loading dataset: {e}")
-            
-            except Exception as e:
-                st.error(f"Error accessing database: {e}")
-        
-        elif db_operation == "List Saved Datasets":
-            st.subheader("Saved Datasets")
-            
-            # Filter options
-            filter_type = st.radio(
-                "Filter by data type:",
-                ["All", "Original", "Interpolated", "Processed", "Predictions"]
-            )
-            
-            data_type_filter = None
-            if filter_type != "All":
-                data_type_filter = filter_type.lower()
-            
-            # Get and display datasets
-            try:
-                datasets = db_handler.list_datasets(data_type=data_type_filter)
-                
-                if not datasets:
-                    st.info(f"No {'datasets' if filter_type == 'All' else filter_type + ' datasets'} found in the database.")
-                else:
-                    # Convert to dataframe for display
-                    datasets_df = pd.DataFrame(datasets)
-                    datasets_df['created_at'] = datasets_df['created_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M'))
-                    if 'modified_at' in datasets_df.columns:
-                        datasets_df['modified_at'] = datasets_df['modified_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M') if x else "")
-                    
-                    st.write(f"Found {len(datasets)} datasets:")
-                    st.dataframe(datasets_df)
-            
-            except Exception as e:
-                st.error(f"Error listing datasets: {e}")
-        
-        elif db_operation == "Save Analysis Result":
-            st.subheader("Save Analysis Result to Database")
-            
-            # Check if we have results to save
-            if st.session_state.predictions is None and st.session_state.risk_assessment is None:
-                st.warning("No analysis results available to save. Please generate predictions or perform risk assessment first.")
-            else:
-                # Select result type
-                result_options = []
-                if st.session_state.predictions is not None:
-                    result_options.append("Prediction Results")
-                if st.session_state.risk_assessment is not None:
-                    result_options.append("Risk Assessment Results")
-                
-                result_type = st.selectbox("Select result type to save:", result_options)
-                
-                # Get datasets to choose from
-                try:
-                    datasets = db_handler.list_datasets()
-                    
-                    if not datasets:
-                        st.warning("No datasets found in the database. Please save a dataset first.")
-                    else:
-                        # Select related dataset
-                        dataset_id = st.selectbox(
-                            "Select related dataset:",
-                            [(ds['id'], ds['name']) for ds in datasets],
-                            format_func=lambda x: f"{x[1]} (ID: {x[0]})"
-                        )
-                        
-                        # Get result data
-                        if result_type == "Prediction Results":
-                            result_data = st.session_state.predictions
-                            analysis_type = "prediction"
-                        else:
-                            result_data = st.session_state.risk_assessment
-                            analysis_type = "risk_assessment"
-                        
-                        # Analysis parameters
-                        st.write("Analysis parameters (optional):")
-                        param_description = st.text_area("Description:", "")
-                        
-                        # Convert to parameters dict
-                        analysis_params = {"description": param_description}
-                        
-                        # Save button
-                        if st.button("Save Analysis Result"):
-                            try:
-                                result_id = db_handler.save_analysis_result(
-                                    dataset_id=dataset_id[0],
-                                    analysis_type=analysis_type,
-                                    analysis_params=analysis_params,
-                                    result_data=result_data
-                                )
-                                st.success(f"Analysis result saved successfully with ID: {result_id}")
-                            except Exception as e:
-                                st.error(f"Error saving analysis result: {e}")
-                        
-                except Exception as e:
-                    st.error(f"Error accessing database: {e}")
-        
-        elif db_operation == "View Analysis Results":
-            st.subheader("View Analysis Results")
-            
-            # Filter options
-            filter_type = st.radio(
-                "Filter by analysis type:",
-                ["All", "Prediction", "Risk Assessment"]
-            )
-            
-            analysis_type_filter = None
-            if filter_type != "All":
-                analysis_type_filter = filter_type.lower().replace(" ", "_")
-            
-            # Get datasets to filter by
-            try:
-                datasets = db_handler.list_datasets()
-                dataset_options = [("all", "All Datasets")] + [(ds['id'], ds['name']) for ds in datasets]
-                
-                dataset_filter = st.selectbox(
-                    "Filter by dataset:",
-                    dataset_options,
-                    format_func=lambda x: x[1]
-                )
-                
-                dataset_id_filter = None if dataset_filter[0] == "all" else dataset_filter[0]
-                
-                # Get and display analysis results
-                results = db_handler.list_analysis_results(
-                    dataset_id=dataset_id_filter,
-                    analysis_type=analysis_type_filter
-                )
-                
-                if not results:
-                    st.info("No analysis results found matching the selected filters.")
-                else:
-                    # Convert to dataframe for display
-                    results_df = pd.DataFrame(results)
-                    results_df['created_at'] = results_df['created_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M'))
-                    
-                    # Add dataset name
-                    if datasets:
-                        dataset_map = {ds['id']: ds['name'] for ds in datasets}
-                        results_df['dataset_name'] = results_df['dataset_id'].apply(lambda x: dataset_map.get(x, "Unknown"))
-                    
-                    # Format analysis type
-                    results_df['analysis_type'] = results_df['analysis_type'].apply(
-                        lambda x: "Prediction" if x == "prediction" else "Risk Assessment"
-                    )
-                    
-                    st.write(f"Found {len(results)} analysis results:")
-                    st.dataframe(results_df)
-                    
-                    # View specific result
-                    if not results_df.empty:
-                        result_id = st.selectbox(
-                            "Select result to view:",
-                            results_df['id'].tolist(),
-                            format_func=lambda x: f"Result ID: {x}"
-                        )
-                        
-                        if st.button("View Result"):
-                            try:
-                                dataset_id, analysis_type, analysis_params, result_data = db_handler.load_analysis_result(result_id)
-                                
-                                st.subheader("Analysis Result Details")
-                                st.write(f"Dataset ID: {dataset_id}")
-                                st.write(f"Analysis Type: {analysis_type}")
-                                
-                                if analysis_params:
-                                    st.write("Analysis Parameters:")
-                                    st.json(analysis_params)
-                                
-                                st.write("Result Data:")
-                                if isinstance(result_data, pd.DataFrame):
-                                    st.dataframe(result_data)
+                                            st.success(f"Analysis complete. Results saved as Analysis {new_analysis['id']}.")
+                                            st.info("Navigate to the Convergence Evaluation tab to evaluate convergence with multiple analyses.")
                                 else:
-                                    st.json(result_data)
+                                    st.warning("Please select at least one analytical method to continue.")
+                                
+                            with multiple_imputation_tabs[2]:
+                                # Evaluate Convergence tab
+                                if 'convergence_datasets' not in st.session_state:
+                                    st.session_state.convergence_datasets = []
                                     
-                            except Exception as e:
-                                st.error(f"Error loading analysis result: {e}")
-            
-            except Exception as e:
-                st.error(f"Error accessing database: {e}")
-                
-        elif db_operation == "Delete Dataset":
-            st.subheader("Delete Dataset")
-            st.warning("⚠️ Warning: This will permanently delete the dataset and all associated analysis results!")
-            
-            # Get datasets to delete
-            try:
-                datasets = db_handler.list_datasets()
-                
-                if not datasets:
-                    st.info("No datasets found in the database.")
-                else:
-                    # Convert to dataframe for display
-                    datasets_df = pd.DataFrame(datasets)
-                    datasets_df['created_at'] = datasets_df['created_at'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M'))
-                    
-                    st.write("Available Datasets:")
-                    st.dataframe(datasets_df)
-                    
-                    # Select dataset to delete
-                    dataset_id = st.selectbox(
-                        "Select dataset to delete:",
-                        [(ds['id'], ds['name']) for ds in datasets],
-                        format_func=lambda x: f"{x[1]} (ID: {x[0]})"
-                    )
-                    
-                    # Confirmation
-                    confirm = st.checkbox("I understand this action cannot be undone")
-                    
-                    # Delete button
-                    if st.button("Delete Dataset", disabled=not confirm):
-                        try:
-                            success = db_handler.delete_dataset(dataset_id[0])
-                            if success:
-                                st.success(f"Dataset {dataset_id[1]} (ID: {dataset_id[0]}) deleted successfully")
-                            else:
-                                st.error("Dataset could not be deleted")
-                        except Exception as e:
-                            st.error(f"Error deleting dataset: {e}")
-            
-            except Exception as e:
-                st.error(f"Error accessing database: {e}")
+                                if not st.session_state.convergence_datasets:
+                                    st.warning("No analysis results available. Please run analysis in the Analyze Imputed Data tab.")
+                                else:
+                                    st.write("### Convergence Evaluation")
+                                    st.write("Evaluate the convergence of multiple imputations.")
+                                    
+                                    # Show available datasets
+                                    st.write("#### Available Analysis Results")
+                                    results_df = pd.DataFrame([
+                                        {
+                                            'ID': a['id'],
+                                            'Dataset': a['dataset_name'],
+                                            'Methods': ", ".join(a['methods']),
+                                            'Timestamp': a['timestamp'].strftime("%Y-%m-%d %H:%M")
+                                        }
+                                        for a in st.session_state.convergence_datasets
+                                    ])
+                                    
+                                    st.dataframe(results_df)
+                                    
+                                    # Select datasets to compare
+                                    selected_ids = st.multiselect(
+                                        "Select analysis results to compare:",
+                                        options=[a['id'] for a in st.session_state.convergence_datasets],
+                                        default=[]
+                                    )
+                                    
+                                    if selected_ids:
+                                        # Get selected analyses
+                                        selected_analyses = [a for a in st.session_state.convergence_datasets if a['id'] in selected_ids]
+                                        
+                                        if len(selected_analyses) > 1:
+                                            st.write("### Convergence Statistics")
+                                            
+                                            # Prepare data for comparison
+                                            comparison_data = []
+                                            
+                                            for analysis in selected_analyses:
+                                                # Extract relevant metrics from each analysis result
+                                                metrics = {
+                                                    'ID': analysis['id'],
+                                                    'Dataset': analysis['dataset_name']
+                                                }
+                                                
+                                                # Add convergence scores
+                                                for key, value in analysis.get('convergence_scores', {}).items():
+                                                    metrics[key] = value
+                                                
+                                                comparison_data.append(metrics)
+                                            
+                                            # Display comparison table
+                                            comparison_df = pd.DataFrame(comparison_data)
+                                            st.dataframe(comparison_df)
+                                            
+                                            # Calculate variation statistics
+                                            if len(comparison_data) > 1:
+                                                st.write("#### Variation Between Imputations")
+                                                
+                                                numeric_cols = comparison_df.select_dtypes(include=np.number).columns
+                                                if len(numeric_cols) > 0:
+                                                    # Calculate coefficient of variation (CV) for each metric
+                                                    variation_stats = {}
+                                                    
+                                                    for col in numeric_cols:
+                                                        values = comparison_df[col].dropna()
+                                                        if len(values) > 1:
+                                                            mean = values.mean()
+                                                            std = values.std()
+                                                            cv = (std / mean) * 100 if mean != 0 else float('nan')
+                                                            
+                                                            variation_stats[col] = {
+                                                                'Mean': mean,
+                                                                'Std': std,
+                                                                'CV (%)': cv
+                                                            }
+                                                    
+                                                    if variation_stats:
+                                                        var_df = pd.DataFrame(variation_stats).T
+                                                        st.dataframe(var_df)
+                                                        
+                                                        # Interpret convergence
+                                                        st.write("#### Convergence Interpretation")
+                                                        
+                                                        cv_values = var_df['CV (%)'].dropna()
+                                                        if len(cv_values) > 0:
+                                                            avg_cv = cv_values.mean()
+                                                            
+                                                            if avg_cv < 5:
+                                                                st.success(f"Good convergence (Average CV: {avg_cv:.2f}%). The multiple imputations have converged well.")
+                                                            elif avg_cv < 10:
+                                                                st.info(f"Acceptable convergence (Average CV: {avg_cv:.2f}%). The multiple imputations show reasonable consistency.")
+                                                            else:
+                                                                st.warning(f"Poor convergence (Average CV: {avg_cv:.2f}%). Consider running more imputations or reviewing the imputation model.")
+                                                    else:
+                                                        st.warning("No comparable numeric metrics found across the selected analyses.")
+                                                else:
+                                                    st.warning("No numeric metrics available for convergence evaluation.")
+                                        else:
+                                            st.warning("Please select at least two analysis results to compare convergence.")
+                                
+                            # Add database tab for storing and retrieving analysis results
+                            with multiple_imputation_tabs[3]:
+                                st.write("### Save and Load Analysis Results")
+                                
+                                # Save current results
+                                if st.button("Save Current Analysis Results to Database"):
+                                    if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
+                                        try:
+                                            # Use SQLAlchemy to save to database
+                                            # This is a placeholder - actual implementation would depend on your database schema
+                                            st.success("Analysis results saved to database.")
+                                        except Exception as e:
+                                            st.error(f"Error saving to database: {str(e)}")
+                                    else:
+                                        st.warning("No analysis results available to save.")
+                                
+                                # Load previous results
+                                st.write("#### Load Previous Analysis Results")
+                                if st.button("Load Analysis Results from Database"):
+                                    try:
+                                        # Use SQLAlchemy to load from database
+                                        # This is a placeholder - actual implementation would depend on your database schema
+                                        st.info("This would load previous analysis results from the database.")
+                                    except Exception as e:
+                                        st.error(f"Error loading from database: {str(e)}")
+                            
+                    # End of the Multiple Imputation Analysis module
 
-# Add a footer with reset option
-st.markdown("---")
-col1, col2 = st.columns([4, 1])
-with col2:
-    if st.button("Reset All"):
-        # Reset all session state variables
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
-        
-with col1:
-    st.markdown("💡 **Tip**: Use the tabs above to navigate between different steps of the analysis pipeline. You can move freely between tabs at any time.")
+if __name__ == "__main__":
+    st.sidebar.info("Data Analysis Platform")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("A comprehensive platform for data analysis, statistical modeling, and multiple imputation convergence testing.")

@@ -1254,7 +1254,8 @@ with main_container:
                                 # Analysis methods in tabs
                                 analysis_tabs = st.tabs(["Dataset Selection", "Cluster Analysis (K-Means)", 
                                                         "Regression Analysis", "Factor Analysis (PCA)", 
-                                                        "Convergence Evaluation"])
+                                                        "Convergence Evaluation", "CGAN Analysis", 
+                                                        "Multiple Imputation Analysis"])
                                 
                                 # Initialize consecutive analysis if it doesn't exist
                                 if 'consecutive_analysis' not in st.session_state:
@@ -1288,11 +1289,21 @@ with main_container:
                                         st.session_state.current_analysis_step = 3
                                     
                                     elif current_step == 3:
-                                        # Final step - convergence evaluation
+                                        # Move to convergence evaluation
                                         st.warning("Consecutive analysis: Running convergence evaluation...")
                                         st.session_state.current_analysis_step = 4
                                     
                                     elif current_step == 4:
+                                        # If convergence is achieved, move to CGAN Analysis
+                                        if 'all_converged' in st.session_state and st.session_state.all_converged:
+                                            st.warning("Consecutive analysis: Running CGAN analysis...")
+                                            st.session_state.current_analysis_step = 5
+                                        else:
+                                            st.warning("Convergence not achieved. Stopping consecutive analysis.")
+                                            st.session_state.consecutive_analysis = False
+                                            st.session_state.current_analysis_step = 0
+                                    
+                                    elif current_step == 5:
                                         # Analysis complete
                                         st.success("Consecutive analysis completed successfully!")
                                         st.session_state.consecutive_analysis = False

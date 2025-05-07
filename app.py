@@ -3702,16 +3702,16 @@ with main_container:
                                             st.session_state.condition_values = condition_values
                                         
                                     else:  # Use natural language input
-                                        st.write("### 使用自然语言描述条件")
-                                        st.write("您可以用自然语言描述想要的条件值，系统将自动解析为CGAN可用的参数。")
+                                        st.write("### Use Natural Language to Describe Conditions")
+                                        st.write("You can describe your desired condition values in natural language, and the system will automatically parse them into parameters that CGAN can use.")
                                         
                                         # Show column info as reference with enhanced display
-                                        st.write("##### 数据列信息（作为参考）")
+                                        st.write("##### Column Information (for reference)")
                                         
                                         # Show original data column statistics
                                         if 'original_data' in st.session_state and st.session_state.original_data is not None:
                                             # Create tabs for better organization
-                                            data_ref_tabs = st.tabs(["条件列统计", "原始数据统计", "原始数据预览"])
+                                            data_ref_tabs = st.tabs(["Condition Column Stats", "Original Data Stats", "Original Data Preview"])
                                             
                                             with data_ref_tabs[0]:
                                                 condition_info_df = pd.DataFrame(condition_info_data)
@@ -3747,46 +3747,46 @@ with main_container:
                                                 height=min(35 * (len(condition_info_data) + 1), 500),
                                                 use_container_width=True
                                             )
-                                        st.write("在自然语言描述中，您可以参考这些数据列名称和它们的取值范围。")
+                                        st.write("In your natural language description, you can refer to these column names and their value ranges.")
                                         
                                         # Natural language input
                                         nl_description = st.text_area(
-                                            "请输入您的自然语言描述：",
+                                            "Enter your natural language description:",
                                             height=150,
                                             key="nl_condition_input",
-                                            help="例如：'年龄约45岁，收入较高，信用评分在中等偏上'"
+                                            help="For example: 'Age around 45, high income, credit score above average'"
                                         )
                                         
                                         # Processing method selection
                                         processing_method = st.radio(
-                                            "处理方法",
-                                            options=["使用大语言模型（需要API密钥）", "使用代码规则解析"],
+                                            "Processing Method",
+                                            options=["Use Large Language Model (requires API key)", "Use code-based parsing"],
                                             index=0 if llm_handler.is_any_service_available() else 1,
                                             key="nl_processing_method"
                                         )
                                         
                                         # LLM service selection if applicable
                                         llm_service = None
-                                        if processing_method == "使用大语言模型（需要API密钥）":
+                                        if processing_method == "Use Large Language Model (requires API key)":
                                             available_services = llm_handler.get_available_services()
                                             if available_services:
                                                 llm_service = st.selectbox(
-                                                    "选择大语言模型服务",
+                                                    "Select LLM Service",
                                                     options=available_services,
                                                     index=0,
                                                     key="llm_service_select"
                                                 )
-                                                st.info(f"将使用 {llm_service} 解析您的自然语言输入")
+                                                st.info(f"Will use {llm_service} to process your natural language input")
                                             else:
-                                                st.error("未检测到任何可用的大语言模型API密钥。请提供OpenAI或Anthropic的API密钥，或者选择使用代码规则解析。")
-                                                processing_method = "使用代码规则解析"
+                                                st.error("No available LLM API keys detected. Please provide an OpenAI or Anthropic API key, or select code-based parsing.")
+                                                processing_method = "Use code-based parsing"
                                         
                                         # Preview button
-                                        if st.button("预览解析结果", key="preview_nl_button"):
+                                        if st.button("Preview Parsing Results", key="preview_nl_button"):
                                             if not nl_description:
-                                                st.warning("请先输入自然语言描述")
+                                                st.warning("Please enter a natural language description first")
                                             else:
-                                                with st.spinner("正在解析自然语言描述..."):
+                                                with st.spinner("Parsing natural language description..."):
                                                     # Map LLM service display name to service ID
                                                     service = "auto"
                                                     if llm_service:
@@ -3796,7 +3796,7 @@ with main_container:
                                                             service = "anthropic"
                                                     
                                                     # Parse using appropriate method
-                                                    if processing_method == "使用大语言模型（需要API密钥）":
+                                                    if processing_method == "Use Large Language Model (requires API key)":
                                                         parsed_values = llm_handler.parse_condition_text(
                                                             nl_description,
                                                             condition_info_data,
@@ -3811,15 +3811,15 @@ with main_container:
                                                     
                                                     # Check for errors
                                                     if isinstance(parsed_values, dict) and "error" in parsed_values:
-                                                        st.error(f"解析错误: {parsed_values['error']}")
+                                                        st.error(f"Parsing Error: {parsed_values['error']}")
                                                         # Show error code without nested expander to avoid Streamlit error
                                                         if "traceback" in parsed_values:
-                                                            st.write("**详细错误信息:**")
+                                                            st.write("**Detailed Error Information:**")
                                                             st.code(parsed_values["traceback"])
                                                     else:
                                                         # Display the parsed values
-                                                        st.success("成功解析自然语言描述！")
-                                                        st.write("解析结果:")
+                                                        st.success("Successfully parsed natural language description!")
+                                                        st.write("Parsing Results:")
                                                         
                                                         # Create a comparison dataframe
                                                         results_data = []
@@ -3829,11 +3829,11 @@ with main_container:
                                                                 orig_stats = next((x for x in condition_info_data if x["Column"] == col), None)
                                                                 if orig_stats:
                                                                     results_data.append({
-                                                                        "列名": col,
-                                                                        "解析值": parsed_values[col],
-                                                                        "原始平均值": orig_stats["Mean"],
-                                                                        "原始最小值": orig_stats["Min"],
-                                                                        "原始最大值": orig_stats["Max"]
+                                                                        "Column": col,
+                                                                        "Parsed Value": parsed_values[col],
+                                                                        "Original Mean": orig_stats["Mean"],
+                                                                        "Original Min": orig_stats["Min"],
+                                                                        "Original Max": orig_stats["Max"]
                                                                     })
                                                         
                                                         if results_data:
@@ -3844,9 +3844,9 @@ with main_container:
                                                                 use_container_width=True
                                                             )
                                                             st.session_state.condition_values = parsed_values
-                                                            st.info("这些值将在生成数据时使用。点击 '训练CGAN模型' 按钮继续。")
+                                                            st.info("These values will be used when generating data. Click the 'Train CGAN Model' button to continue.")
                                                         else:
-                                                            st.warning("未能解析出任何有效的条件值。请尝试更明确的自然语言描述。")
+                                                            st.warning("No valid condition values could be parsed. Please try a more specific natural language description.")
                             
                             # Dataset Balance Analysis
                             with st.expander("Training Data Analysis", expanded=False):

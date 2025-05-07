@@ -2778,6 +2778,91 @@ with main_container:
                         st.write("#### Select Data Sources")
                         st.write("CGAN analysis requires two datasets: training data and evaluation data.")
                         
+                        # Display the original data preview
+                        if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                            with st.expander("查看原始数据列信息（作为参考）", expanded=False):
+                                st.write("##### 原始数据集信息")
+                                original_data = st.session_state.original_data
+                                st.write(f"数据形状: {original_data.shape[0]} 行, {original_data.shape[1]} 列")
+                                
+                                # Basic statistics of the original data
+                                st.write("##### 原始数据基本统计")
+                                stats_df = original_data.describe().T
+                                stats_df = stats_df.reset_index().rename(columns={"index": "Column"})
+                                
+                                # Display with adjustable height and width
+                                st.dataframe(
+                                    stats_df,
+                                    height=min(35 * (len(stats_df) + 1), 500),
+                                    use_container_width=True
+                                )
+                                
+                                # Display first few rows of the data
+                                st.write("##### 原始数据前5行")
+                                st.dataframe(
+                                    original_data.head(), 
+                                    height=min(35 * 6, 300),  # Header + 5 rows
+                                    use_container_width=True
+                                )
+                        
+                        # Experimental data input section
+                        with st.expander("输入实验数据", expanded=False):
+                            st.write("##### 上传实验数据")
+                            st.write("您可以上传实验数据用于CGAN分析。")
+                            
+                            # File uploader for experimental data
+                            experimental_file = st.file_uploader(
+                                "上传实验数据文件（CSV或Excel格式）",
+                                type=["csv", "xlsx", "xls"],
+                                key="cgan_experimental_data"
+                            )
+                            
+                            if experimental_file is not None:
+                                try:
+                                    # Import the experimental data
+                                    experimental_data = data_handler.import_data(experimental_file)
+                                    
+                                    # Store in session state
+                                    st.session_state.cgan_experimental_data = experimental_data
+                                    
+                                    # Show preview
+                                    st.success(f"✓ 成功导入实验数据: {experimental_data.shape[0]} 行, {experimental_data.shape[1]} 列")
+                                    st.write("##### 实验数据预览")
+                                    st.dataframe(
+                                        experimental_data.head(),
+                                        height=min(35 * 6, 300),  # Header + 5 rows
+                                        use_container_width=True
+                                    )
+                                    
+                                    # If original data is available, check column compatibility
+                                    if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                                        original_cols = set(st.session_state.original_data.columns)
+                                        experimental_cols = set(experimental_data.columns)
+                                        common_cols = original_cols.intersection(experimental_cols)
+                                        
+                                        if len(common_cols) == 0:
+                                            st.error("❌ 实验数据与原始数据没有共同的列，无法进行比较分析。")
+                                        else:
+                                            st.info(f"✓ 检测到 {len(common_cols)} 个共同列，可以进行比较分析。")
+                                except Exception as e:
+                                    st.error(f"导入实验数据时出错: {str(e)}")
+                            
+                            # Add experimental data to options if available
+                            if 'cgan_experimental_data' in st.session_state and st.session_state.cgan_experimental_data is not None:
+                                st.success("✓ 实验数据已成功导入，可以在训练选项中使用。")
+                                
+                                # Show statistics of the experimental data
+                                st.write("##### 实验数据基本统计")
+                                exp_stats_df = st.session_state.cgan_experimental_data.describe().T
+                                exp_stats_df = exp_stats_df.reset_index().rename(columns={"index": "Column"})
+                                
+                                # Display with adjustable height and width
+                                st.dataframe(
+                                    exp_stats_df,
+                                    height=min(35 * (len(exp_stats_df) + 1), 500),
+                                    use_container_width=True
+                                )
+                        
                         col1, col2 = st.columns(2)
                         
                         with col1:
@@ -2788,8 +2873,14 @@ with main_container:
                             if 'original_data' in st.session_state and st.session_state.original_data is not None:
                                 training_data_options.append("Original Data")
                             
+                            # 加入原始+插值数据选项
                             if ('original_data' in st.session_state and st.session_state.original_data is not None and
                                 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None):
+                                training_data_options.append("Combined Data (Original + Interpolated)")
+                            
+                            # 加入原始+实验数据选项
+                            if ('original_data' in st.session_state and st.session_state.original_data is not None and
+                                'cgan_experimental_data' in st.session_state and st.session_state.cgan_experimental_data is not None):
                                 training_data_options.append("Combined Data (Original + Experimental)")
                             
                             if not training_data_options:
@@ -2807,18 +2898,18 @@ with main_container:
                                     st.success("✓ Using Original Data for model training")
                                     training_data = st.session_state.original_data
                                     st.write(f"Data shape: {training_data.shape[0]} rows, {training_data.shape[1]} columns")
-                                elif training_data_source == "Combined Data (Original + Experimental)":
-                                    # Combine the original and experimental data
-                                    st.success("✓ Using Combined Data for model training")
+                                elif training_data_source == "Combined Data (Original + Interpolated)":
+                                    # Combine the original and interpolated data
+                                    st.success("✓ Using Combined Data (Original + Interpolated) for model training")
                                     
-                                    # Allow user to set weight for experimental data
-                                    exp_weight = st.slider(
-                                        "Experimental data weight in combined dataset:", 
+                                    # Allow user to set weight for interpolated data
+                                    interp_weight = st.slider(
+                                        "Interpolated data weight in combined dataset:", 
                                         min_value=0.1, 
                                         max_value=1.0, 
                                         value=0.5,
                                         step=0.1,
-                                        help="Lower values give more weight to original data, higher values give more weight to experimental data"
+                                        help="Lower values give more weight to original data, higher values give more weight to interpolated data"
                                     )
                                     
                                     # Get common columns
@@ -2826,8 +2917,8 @@ with main_container:
                                                      set(st.session_state.interpolated_data.columns))
                                     
                                     # Sample from both datasets based on weight
-                                    orig_sample_size = int(len(st.session_state.original_data) * (1 - exp_weight/2))
-                                    interp_sample_size = int(len(st.session_state.interpolated_data) * exp_weight)
+                                    orig_sample_size = int(len(st.session_state.original_data) * (1 - interp_weight/2))
+                                    interp_sample_size = int(len(st.session_state.interpolated_data) * interp_weight)
                                     
                                     # Sample with replacement to ensure we get the desired size
                                     orig_sample = st.session_state.original_data.sample(n=orig_sample_size, replace=True)
@@ -2841,7 +2932,52 @@ with main_container:
                                     
                                     st.write(f"Combined data shape: {training_data.shape[0]} rows, {training_data.shape[1]} columns")
                                     st.write(f"Original contribution: {orig_sample_size} rows ({orig_sample_size/training_data.shape[0]:.1%})")
-                                    st.write(f"Experimental contribution: {interp_sample_size} rows ({interp_sample_size/training_data.shape[0]:.1%})")
+                                    st.write(f"Interpolated contribution: {interp_sample_size} rows ({interp_sample_size/training_data.shape[0]:.1%})")
+                                
+                                elif training_data_source == "Combined Data (Original + Experimental)":
+                                    # Combine the original and experimental data
+                                    st.success("✓ Using Combined Data (Original + Experimental) for model training")
+                                    
+                                    # Allow user to set weight for experimental data
+                                    exp_weight = st.slider(
+                                        "Experimental data weight in combined dataset:", 
+                                        min_value=0.1, 
+                                        max_value=1.0, 
+                                        value=0.5,
+                                        step=0.1,
+                                        help="Lower values give more weight to original data, higher values give more weight to experimental data"
+                                    )
+                                    
+                                    # Get common columns between original and experimental data
+                                    common_cols = list(set(st.session_state.original_data.columns) & 
+                                                     set(st.session_state.cgan_experimental_data.columns))
+                                    
+                                    if len(common_cols) == 0:
+                                        st.error("No common columns found between original and experimental data. Cannot combine.")
+                                        training_data = st.session_state.original_data
+                                        st.warning("Falling back to using original data only.")
+                                    else:
+                                        # Filter data to use only common columns
+                                        orig_filtered = st.session_state.original_data[common_cols]
+                                        exp_filtered = st.session_state.cgan_experimental_data[common_cols]
+                                        
+                                        # Sample from both datasets based on weight
+                                        orig_sample_size = int(len(orig_filtered) * (1 - exp_weight/2))
+                                        exp_sample_size = int(len(exp_filtered) * exp_weight)
+                                        
+                                        # Sample with replacement to ensure we get the desired size
+                                        orig_sample = orig_filtered.sample(n=orig_sample_size, replace=True)
+                                        exp_sample = exp_filtered.sample(n=exp_sample_size, replace=True)
+                                        
+                                        # Combine the samples
+                                        training_data = pd.concat([orig_sample, exp_sample], ignore_index=True)
+                                        
+                                        # Shuffle the combined data
+                                        training_data = training_data.sample(frac=1.0).reset_index(drop=True)
+                                        
+                                        st.write(f"Combined data shape: {training_data.shape[0]} rows, {training_data.shape[1]} columns")
+                                        st.write(f"Original contribution: {orig_sample_size} rows ({orig_sample_size/training_data.shape[0]:.1%})")
+                                        st.write(f"Experimental contribution: {exp_sample_size} rows ({exp_sample_size/training_data.shape[0]:.1%})")
                                 else:
                                     st.error("❌ Please select a valid training data source.")
                                     training_data = None

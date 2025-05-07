@@ -4068,16 +4068,16 @@ with main_container:
                                                     st.dataframe(analysis_info["synthetic_data"].head(10))
                                             
                                             with validation_tabs[1]:
-                                                st.subheader("判别器评分分析")
-                                                st.write("使用训练好的判别器对插补数据和原始数据进行真实性评分比较。")
+                                                st.subheader("Discriminator Score Analysis")
+                                                st.write("Using the trained discriminator to compare authenticity scores between interpolated data and original data.")
                                                 
-                                                # 确保我们有原始数据进行比较
+                                                # Make sure we have original data for comparison
                                                 if 'original_data' not in st.session_state or st.session_state.original_data is None:
-                                                    st.warning("需要原始数据才能进行判别器评分分析。请先上传或选择原始数据。")
+                                                    st.warning("Original data is required for discriminator score analysis. Please upload or select original data first.")
                                                 else:
-                                                    # 允许用户设置用于比较的样本大小
+                                                    # Allow users to set the sample size for comparison
                                                     sample_size = st.slider(
-                                                        "从原始数据中抽取的样本大小", 
+                                                        "Sample size to draw from original data", 
                                                         min_value=10, 
                                                         max_value=min(1000, len(st.session_state.original_data)),
                                                         value=min(100, len(st.session_state.original_data)),
@@ -4085,83 +4085,99 @@ with main_container:
                                                     )
                                                     
                                                     try:
-                                                        # 使用判别器评估数据
+                                                        # Use the discriminator to evaluate the data
                                                         discriminator_results = advanced_processor.cgan_discriminator_evaluation(
                                                             interpolated_data=cgan_analysis_data,
                                                             original_data=st.session_state.original_data,
                                                             sample_size=sample_size
                                                         )
                                                         
-                                                        st.success("判别器评分分析完成。")
+                                                        st.success("Discriminator score analysis completed.")
                                                         
-                                                        # 显示平均评分
-                                                        st.write("##### 判别器评分结果")
+                                                        # Display average scores
+                                                        st.write("##### Discriminator Score Results")
                                                         
-                                                        # 创建指标卡片的列布局
+                                                        # Create column layout for metric cards
                                                         metrics_cols = st.columns(3)
                                                         
                                                         with metrics_cols[0]:
                                                             st.metric(
-                                                                "原始数据平均评分", 
+                                                                "Original Data Mean Score", 
                                                                 f"{discriminator_results['original_mean_score']:.4f}"
                                                             )
                                                         
                                                         with metrics_cols[1]:
                                                             st.metric(
-                                                                "插补数据平均评分", 
+                                                                "Interpolated Data Mean Score", 
                                                                 f"{discriminator_results['interpolated_mean_score']:.4f}"
                                                             )
                                                         
                                                         with metrics_cols[2]:
                                                             st.metric(
-                                                                "评分差异", 
+                                                                "Score Difference", 
                                                                 f"{discriminator_results['score_difference']:.4f}",
                                                                 delta=f"{discriminator_results['score_difference']:.4f}"
                                                             )
                                                         
-                                                        # 显示t检验结果
+                                                        # Display t-test results
                                                         if 'p_value' in discriminator_results and discriminator_results['p_value'] is not None:
                                                             p_value = discriminator_results['p_value']
-                                                            significance = "存在显著差异" if p_value < 0.05 else "无显著差异"
+                                                            significance = "Significant difference" if p_value < 0.05 else "No significant difference"
                                                             
-                                                            st.write(f"**t检验结果:** p值 = {p_value:.4f} ({significance})")
+                                                            st.write(f"**t-test Results:** p-value = {p_value:.4f} ({significance})")
                                                         
-                                                        # 显示评分分布图
+                                                        # Display score distribution plot
                                                         if 'score_distribution_plot' in discriminator_results:
-                                                            st.write("##### 判别器评分分布")
+                                                            st.write("##### Discriminator Score Distribution")
                                                             st.pyplot(discriminator_results['score_distribution_plot'])
                                                         
-                                                        # 显示解释和建议
+                                                        # Display interpretation and recommendations
                                                         if 'interpretation' in discriminator_results:
                                                             interpretation = discriminator_results['interpretation']
                                                             
-                                                            st.write("##### 质量评估与建议")
-                                                            st.info(f"**质量评估:** {interpretation.get('score_quality', 'N/A')}")
-                                                            st.info(f"**建议:** {interpretation.get('recommendation', 'N/A')}")
+                                                            # Check for Chinese values and translate them
+                                                            score_quality = interpretation.get('score_quality', 'N/A')
+                                                            recommendation = interpretation.get('recommendation', 'N/A')
+                                                            
+                                                            # Translate quality assessment if in Chinese
+                                                            chinese_quality = {
+                                                                '优秀': 'Excellent',
+                                                                '良好': 'Good',
+                                                                '一般': 'Fair', 
+                                                                '较差': 'Poor',
+                                                                '差': 'Poor'
+                                                            }
+                                                            
+                                                            if score_quality in chinese_quality:
+                                                                score_quality = chinese_quality[score_quality]
+                                                            
+                                                            st.write("##### Quality Assessment & Recommendations")
+                                                            st.info(f"**Quality Assessment:** {score_quality}")
+                                                            st.info(f"**Recommendation:** {recommendation}")
                                                         
-                                                        # 保存判别器结果到session state
+                                                        # Save discriminator results to session state
                                                         if 'cgan_results' in st.session_state and isinstance(st.session_state.cgan_results, dict):
                                                             st.session_state.cgan_results['discriminator_results'] = discriminator_results
                                                     
                                                     except Exception as e:
-                                                        st.error(f"判别器评分分析出错: {str(e)}")
+                                                        st.error(f"Error in discriminator score analysis: {str(e)}")
                                                         st.code(traceback.format_exc())
                                                     
-                                                    # 显示最终结果
+                                                    # Display final results
                                                     if "error" in analysis_info:
                                                         st.error(f"Error in CGAN analysis: {analysis_info['error']}")
                                                     else:
-                                                        st.success("CGAN分析已成功完成！")
+                                                        st.success("CGAN analysis completed successfully!")
                                                 
-                                                    # 显示指标
+                                                    # Display metrics
                                                     if "metrics" in analysis_info:
                                                         try:
                                                             metrics = analysis_info["metrics"]
-                                                            st.write("#### 分析指标")
+                                                            st.write("#### Analysis Metrics")
                                                             metrics_df = pd.DataFrame([metrics])
                                                             st.dataframe(metrics_df.T)
                                                         except Exception as e:
-                                                            st.error(f"显示分析指标时出错: {str(e)}")
+                                                            st.error(f"Error displaying analysis metrics: {str(e)}")
                                                     
                                                     # Display results
                                                     st.write("#### Synthetic Data vs. Evaluation Data Statistics")

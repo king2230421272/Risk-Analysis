@@ -2650,6 +2650,134 @@ with main_container:
                                                     # Update the between_within_ratio with the modified values
                                                     between_within_ratio = {params[i]: values[i] for i in range(len(params))}
                                                     
+                                                    # Check if we have actual MCMC samples to show trace plots
+                                                    have_mcmc_samples = 'mcmc_samples' in st.session_state and st.session_state.mcmc_samples is not None
+                                                    
+                                                    # MCMC Trace Plot Section (only show if we have actual samples)
+                                                    if have_mcmc_samples:
+                                                        st.write("#### MCMC Chain Trace Plots")
+                                                        st.write("""
+                                                        Trace plots show how the MCMC chains explore the parameter space. 
+                                                        Good mixing and convergence is indicated by chains that:
+                                                        - Explore similar regions (overlapping chains)
+                                                        - Show good random movement without getting "stuck"
+                                                        - Don't show strong trends or patterns
+                                                        """)
+                                                        
+                                                        # Create a parameter selector
+                                                        # Get available parameters from the MCMC samples
+                                                        posterior_params = list(st.session_state.mcmc_samples.posterior.keys())
+                                                        
+                                                        # Filter out non-parameter variables or create a meaningful grouping
+                                                        mu_params = [p for p in posterior_params if p.startswith('mu_')]
+                                                        sigma_params = [p for p in posterior_params if p.startswith('sigma_')]
+                                                        other_params = [p for p in posterior_params if not p.startswith('mu_') and not p.startswith('sigma_')]
+                                                        
+                                                        # Organize parameters by type
+                                                        param_groups = {
+                                                            "μ (Mean) Parameters": mu_params,
+                                                            "σ (Standard Deviation) Parameters": sigma_params,
+                                                            "Other Parameters": other_params
+                                                        }
+                                                        
+                                                        # Let user select parameter group
+                                                        param_group = st.selectbox(
+                                                            "Parameter group:",
+                                                            options=list(param_groups.keys()),
+                                                            key="mcmc_param_group"
+                                                        )
+                                                        
+                                                        # Let user select parameter
+                                                        if param_groups[param_group]:
+                                                            selected_param = st.selectbox(
+                                                                "Select parameter to visualize:",
+                                                                options=param_groups[param_group],
+                                                                key="mcmc_trace_param"
+                                                            )
+                                                            
+                                                            # Get the parameter samples
+                                                            if selected_param in posterior_params:
+                                                                chain_samples = st.session_state.mcmc_samples.posterior[selected_param].values
+                                                                
+                                                                # Number of chains and samples
+                                                                n_chains = chain_samples.shape[0]
+                                                                n_samples = chain_samples.shape[1]
+                                                                
+                                                                # Create trace plot
+                                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                                
+                                                                # Plot each chain with a different color
+                                                                for chain in range(n_chains):
+                                                                    ax.plot(
+                                                                        range(n_samples), 
+                                                                        chain_samples[chain, :], 
+                                                                        label=f'Chain {chain+1}',
+                                                                        alpha=0.8
+                                                                    )
+                                                                
+                                                                ax.set_xlabel('Sample Number')
+                                                                ax.set_ylabel('Parameter Value')
+                                                                ax.set_title(f'Trace Plot for {selected_param}')
+                                                                ax.legend()
+                                                                
+                                                                # Add grid and improve appearance
+                                                                ax.grid(True, linestyle='--', alpha=0.6)
+                                                                
+                                                                st.pyplot(fig)
+                                                                
+                                                                # Create density plot for the same parameter
+                                                                fig2, ax2 = plt.subplots(figsize=(10, 5))
+                                                                
+                                                                # Plot density for each chain
+                                                                for chain in range(n_chains):
+                                                                    sns.kdeplot(
+                                                                        chain_samples[chain, :], 
+                                                                        label=f'Chain {chain+1}',
+                                                                        ax=ax2
+                                                                    )
+                                                                
+                                                                ax2.set_xlabel('Parameter Value')
+                                                                ax2.set_ylabel('Density')
+                                                                ax2.set_title(f'Posterior Density for {selected_param}')
+                                                                ax2.legend()
+                                                                
+                                                                st.pyplot(fig2)
+                                                                
+                                                                # Add parameter statistics
+                                                                st.write("##### Parameter Statistics")
+                                                                
+                                                                # Calculate statistics for each chain
+                                                                chain_stats = []
+                                                                for chain in range(n_chains):
+                                                                    chain_stats.append({
+                                                                        'Chain': f'Chain {chain+1}',
+                                                                        'Mean': np.mean(chain_samples[chain, :]),
+                                                                        'Std Dev': np.std(chain_samples[chain, :]),
+                                                                        'Min': np.min(chain_samples[chain, :]),
+                                                                        '25%': np.percentile(chain_samples[chain, :], 25),
+                                                                        'Median': np.median(chain_samples[chain, :]),
+                                                                        '75%': np.percentile(chain_samples[chain, :], 75),
+                                                                        'Max': np.max(chain_samples[chain, :])
+                                                                    })
+                                                                
+                                                                # Add overall statistics
+                                                                chain_stats.append({
+                                                                    'Chain': 'All Chains',
+                                                                    'Mean': np.mean(chain_samples),
+                                                                    'Std Dev': np.std(chain_samples),
+                                                                    'Min': np.min(chain_samples),
+                                                                    '25%': np.percentile(chain_samples, 25),
+                                                                    'Median': np.median(chain_samples),
+                                                                    '75%': np.percentile(chain_samples, 75),
+                                                                    'Max': np.max(chain_samples)
+                                                                })
+                                                                
+                                                                st.dataframe(pd.DataFrame(chain_stats))
+                                                            else:
+                                                                st.warning(f"Parameter {selected_param} not found in MCMC samples.")
+                                                        else:
+                                                            st.warning(f"No parameters found in the selected group.")
+                                                    
                                                     # Display PSRF results
                                                     st.write("#### Potential Scale Reduction Factor (PSRF)")
                                                     st.write("""

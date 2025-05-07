@@ -1087,6 +1087,67 @@ with main_container:
                         while accounting for uncertainty in the interpolated values.
                         """)
                         
+                        # Experimental Data section
+                        use_experimental_data = st.checkbox(
+                            "使用实验数据进行增强插值",
+                            value=False,
+                            key="mcmc_use_experimental_data",
+                            help="选择是否使用实验数据与所选数据集进行融合，增强插值质量"
+                        )
+                        
+                        if use_experimental_data:
+                            st.write("#### 实验数据设置")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                experimental_data_file = st.file_uploader(
+                                    "上传实验数据文件 (CSV or Excel)",
+                                    type=["csv", "xlsx", "xls"],
+                                    key="mcmc_experimental_data_file"
+                                )
+                            
+                            with col2:
+                                # 设置融合比例的滑块
+                                fusion_ratio = st.slider(
+                                    "原始数据与实验数据融合比例",
+                                    min_value=0.0,
+                                    max_value=1.0,
+                                    value=0.5,
+                                    step=0.05,
+                                    help="值为0.5表示原始数据和实验数据各占50%的权重"
+                                )
+                                
+                                # 添加数据缩放选项
+                                apply_scaling = st.checkbox(
+                                    "应用数据缩放让实验数据与原始数据量级一致",
+                                    value=True,
+                                    help="将实验数据缩放到与原始数据相似的分布范围"
+                                )
+                            
+                            # 处理实验数据
+                            experimental_data = None
+                            if experimental_data_file is not None:
+                                try:
+                                    experimental_data = data_handler.import_data(experimental_data_file)
+                                    st.success(f"成功导入实验数据: {experimental_data.shape[0]} 行, {experimental_data.shape[1]} 列")
+                                    
+                                    # 显示实验数据预览
+                                    with st.expander("实验数据预览", expanded=False):
+                                        st.dataframe(experimental_data.head())
+                                        st.write("基本统计信息:")
+                                        st.dataframe(experimental_data.describe())
+                                    
+                                    # 如果需要融合实验数据，并且有插值数据
+                                    if interpolated_data is not None:
+                                        # 确保列名一致
+                                        common_cols = set(interpolated_data.columns).intersection(set(experimental_data.columns))
+                                        if len(common_cols) == 0:
+                                            st.error("实验数据与插值数据没有共同的列名。请确保数据格式一致。")
+                                        else:
+                                            st.success(f"检测到 {len(common_cols)} 个共同列，可以进行数据融合。")
+                                except Exception as e:
+                                    st.error(f"导入实验数据时出错: {e}")
+                                    experimental_data = None
+                        
                         # Interpolation parameters
                         with st.expander("Interpolation Parameters", expanded=True):
                             num_samples = st.slider("Number of MCMC samples", min_value=100, max_value=1000, value=500, step=100)
@@ -1118,15 +1179,104 @@ with main_container:
                                     iterations = num_datasets if generate_multiple else 1
                                     
                                     with st.spinner(f"Running MCMC interpolation for {iterations} dataset(s)... (this may take a while)"):
+                                        # Apply experimental data fusion if enabled
+                                        data_for_interpolation = interpolated_data.copy()
+                                        
+                                        # Handling experimental data fusion
+                                        if use_experimental_data and experimental_data is not None:
+                                            try:
+                                                st.write("##### 应用实验数据融合")
+                                                
+                                                # 确保列名一致
+                                                common_cols = set(interpolated_data.columns).intersection(set(experimental_data.columns))
+                                                if len(common_cols) > 0:
+                                                    # 仅保留共同列
+                                                    base_subset = interpolated_data[list(common_cols)].copy()
+                                                    exp_subset = experimental_data[list(common_cols)].copy()
+                                                    
+                                                    # 应用缩放使实验数据与原始数据量级一致
+                                                    if apply_scaling:
+                                                        st.write("正在应用数据缩放...")
+                                                        # 仅对数值列进行缩放
+                                                        numeric_cols = base_subset.select_dtypes(include=np.number).columns
+                                                        
+                                                        for col in numeric_cols:
+                                                            # 跳过所有NaN的列
+                                                            if exp_subset[col].isna().all() or base_subset[col].isna().all():
+                                                                continue
+                                                                
+                                                            # 计算原始数据的均值和标准差 (忽略NaN)
+                                                            base_mean = base_subset[col].mean()
+                                                            base_std = base_subset[col].std() if base_subset[col].std() > 0 else 1.0
+                                                            
+                                                            # 计算实验数据的均值和标准差 (忽略NaN)
+                                                            exp_mean = exp_subset[col].mean() 
+                                                            exp_std = exp_subset[col].std() if exp_subset[col].std() > 0 else 1.0
+                                                            
+                                                            # 标准化实验数据，然后使用原始数据的分布进行缩放
+                                                            exp_subset[col] = ((exp_subset[col] - exp_mean) / exp_std) * base_std + base_mean
+                                                    
+                                                    # 根据融合比例计算样本量
+                                                    total_samples = int(base_subset.shape[0] * 0.8)  # 控制总量不要太大
+                                                    
+                                                    # 计算原始数据和实验数据的样本量
+                                                    orig_sample_size = int(total_samples * fusion_ratio)
+                                                    exp_sample_size = total_samples - orig_sample_size
+                                                    
+                                                    if orig_sample_size <= 0:
+                                                        orig_sample_size = 1
+                                                    if exp_sample_size <= 0:
+                                                        exp_sample_size = 1
+                                                        
+                                                    # 采样并合并
+                                                    orig_sample = base_subset.sample(n=min(orig_sample_size, base_subset.shape[0]), random_state=42)
+                                                    exp_sample = exp_subset.sample(n=min(exp_sample_size, exp_subset.shape[0]), random_state=42)
+                                                    
+                                                    # 创建融合数据
+                                                    fused_data = pd.concat([orig_sample, exp_sample], axis=0, ignore_index=True)
+                                                    
+                                                    # 使用融合数据更新插值数据
+                                                    for col in common_cols:
+                                                        # 替换那些含有NaN的部分
+                                                        if col in data_for_interpolation.columns:
+                                                            mask = data_for_interpolation[col].isna()
+                                                            if mask.any():
+                                                                # 在没有NaN的实验数据中取样填充
+                                                                non_nan_exp = fused_data.loc[~fused_data[col].isna(), col]
+                                                                
+                                                                if len(non_nan_exp) > 0:
+                                                                    # 对于每个NaN值，随机取一个非NaN实验值
+                                                                    for idx in data_for_interpolation[mask].index:
+                                                                        if len(non_nan_exp) > 0:
+                                                                            data_for_interpolation.loc[idx, col] = non_nan_exp.sample(n=1).iloc[0]
+                                                    
+                                                    st.success(f"成功融合数据: 使用了 {orig_sample_size} 行原始数据和 {exp_sample_size} 行实验数据")
+                                                    
+                                                    # 显示融合后的数据统计信息
+                                                    with st.expander("查看融合辅助数据统计", expanded=False):
+                                                        co1, co2, co3 = st.columns(3)
+                                                        with co1:
+                                                            st.write("原始数据统计:")
+                                                            st.dataframe(base_subset.describe())
+                                                        with co2:
+                                                            st.write("实验数据统计:")
+                                                            st.dataframe(exp_subset.describe())
+                                                        with co3:
+                                                            st.write("融合后辅助数据统计:")
+                                                            st.dataframe(fused_data.describe())
+                                            except Exception as e:
+                                                st.error(f"实验数据融合过程中发生错误: {str(e)}")
+                                                # 出错时仍使用原始数据进行插值
+                                                
                                         # Generate the requested number of datasets
                                         for i in range(iterations):
                                             # Show progress for multiple datasets
                                             if generate_multiple:
                                                 st.text(f"Generating dataset {i+1} of {iterations}...")
                                                 
-                                            # Run MCMC interpolation
+                                            # Run MCMC interpolation with the potentially enhanced data
                                             interpolated_result = advanced_processor.mcmc_interpolation(
-                                                interpolated_data,
+                                                data_for_interpolation,
                                                 num_samples=num_samples,
                                                 chains=chains
                                             )

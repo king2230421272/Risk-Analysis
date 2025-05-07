@@ -27,11 +27,24 @@ class LlmHandler:
         self.anthropic_available = self.anthropic_api_key is not None and len(self.anthropic_api_key) > 0
         
         # Initialize clients if keys are available
+        self.openai_client = None
+        self.anthropic_client = None
+        
         if self.openai_available:
-            self.openai_client = openai.OpenAI(api_key=self.openai_api_key)
+            try:
+                self.openai_client = openai.OpenAI(api_key=self.openai_api_key)
+                print("OpenAI client successfully initialized")
+            except Exception as e:
+                print(f"Error initializing OpenAI client: {e}")
+                self.openai_available = False
         
         if self.anthropic_available:
-            self.anthropic_client = Anthropic(api_key=self.anthropic_api_key)
+            try:
+                self.anthropic_client = Anthropic(api_key=self.anthropic_api_key)
+                print("Anthropic client successfully initialized")
+            except Exception as e:
+                print(f"Error initializing Anthropic client: {e}")
+                self.anthropic_available = False
     
     def is_any_service_available(self):
         """Check if any LLM service is available."""

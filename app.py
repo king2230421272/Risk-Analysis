@@ -2782,15 +2782,69 @@ with main_container:
                         
                         with col1:
                             st.write("**Training Data Source**")
-                            # Always use original data for training by default
-                            training_data_source = "Original Data"
+                            # Data source options
+                            training_data_options = []
+                            
                             if 'original_data' in st.session_state and st.session_state.original_data is not None:
-                                st.success("✓ Using Original Data for model training")
-                                training_data = st.session_state.original_data
-                                st.write(f"Data shape: {training_data.shape[0]} rows, {training_data.shape[1]} columns")
-                            else:
-                                st.error("❌ Original Data not available. Please import data in the Data Import tab.")
+                                training_data_options.append("Original Data")
+                            
+                            if ('original_data' in st.session_state and st.session_state.original_data is not None and
+                                'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None):
+                                training_data_options.append("Combined Data (Original + Experimental)")
+                            
+                            if not training_data_options:
+                                st.error("❌ No training data available. Please import data in the Data Import tab.")
                                 training_data = None
+                            else:
+                                training_data_source = st.radio(
+                                    "Select data source for model training:",
+                                    options=training_data_options,
+                                    index=0,
+                                    key="cgan_training_data_source"
+                                )
+                                
+                                if training_data_source == "Original Data":
+                                    st.success("✓ Using Original Data for model training")
+                                    training_data = st.session_state.original_data
+                                    st.write(f"Data shape: {training_data.shape[0]} rows, {training_data.shape[1]} columns")
+                                elif training_data_source == "Combined Data (Original + Experimental)":
+                                    # Combine the original and experimental data
+                                    st.success("✓ Using Combined Data for model training")
+                                    
+                                    # Allow user to set weight for experimental data
+                                    exp_weight = st.slider(
+                                        "Experimental data weight in combined dataset:", 
+                                        min_value=0.1, 
+                                        max_value=1.0, 
+                                        value=0.5,
+                                        step=0.1,
+                                        help="Lower values give more weight to original data, higher values give more weight to experimental data"
+                                    )
+                                    
+                                    # Get common columns
+                                    common_cols = list(set(st.session_state.original_data.columns) & 
+                                                     set(st.session_state.interpolated_data.columns))
+                                    
+                                    # Sample from both datasets based on weight
+                                    orig_sample_size = int(len(st.session_state.original_data) * (1 - exp_weight/2))
+                                    interp_sample_size = int(len(st.session_state.interpolated_data) * exp_weight)
+                                    
+                                    # Sample with replacement to ensure we get the desired size
+                                    orig_sample = st.session_state.original_data.sample(n=orig_sample_size, replace=True)
+                                    interp_sample = st.session_state.interpolated_data.sample(n=interp_sample_size, replace=True)
+                                    
+                                    # Combine the samples
+                                    training_data = pd.concat([orig_sample, interp_sample], ignore_index=True)
+                                    
+                                    # Shuffle the combined data
+                                    training_data = training_data.sample(frac=1.0).reset_index(drop=True)
+                                    
+                                    st.write(f"Combined data shape: {training_data.shape[0]} rows, {training_data.shape[1]} columns")
+                                    st.write(f"Original contribution: {orig_sample_size} rows ({orig_sample_size/training_data.shape[0]:.1%})")
+                                    st.write(f"Experimental contribution: {interp_sample_size} rows ({interp_sample_size/training_data.shape[0]:.1%})")
+                                else:
+                                    st.error("❌ Please select a valid training data source.")
+                                    training_data = None
                         
                         with col2:
                             st.write("**Evaluation Data Source**")
@@ -2924,7 +2978,12 @@ with main_container:
                                         
                                         # Create DataFrame and display
                                         condition_info_df = pd.DataFrame(condition_info_data)
-                                        st.dataframe(condition_info_df)
+                                        # Set height to show all rows without scrolling and width to fill container
+                                        st.dataframe(
+                                            condition_info_df,
+                                            height=min(35 * (len(condition_info_data) + 1), 500),
+                                            use_container_width=True
+                                        )
                                         
                                         st.info("When generating data, the model will use these statistics to sample condition values.")
                                         
@@ -2979,7 +3038,12 @@ with main_container:
                                         # Show column info as reference
                                         st.write("##### 数据列信息（作为参考）")
                                         condition_info_df = pd.DataFrame(condition_info_data)
-                                        st.dataframe(condition_info_df)
+                                        # Set height to show all rows without scrolling and width to fill container
+                                        st.dataframe(
+                                            condition_info_df,
+                                            height=min(35 * (len(condition_info_data) + 1), 500),
+                                            use_container_width=True
+                                        )
                                         st.write("在自然语言描述中，您可以参考这些数据列名称和它们的取值范围。")
                                         
                                         # Natural language input
@@ -3069,7 +3133,12 @@ with main_container:
                                                                     })
                                                         
                                                         if results_data:
-                                                            st.dataframe(pd.DataFrame(results_data))
+                                                            # Display with better formatting
+                                                            st.dataframe(
+                                                                pd.DataFrame(results_data),
+                                                                height=min(35 * (len(results_data) + 1), 500),
+                                                                use_container_width=True
+                                                            )
                                                             st.session_state.condition_values = parsed_values
                                                             st.info("这些值将在生成数据时使用。点击 '训练CGAN模型' 按钮继续。")
                                                         else:

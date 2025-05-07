@@ -598,75 +598,75 @@ class AdvancedDataProcessor:
         # 确保条件列存在于数据中
         missing_cols = set(condition_cols) - set(data.columns)
         if missing_cols:
-            raise ValueError(f"数据中缺少条件列: {missing_cols}")
+            raise ValueError(f"Missing condition columns in data: {missing_cols}")
         
-        # 如果提供了自定义条件，使用它们代替数据框中的数据
+        # If custom conditions are provided, use them instead of data in the dataframe
         if custom_conditions is not None and isinstance(custom_conditions, dict):
-            print(f"使用自定义条件值: {custom_conditions}")
+            print(f"Using custom condition values: {custom_conditions}")
             
-            # 创建一个只包含自定义条件值的单行数据框
+            # Create a single-row dataframe with only custom condition values
             custom_condition_df = pd.DataFrame([custom_conditions])
             
-            # 确保所有条件列都存在
+            # Ensure all condition columns exist
             for col in condition_cols:
                 if col not in custom_condition_df.columns:
-                    raise ValueError(f"自定义条件中缺少列 '{col}'")
+                    raise ValueError(f"Missing column '{col}' in custom conditions")
             
-            # 按正确顺序提取所需的列
+            # Extract required columns in correct order
             condition_data = custom_condition_df[condition_cols].values
             
-            # 覆盖插值数据进行结果比较
+            # Override interpolated data for result comparison
             if len(target_cols) > 0 and all(col in data.columns for col in target_cols):
                 comparison_data = data[target_cols].head(1).copy()
             else:
                 comparison_data = pd.DataFrame(index=[0], columns=target_cols)
         else:
-            # 使用数据框中的条件数据
+            # Use condition data from the dataframe
             condition_data = data[condition_cols].values
             comparison_data = data[target_cols].copy() if len(target_cols) > 0 else pd.DataFrame()
         
-        # 缩放条件数据
+        # Scale condition data
         scaled_condition = condition_scaler.transform(condition_data)
         
-        # 转换为PyTorch张量
+        # Convert to PyTorch tensor
         condition_tensor = torch.FloatTensor(scaled_condition).to(self.device)
         
-        # 将生成器设置为评估模式
+        # Set generator to evaluation mode
         generator.eval()
         
-        # 存储用于分布分析的原始合成数据
+        # Store raw synthetic data for distribution analysis
         all_raw_generations = []
         all_conditions = []
         
-        # 为每个条件生成多个样本
+        # Generate multiple samples for each condition
         all_generations = []
         
-        print(f"为{len(condition_data)}个条件各生成{noise_samples}个样本...")
+        print(f"Generating {noise_samples} samples for each of {len(condition_data)} conditions...")
         
         with torch.no_grad():
             for _ in range(noise_samples):
-                # 生成随机噪声
+                # Generate random noise
                 noise = torch.randn(condition_tensor.size(0), noise_dim).to(self.device)
                 
-                # 生成假样本
+                # Generate fake samples
                 fake_target = generator(noise, condition_tensor)
                 
-                # 存储原始样本用于分布分析(反向缩放前)
+                # Store raw samples for distribution analysis (before inverse scaling)
                 all_raw_generations.append(fake_target.cpu().numpy())
                 all_conditions.append(condition_tensor.cpu().numpy())
                 
-                # 转换回numpy
+                # Convert back to numpy
                 fake_target_np = fake_target.cpu().numpy()
                 
-                # 反向转换到原始比例
+                # Inverse transform to original scale
                 fake_target_rescaled = target_scaler.inverse_transform(fake_target_np)
                 
                 all_generations.append(fake_target_rescaled)
         
-        # 堆叠所有生成结果
+        # Stack all generated results
         all_generations_stacked = np.stack(all_generations, axis=0)
         
-        # 计算统计数据
+        # Calculate statistics
         mean_generations = np.mean(all_generations_stacked, axis=0)
         std_generations = np.std(all_generations_stacked, axis=0)
         median_generations = np.median(all_generations_stacked, axis=0)
@@ -675,13 +675,13 @@ class AdvancedDataProcessor:
         q1_generations = np.percentile(all_generations_stacked, 25, axis=0)
         q3_generations = np.percentile(all_generations_stacked, 75, axis=0)
         
-        # 创建CGAN分析结果数据框
+        # Create CGAN analysis results dataframe
         generated_results = pd.DataFrame()
         
-        # 检查结果是否包含NaN或为空
+        # Check if results contain NaN or are empty
         if np.isnan(mean_generations).all() or len(mean_generations) == 0:
-            print("警告: 生成的数据仅包含NaN值")
-            # 创建具有适当列的空数据框
+            print("Warning: Generated data contains only NaN values")
+            # Create empty dataframe with appropriate columns
             for i, col in enumerate(target_cols):
                 generated_results[col] = np.zeros(condition_data.shape[0])
                 generated_results[f'{col}_std'] = np.zeros(condition_data.shape[0])
@@ -689,33 +689,33 @@ class AdvancedDataProcessor:
                     generated_results[f'{col}_original'] = comparison_data[col].values
                     generated_results[f'{col}_deviation'] = np.zeros(condition_data.shape[0])
             
-            # 返回空结果
-            return generated_results, {"error": "生成的数据仅包含NaN值"}
+            # Return empty results
+            return generated_results, {"error": "Generated data contains only NaN values"}
         
-        # 创建合成数据DataFrame以进行详细统计分析
+        # Create synthetic data DataFrame for detailed statistical analysis
         all_raw_generations_combined = np.vstack(all_raw_generations)
         all_raw_generations_unscaled = target_scaler.inverse_transform(all_raw_generations_combined)
         synthetic_df = pd.DataFrame(all_raw_generations_unscaled, columns=target_cols)
         
-        # 将结果添加到数据框
+        # Add results to the dataframe
         for i, col in enumerate(target_cols):
-            if i < mean_generations.shape[1]:  # 确保列索引在范围内
-                generated_results[col] = mean_generations[:, i]  # 主列是平均预测
+            if i < mean_generations.shape[1]:  # Ensure column index is in range
+                generated_results[col] = mean_generations[:, i]  # Main column is average prediction
                 generated_results[f'{col}_std'] = std_generations[:, i]
                 
-                # 添加原始值进行比较
+                # Add original values for comparison
                 if col in comparison_data.columns:
-                    # 确保两个数组的长度相同
+                    # Ensure both arrays have the same length
                     min_len = min(len(comparison_data[col].values), len(mean_generations[:, i]))
                     if min_len > 0:
                         generated_results[f'{col}_original'] = comparison_data[col].values[:min_len]
                         
-                        # 计算与CGAN预测的偏差
+                        # Calculate deviation from CGAN prediction
                         generated_results[f'{col}_deviation'] = np.abs(
                             comparison_data[col].values[:min_len] - mean_generations[:min_len, i]
                         )
                         
-                        # 添加偏差百分比
+                        # Add percentage deviation
                         original_mean = np.mean(comparison_data[col].values[:min_len])
                         if abs(original_mean) > 1e-10:
                             generated_results[f'{col}_deviation_pct'] = np.abs(
@@ -724,31 +724,31 @@ class AdvancedDataProcessor:
                         else:
                             generated_results[f'{col}_deviation_pct'] = np.zeros(min_len)
                     else:
-                        # 处理一个数组为空的情况
+                        # Handle case where one array is empty
                         generated_results[f'{col}_original'] = []
                         generated_results[f'{col}_deviation'] = []
                         generated_results[f'{col}_deviation_pct'] = []
         
-        # 为参考添加条件值到结果
+        # Add condition values to results for reference
         for i, col in enumerate(condition_cols):
             if condition_data.shape[1] > i:
                 generated_results[f'condition_{col}'] = condition_data[:, i]
         
-        # 执行全面统计指标比较
+        # Perform comprehensive statistical metric comparison
         statistical_analysis = {}
         
-        # 对每个目标列执行详细统计比较
+        # Perform detailed statistical comparison for each target column
         for col in target_cols:
             if col in comparison_data.columns and col in synthetic_df.columns:
                 try:
-                    # 从插补数据获取实际值
+                    # Get actual values from interpolated data
                     real_values = comparison_data[col].dropna().values
                     
-                    # 获取合成数据值
+                    # Get synthetic data values
                     synthetic_values = synthetic_df[col].dropna().values
                     
                     if len(real_values) > 0 and len(synthetic_values) > 0:
-                        # 计算详细统计数据
+                        # Calculate detailed statistics
                         stats_comparison = {
                             'real_mean': np.mean(real_values),
                             'synthetic_mean': np.mean(synthetic_values),
@@ -790,20 +790,20 @@ class AdvancedDataProcessor:
                                             max(abs(np.percentile(real_values, 75) - np.percentile(real_values, 25)), 1e-10)) * 100
                         }
                         
-                        # 评估统计保存质量
+                        # Evaluate statistical preservation quality
                         mean_diff_pct = stats_comparison['mean_diff_pct']
                         std_diff_pct = stats_comparison['std_diff_pct']
                         
                         if mean_diff_pct < 5 and std_diff_pct < 10:
-                            stats_comparison['preservation_quality'] = '优秀'
+                            stats_comparison['preservation_quality'] = 'Excellent'
                         elif mean_diff_pct < 10 and std_diff_pct < 20:
-                            stats_comparison['preservation_quality'] = '良好'
+                            stats_comparison['preservation_quality'] = 'Good'
                         elif mean_diff_pct < 20 and std_diff_pct < 30:
-                            stats_comparison['preservation_quality'] = '一般'
+                            stats_comparison['preservation_quality'] = 'Fair'
                         else:
-                            stats_comparison['preservation_quality'] = '差'
+                            stats_comparison['preservation_quality'] = 'Poor'
                         
-                        # 执行K-S检验比较分布
+                        # Perform K-S test to compare distributions
                         try:
                             from scipy import stats
                             statistic, p_value = stats.ks_2samp(real_values, synthetic_values)
@@ -811,32 +811,32 @@ class AdvancedDataProcessor:
                             stats_comparison['ks_p_value'] = p_value
                             stats_comparison['similar_distribution'] = p_value >= 0.05
                         except Exception as e:
-                            print(f"K-S检验出错 {col}: {str(e)}")
+                            print(f"K-S test error for {col}: {str(e)}")
                         
-                        # 创建比较分布的图
+                        # Create distribution comparison plot
                         fig, ax = plt.subplots(figsize=(10, 6))
                         
-                        # 绘制带核密度估计的直方图
-                        ax.hist(real_values, bins=20, alpha=0.5, density=True, label='插补数据', color='blue')
-                        ax.hist(synthetic_values, bins=20, alpha=0.5, density=True, label='合成数据', color='orange')
+                        # Plot histograms with kernel density estimation
+                        ax.hist(real_values, bins=20, alpha=0.5, density=True, label='Interpolated Data', color='blue')
+                        ax.hist(synthetic_values, bins=20, alpha=0.5, density=True, label='Synthetic Data', color='orange')
                         
-                        ax.set_title(f'{col}的分布比较 (p值: {stats_comparison.get("ks_p_value", "N/A"):.4f})')
-                        ax.set_xlabel('值')
-                        ax.set_ylabel('密度')
+                        ax.set_title(f'Distribution Comparison for {col} (p-value: {stats_comparison.get("ks_p_value", "N/A"):.4f})')
+                        ax.set_xlabel('Value')
+                        ax.set_ylabel('Density')
                         ax.legend()
                         
-                        # 存储图以供稍后显示
+                        # Store plot for later display
                         stats_comparison['distribution_plot'] = fig
                         
                         statistical_analysis[col] = stats_comparison
                 except Exception as e:
-                    print(f"分析列{col}时出错: {str(e)}")
+                    print(f"Error analyzing column {col}: {str(e)}")
         
-        # 汇总分析信息
+        # Summarize analysis information
         analysis_info = {
             'statistical_analysis': statistical_analysis,
             'synthetic_data': synthetic_df,
-            'conditions_used': custom_conditions if custom_conditions else "原始数据条件",
+            'conditions_used': custom_conditions if custom_conditions else "Original data conditions",
             'metrics': {
                 'num_conditions': len(condition_data),
                 'num_samples_per_condition': noise_samples,
@@ -845,129 +845,129 @@ class AdvancedDataProcessor:
             }
         }
         
-        print("CGAN生成与统计比较分析完成。")
+        print("CGAN generation and statistical comparison analysis completed.")
         return generated_results, analysis_info
         
     def cgan_discriminator_evaluation(self, interpolated_data, original_data, sample_size=100):
         """
-        使用训练好的判别器评估插补数据与原始数据的真实性评分。
+        Use the trained discriminator to evaluate the authenticity scores of interpolated data vs original data.
         
         Parameters:
         -----------
         interpolated_data : pandas.DataFrame
-            要评估的插补数据集
+            The interpolated dataset to evaluate
         original_data : pandas.DataFrame
-            原始数据集，用于随机抽取样本进行比较
+            Original dataset to randomly sample from for comparison
         sample_size : int
-            从原始数据中随机抽取的样本数量
+            Number of samples to randomly draw from the original data
             
         Returns:
         --------
         dict
-            包含判别器评分和分析结果的字典
+            Dictionary containing discriminator scores and analysis results
         """
         if self.cgan_model is None or 'discriminator' not in self.cgan_model:
-            raise ValueError("CGAN模型未训练或不包含判别器。请先调用train_cgan方法。")
+            raise ValueError("CGAN model not trained or missing discriminator. Please call train_cgan method first.")
         
-        print("开始判别器评分分析...")
+        print("Starting discriminator score analysis...")
         
-        # 从保存的模型中提取组件
+        # Extract components from the saved model
         discriminator = self.cgan_model['discriminator']
         condition_scaler = self.cgan_model['condition_scaler']
         target_scaler = self.cgan_model['target_scaler']
         condition_cols = self.cgan_model['condition_cols']
         target_cols = self.cgan_model['target_cols']
         
-        # 预处理数据
+        # Preprocess data
         interpolated_processed = self.preprocess_data(interpolated_data)
         original_processed = self.preprocess_data(original_data)
         
-        # 检查是否有足够的数据
+        # Check if there is enough data
         if interpolated_processed.empty or original_processed.empty:
-            raise ValueError("插补数据或原始数据为空")
+            raise ValueError("Interpolated or original data is empty")
         
-        # 确保所有必需的列存在
+        # Ensure all required columns exist
         all_cols = condition_cols + target_cols
         missing_cols_interp = set(all_cols) - set(interpolated_processed.columns)
         missing_cols_orig = set(all_cols) - set(original_processed.columns)
         
         if missing_cols_interp:
-            raise ValueError(f"插补数据中缺少列: {missing_cols_interp}")
+            raise ValueError(f"Missing columns in interpolated data: {missing_cols_interp}")
         if missing_cols_orig:
-            raise ValueError(f"原始数据中缺少列: {missing_cols_orig}")
+            raise ValueError(f"Missing columns in original data: {missing_cols_orig}")
         
-        # 将判别器设置为评估模式
+        # Set discriminator to evaluation mode
         discriminator.eval()
         
-        # 从原始数据中随机抽样
+        # Randomly sample from original data
         if len(original_processed) > sample_size:
             original_sample = original_processed.sample(sample_size, random_state=42)
         else:
             original_sample = original_processed
-            print(f"警告: 原始数据样本数({len(original_processed)})少于请求的样本数({sample_size})")
+            print(f"Warning: Original data sample count ({len(original_processed)}) is less than requested sample size ({sample_size})")
         
-        # 准备判别器输入数据
+        # Prepare discriminator input data
         interp_condition_data = interpolated_processed[condition_cols].values
         interp_target_data = interpolated_processed[target_cols].values
         
         orig_condition_data = original_sample[condition_cols].values
         orig_target_data = original_sample[target_cols].values
         
-        # 缩放数据
+        # Scale data
         interp_condition_scaled = condition_scaler.transform(interp_condition_data)
         interp_target_scaled = target_scaler.transform(interp_target_data)
         
         orig_condition_scaled = condition_scaler.transform(orig_condition_data)
         orig_target_scaled = target_scaler.transform(orig_target_data)
         
-        # 转换为PyTorch张量
+        # Convert to PyTorch tensors
         interp_condition_tensor = torch.FloatTensor(interp_condition_scaled).to(self.device)
         interp_target_tensor = torch.FloatTensor(interp_target_scaled).to(self.device)
         
         orig_condition_tensor = torch.FloatTensor(orig_condition_scaled).to(self.device)
         orig_target_tensor = torch.FloatTensor(orig_target_scaled).to(self.device)
         
-        # 获取判别器评分
+        # Get discriminator scores
         with torch.no_grad():
-            # 对插补数据的判别器评分
+            # Discriminator scores for interpolated data
             interp_scores = discriminator(interp_target_tensor, interp_condition_tensor)
             interp_scores_np = interp_scores.cpu().numpy().flatten()
             
-            # 对原始数据的判别器评分
+            # Discriminator scores for original data
             orig_scores = discriminator(orig_target_tensor, orig_condition_tensor)
             orig_scores_np = orig_scores.cpu().numpy().flatten()
         
-        # 计算统计数据
+        # Calculate statistics
         interp_mean_score = np.mean(interp_scores_np)
         orig_mean_score = np.mean(orig_scores_np)
         
         score_diff = orig_mean_score - interp_mean_score
         
-        # 制作评分分布图
+        # Create score distribution plot
         fig, ax = plt.subplots(figsize=(10, 6))
         
-        # 绘制判别器评分分布
-        ax.hist(interp_scores_np, bins=20, alpha=0.5, label='插补数据评分', color='blue')
-        ax.hist(orig_scores_np, bins=20, alpha=0.5, label='原始数据评分', color='green')
+        # Plot discriminator score distributions
+        ax.hist(interp_scores_np, bins=20, alpha=0.5, label='Interpolated Data Scores', color='blue')
+        ax.hist(orig_scores_np, bins=20, alpha=0.5, label='Original Data Scores', color='green')
         
-        ax.axvline(interp_mean_score, color='blue', linestyle='--', alpha=0.8, label=f'插补平均评分: {interp_mean_score:.4f}')
-        ax.axvline(orig_mean_score, color='green', linestyle='--', alpha=0.8, label=f'原始平均评分: {orig_mean_score:.4f}')
+        ax.axvline(interp_mean_score, color='blue', linestyle='--', alpha=0.8, label=f'Interpolated Mean Score: {interp_mean_score:.4f}')
+        ax.axvline(orig_mean_score, color='green', linestyle='--', alpha=0.8, label=f'Original Mean Score: {orig_mean_score:.4f}')
         
-        ax.set_title('判别器真实性评分分布比较')
-        ax.set_xlabel('判别器评分 (越高越"真实")')
-        ax.set_ylabel('频率')
+        ax.set_title('Discriminator Authenticity Score Distribution Comparison')
+        ax.set_xlabel('Discriminator Score (higher means more "real")')
+        ax.set_ylabel('Frequency')
         ax.legend()
         
-        # 执行t检验比较两组评分
+        # Perform t-test to compare the two score groups
         try:
             from scipy import stats
             t_stat, p_value = stats.ttest_ind(orig_scores_np, interp_scores_np, equal_var=False)
-            significance = "显著差异" if p_value < 0.05 else "无显著差异"
+            significance = "Significant Difference" if p_value < 0.05 else "No Significant Difference"
         except Exception as e:
-            print(f"执行t检验时出错: {str(e)}")
-            t_stat, p_value, significance = None, None, "无法计算"
+            print(f"Error performing t-test: {str(e)}")
+            t_stat, p_value, significance = None, None, "Unable to Calculate"
         
-        # 创建结果字典
+        # Create results dictionary
         discriminator_results = {
             'interpolated_scores': interp_scores_np,
             'original_scores': orig_scores_np,
@@ -984,37 +984,37 @@ class AdvancedDataProcessor:
             }
         }
         
-        print("判别器评分分析完成。")
+        print("Discriminator score analysis completed.")
         return discriminator_results
     
     def _interpret_discriminator_score(self, interp_score, orig_score):
-        """根据判别器评分解释插补数据质量"""
+        """Interpret interpolated data quality based on discriminator score"""
         score_ratio = interp_score / max(orig_score, 1e-10)
         diff_percent = abs(orig_score - interp_score) / max(orig_score, 1e-10) * 100
         
         if score_ratio >= 0.95:
-            return "优秀 - 插补数据与原始数据几乎无法区分"
+            return "Excellent - Interpolated data is nearly indistinguishable from original data"
         elif score_ratio >= 0.85:
-            return "良好 - 插补数据与原始数据非常相似"
+            return "Good - Interpolated data is very similar to original data"
         elif score_ratio >= 0.70:
-            return "一般 - 插补数据与原始数据有一定差异"
+            return "Fair - Interpolated data has some differences from original data"
         elif score_ratio >= 0.50:
-            return "较差 - 插补数据与原始数据有明显差异"
+            return "Poor - Interpolated data has significant differences from original data"
         else:
-            return "差 - 插补数据与原始数据有很大差异"
+            return "Very Poor - Interpolated data has major differences from original data"
     
     def _get_recommendation(self, interp_score, orig_score, p_value):
-        """根据判别器评分提供改进建议"""
+        """Provide improvement recommendations based on discriminator score"""
         diff_percent = abs(orig_score - interp_score) / max(orig_score, 1e-10) * 100
         
         if diff_percent < 5 and p_value >= 0.05:
-            return "当前插补数据质量很好，不需要进一步调整。"
+            return "Current interpolated data quality is good, no further adjustments needed."
         elif diff_percent < 15:
-            return "考虑轻微调整插补参数，如增加MCMC样本或调整实验数据权重。"
+            return "Consider minor adjustments to interpolation parameters, such as increasing MCMC samples or adjusting experimental data weight."
         elif diff_percent < 30:
-            return "建议重新运行MCMC插补，可能需要增加链数量或样本数量，或调整收敛条件。"
+            return "Recommend re-running MCMC interpolation, possibly with increased chain count or sample size, or adjusted convergence conditions."
         else:
-            return "需要重新评估数据插补方法，考虑使用不同的模型参数或其他插补技术。"
+            return "Need to re-evaluate data interpolation method, consider using different model parameters or alternative interpolation techniques."
             
     def cgan_analysis(self, interpolated_data, noise_samples=100, custom_conditions=None, original_data=None):
         """

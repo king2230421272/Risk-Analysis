@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import seaborn as sns
 from scipy import stats
+import traceback
 from modules.data_processing import DataProcessor
 from modules.advanced_data_processing import AdvancedDataProcessor
 from modules.prediction import Predictor
@@ -3925,40 +3926,58 @@ with main_container:
                                                 custom_conditions = st.session_state.condition_values
                                                 st.success(f"Using custom condition values: {custom_conditions}")
                                         
-                                        # Check if we have convergence-tested datasets to use for analysis
-                                        if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
-                                            st.info("Using datasets from Convergence Diagnostics for comprehensive analysis.")
+                                        # First, use the trained CGAN model to generate synthetic data
+                                        try:
+                                            # Generate synthetic data using the trained model
+                                            cgan_analysis_data = eval_data  # Default to evaluation data
+                                            data_source_label = "evaluation data"
                                             
-                                            # Allow users to select which convergence dataset to use
-                                            dataset_options = list(st.session_state.convergence_datasets.keys())
-                                            selected_dataset = st.selectbox(
-                                                "Select dataset from Convergence Diagnostics:",
-                                                options=dataset_options,
-                                                index=0 if dataset_options else None
+                                            # Check if we have convergence-tested datasets to use for analysis
+                                            if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
+                                                st.info("Using datasets from Convergence Diagnostics for comprehensive analysis.")
+                                                
+                                                # Make sure convergence_datasets is a dictionary, not a list
+                                                if isinstance(st.session_state.convergence_datasets, dict):
+                                                    # Allow users to select which convergence dataset to use
+                                                    dataset_options = list(st.session_state.convergence_datasets.keys())
+                                                    selected_dataset = st.selectbox(
+                                                        "Select dataset from Convergence Diagnostics:",
+                                                        options=dataset_options,
+                                                        index=0 if dataset_options else None
+                                                    )
+                                                    
+                                                    if selected_dataset and selected_dataset in st.session_state.convergence_datasets:
+                                                        cgan_analysis_data = st.session_state.convergence_datasets[selected_dataset]
+                                                        data_source_label = f"convergence-tested dataset '{selected_dataset}'"
+                                                        st.success(f"Using {data_source_label} for enhanced analysis.")
+                                                elif isinstance(st.session_state.convergence_datasets, list) and len(st.session_state.convergence_datasets) > 0:
+                                                    # If it's a list, offer numbered options
+                                                    dataset_indices = list(range(len(st.session_state.convergence_datasets)))
+                                                    dataset_options = [f"Dataset {i+1}" for i in dataset_indices]
+                                                    selected_index = st.selectbox(
+                                                        "Select dataset from Convergence Diagnostics:",
+                                                        options=dataset_indices,
+                                                        format_func=lambda i: dataset_options[i],
+                                                        index=0
+                                                    )
+                                                    
+                                                    cgan_analysis_data = st.session_state.convergence_datasets[selected_index]
+                                                    data_source_label = f"convergence-tested dataset #{selected_index+1}"
+                                                    st.success(f"Using {data_source_label} for enhanced analysis.")
+                                            
+                                            # Now use the CGAN model to analyze the selected data
+                                            cgan_results, analysis_info = advanced_processor.cgan_analysis(
+                                                cgan_analysis_data,  # Use the selected dataset
+                                                noise_samples=noise_samples,
+                                                custom_conditions=custom_conditions,
+                                                original_data=st.session_state.original_data if 'original_data' in st.session_state else None
                                             )
                                             
-                                            if selected_dataset and selected_dataset in st.session_state.convergence_datasets:
-                                                convergence_data = st.session_state.convergence_datasets[selected_dataset]
-                                                
-                                                # Use convergence-tested dataset for analysis with original data for reference
-                                                cgan_results, analysis_info = advanced_processor.cgan_analysis(
-                                                    convergence_data,  # Use the selected convergence-tested dataset
-                                                    noise_samples=noise_samples,
-                                                    custom_conditions=custom_conditions,
-                                                    original_data=st.session_state.original_data if 'original_data' in st.session_state else None
-                                                )
-                                                
-                                                st.success(f"Using convergence-tested dataset '{selected_dataset}' for enhanced analysis.")
-                                            else:
-                                                # Fallback to evaluation data if no convergence dataset is selected
-                                                cgan_results, analysis_info = advanced_processor.cgan_analysis(
-                                                    eval_data,  # Use the selected evaluation data
-                                                    noise_samples=noise_samples,
-                                                    custom_conditions=custom_conditions,
-                                                    original_data=st.session_state.original_data if 'original_data' in st.session_state else None
-                                                )
-                                        else:
-                                            # Use the selected evaluation data if no convergence datasets available
+                                            st.success(f"CGAN model successfully analyzed {data_source_label}.")
+                                        except Exception as e:
+                                            st.error(f"Error in CGAN analysis preparation: {str(e)}")
+                                            st.code(traceback.format_exc())
+                                            # Fall back to the most basic option
                                             cgan_results, analysis_info = advanced_processor.cgan_analysis(
                                                 eval_data,  # Use the selected evaluation data
                                                 noise_samples=noise_samples,

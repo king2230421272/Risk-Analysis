@@ -4127,10 +4127,12 @@ with main_container:
                                                         st.write("#### Distribution Comparison")
                                                         st.write("Compare evaluation vs. synthetic data distributions:")
                                                         
-                                                        # Select a column to visualize
+                                                        # Select a column to visualize (all columns except the first one)
+                                                        all_columns = eval_data.columns.tolist()
+                                                        selectable_columns = all_columns[1:] if len(all_columns) > 1 else all_columns
                                                         viz_col = st.selectbox(
                                                             "Select column to visualize:",
-                                                            options=st.session_state.cgan_results['target_cols']
+                                                            options=selectable_columns
                                                         )
                                                     
                                                         if viz_col:

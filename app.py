@@ -755,6 +755,68 @@ with main_container:
                                 max_value=4, 
                                 value=2
                             )
+                            
+                            # Add experimental data upload section
+                            with st.expander("实验数据融合 (Experimental Data Fusion)", expanded=False):
+                                st.write("您可以上传实验数据作为MCMC插值的先验信息，帮助提高插值精度。")
+                                st.write("You can upload experimental data as prior information for MCMC interpolation to improve interpolation accuracy.")
+                                
+                                # File uploader for experimental data
+                                mcmc_exp_file = st.file_uploader(
+                                    "上传实验数据文件（CSV或Excel格式）",
+                                    type=["csv", "xlsx", "xls"],
+                                    key="mcmc_experimental_data"
+                                )
+                                
+                                if mcmc_exp_file is not None:
+                                    try:
+                                        # Import the experimental data
+                                        mcmc_exp_data = data_handler.import_data(mcmc_exp_file)
+                                        
+                                        # Store in session state
+                                        st.session_state.mcmc_experimental_data = mcmc_exp_data
+                                        
+                                        # Show preview
+                                        st.success(f"✓ 成功导入实验数据: {mcmc_exp_data.shape[0]} 行, {mcmc_exp_data.shape[1]} 列")
+                                        st.write("##### 实验数据预览")
+                                        st.dataframe(
+                                            mcmc_exp_data.head(),
+                                            height=min(35 * 6, 300),  # Header + 5 rows
+                                            use_container_width=True
+                                        )
+                                        
+                                        # Check column compatibility
+                                        if interp_data is not None:
+                                            original_cols = set(interp_data.columns)
+                                            experimental_cols = set(mcmc_exp_data.columns)
+                                            common_cols = original_cols.intersection(experimental_cols)
+                                            
+                                            if len(common_cols) == 0:
+                                                st.error("❌ 实验数据与原始数据没有共同的列，无法进行融合。")
+                                            else:
+                                                st.info(f"✓ 检测到 {len(common_cols)} 个共同列，可以进行融合。")
+                                                
+                                                # Add data scaling option
+                                                apply_scaling = st.checkbox(
+                                                    "应用数据缩放使实验数据与原始数据量级一致", 
+                                                    value=True,
+                                                    key="mcmc_apply_scaling",
+                                                    help="将实验数据缩放到与原始数据相似的分布范围"
+                                                )
+                                                
+                                                # Allow user to set experimental data weight
+                                                exp_weight = st.slider(
+                                                    "实验数据权重", 
+                                                    min_value=0.1, 
+                                                    max_value=1.0, 
+                                                    value=0.5,
+                                                    step=0.1,
+                                                    help="权重越大，实验数据对插值结果的影响越大"
+                                                )
+                                                
+                                                st.session_state.mcmc_exp_weight = exp_weight
+                                    except Exception as e:
+                                        st.error(f"导入实验数据时出错: {str(e)}")
                         
                         # Select columns for interpolation
                         interp_columns = st.multiselect(
@@ -813,16 +875,39 @@ with main_container:
                                 elif interp_method == "MCMC (Monte Carlo)":
                                     # Use the advanced processor for MCMC interpolation
                                     with st.spinner("Running MCMC interpolation... (this may take a while)"):
+                                        # Check if experimental data is available
+                                        experimental_data = None
+                                        exp_weight = 0.5  # default weight
+                                        
+                                        if 'mcmc_experimental_data' in st.session_state and st.session_state.mcmc_experimental_data is not None:
+                                            experimental_data = st.session_state.mcmc_experimental_data
+                                            
+                                            # Get the experimental weight if set
+                                            if 'mcmc_exp_weight' in st.session_state:
+                                                exp_weight = st.session_state.mcmc_exp_weight
+                                            
+                                            st.info(f"Using experimental data with weight {exp_weight} for MCMC interpolation")
+                                        
+                                        # Perform MCMC interpolation with or without experimental data
                                         interpolated_data = advanced_processor.mcmc_interpolation(
                                             interpolated_data,
                                             num_samples=num_samples,
-                                            chains=chains
+                                            chains=chains,
+                                            experimental_data=experimental_data,
+                                            experimental_weight=exp_weight
                                         )
                                         
                                         # Set a flag to indicate this dataset was generated by MCMC
                                         st.session_state.mcmc_generated = True
+                                        
+                                        # Store the MCMC samples for later use in convergence diagnostics
+                                        st.session_state.mcmc_samples = advanced_processor.mcmc_samples
                                     
-                                    st.success(f"Applied MCMC interpolation to {len(interp_columns)} columns")
+                                    # If experimental data was used
+                                    if 'mcmc_experimental_data' in st.session_state and st.session_state.mcmc_experimental_data is not None:
+                                        st.success(f"Applied MCMC interpolation to {len(interp_columns)} columns with experimental data fusion")
+                                    else:
+                                        st.success(f"Applied MCMC interpolation to {len(interp_columns)} columns")
                                 
                                 # Store the interpolated data
                                 st.session_state.basic_processed_outputs['interpolated_data'] = interpolated_data

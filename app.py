@@ -3947,8 +3947,15 @@ with main_container:
                                                     )
                                                     
                                                     if selected_dataset and selected_dataset in st.session_state.convergence_datasets:
-                                                        cgan_analysis_data = st.session_state.convergence_datasets[selected_dataset]
-                                                        data_source_label = f"convergence-tested dataset '{selected_dataset}'"
+                                                        dataset_item = st.session_state.convergence_datasets[selected_dataset]
+                                                        # Extract the actual data if this is a dictionary with a 'data' key
+                                                        if isinstance(dataset_item, dict) and 'data' in dataset_item:
+                                                            cgan_analysis_data = dataset_item['data']
+                                                            dataset_name = dataset_item.get('name', selected_dataset)
+                                                            data_source_label = f"convergence-tested dataset '{dataset_name}'"
+                                                        else:
+                                                            cgan_analysis_data = dataset_item
+                                                            data_source_label = f"convergence-tested dataset '{selected_dataset}'"
                                                         st.success(f"Using {data_source_label} for enhanced analysis.")
                                                 elif isinstance(st.session_state.convergence_datasets, list) and len(st.session_state.convergence_datasets) > 0:
                                                     # If it's a list, offer numbered options
@@ -3961,8 +3968,16 @@ with main_container:
                                                         index=0
                                                     )
                                                     
-                                                    cgan_analysis_data = st.session_state.convergence_datasets[selected_index]
-                                                    data_source_label = f"convergence-tested dataset #{selected_index+1}"
+                                                    dataset_item = st.session_state.convergence_datasets[selected_index]
+                                                    # Extract the actual data if this is a dictionary with a 'data' key
+                                                    if isinstance(dataset_item, dict) and 'data' in dataset_item:
+                                                        cgan_analysis_data = dataset_item['data']
+                                                        dataset_name = dataset_item.get('name', f"#{selected_index+1}")
+                                                        data_source_label = f"convergence-tested dataset {dataset_name}"
+                                                    else:
+                                                        cgan_analysis_data = dataset_item
+                                                        data_source_label = f"convergence-tested dataset #{selected_index+1}"
+                                                    
                                                     st.success(f"Using {data_source_label} for enhanced analysis.")
                                             
                                             # Now use the CGAN model to analyze the selected data

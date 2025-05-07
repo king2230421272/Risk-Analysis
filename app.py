@@ -3914,20 +3914,19 @@ with main_container:
                                 
                                 # Generate and analyze data using the trained CGAN
                                 with st.spinner("Analyzing data with the trained CGAN model..."):
+                                    # Set up for analysis
+                                    noise_samples = st.slider("Number of synthetic samples per condition:", 
+                                                            min_value=10, max_value=500, value=100, step=10)
+                                    
+                                    # Use custom condition values if selected earlier
+                                    custom_conditions = None
+                                    if 'condition_input_mode' in st.session_state and 'condition_values' in st.session_state:
+                                        if st.session_state.condition_input_mode in ["Define specific values", "Use natural language input"]:
+                                            custom_conditions = st.session_state.condition_values
+                                            st.success(f"Using custom condition values: {custom_conditions}")
+                                    
+                                    # First, use the trained CGAN model to generate synthetic data
                                     try:
-                                        # Set up for analysis
-                                        noise_samples = st.slider("Number of synthetic samples per condition:", 
-                                                                min_value=10, max_value=500, value=100, step=10)
-                                        
-                                        # Use custom condition values if selected earlier
-                                        custom_conditions = None
-                                        if 'condition_input_mode' in st.session_state and 'condition_values' in st.session_state:
-                                            if st.session_state.condition_input_mode in ["Define specific values", "Use natural language input"]:
-                                                custom_conditions = st.session_state.condition_values
-                                                st.success(f"Using custom condition values: {custom_conditions}")
-                                        
-                                        # First, use the trained CGAN model to generate synthetic data
-                                        try:
                                             # Generate synthetic data using the trained model
                                             cgan_analysis_data = eval_data  # Default to evaluation data
                                             data_source_label = "evaluation data"
@@ -3978,253 +3977,444 @@ with main_container:
                                                         cgan_analysis_data = dataset_item
                                                         data_source_label = f"convergence-tested dataset #{selected_index+1}"
                                                     
-                                                    st.success(f"Using {data_source_label} for enhanced analysis.")
+                                                    st.success(f"Using {data_source_label} for validation.")
                                             
-                                            # Now use the CGAN model to analyze the selected data
-                                            cgan_results, analysis_info = advanced_processor.cgan_analysis(
-                                                cgan_analysis_data,  # Use the selected dataset
-                                                noise_samples=noise_samples,
-                                                custom_conditions=custom_conditions,
-                                                original_data=st.session_state.original_data if 'original_data' in st.session_state else None
-                                            )
+                                            # 创建一个CGAN模型分析验证模块
+                                            st.header("CGAN模型分析验证")
                                             
-                                            st.success(f"CGAN model successfully analyzed {data_source_label}.")
-                                        except Exception as e:
-                                            st.error(f"Error in CGAN analysis preparation: {str(e)}")
-                                            st.code(traceback.format_exc())
-                                            # Fall back to the most basic option
-                                            cgan_results, analysis_info = advanced_processor.cgan_analysis(
-                                                eval_data,  # Use the selected evaluation data
-                                                noise_samples=noise_samples,
-                                                custom_conditions=custom_conditions,
-                                                original_data=st.session_state.original_data if 'original_data' in st.session_state else None
-                                            )
-                                        
-                                        if "error" in analysis_info:
-                                            st.error(f"Error in CGAN analysis: {analysis_info['error']}")
-                                        else:
-                                            st.success("CGAN analysis completed successfully!")
+                                            # 使用两个模块实现不同的功能
+                                            validation_tabs = st.tabs(["生成数据与统计指标比较", "判别器评分分析"])
                                             
-                                            # Display metrics
-                                            if "metrics" in analysis_info:
-                                                metrics = analysis_info["metrics"]
-                                                st.write("#### Analysis Metrics")
-                                                metrics_df = pd.DataFrame([metrics])
-                                                st.dataframe(metrics_df.T)
-                                            
-                                            # Display results
-                                            st.write("#### Synthetic Data vs. Evaluation Data Statistics")
-                                            st.write("Compare statistics between evaluation data and synthetic data generated by the CGAN model.")
-                                        
-                                        # Get KS test results from the analysis
-                                        if 'ks_test_results' in analysis_info and analysis_info['ks_test_results']:
-                                            st.write("#### Distribution Similarity Test")
-                                            st.write("Kolmogorov-Smirnov test to compare evaluation and synthetic data distributions:")
-                                            
-                                            ks_df = pd.DataFrame(analysis_info['ks_test_results'])
-                                            st.dataframe(ks_df)
-                                            
-                                            if len(ks_df) > 0 and 'p-value' in ks_df.columns:
-                                                # Plot KS test p-values
-                                                fig, ax = plt.subplots(figsize=(10, 5))
-                                                bars = ax.bar(ks_df['Feature'], ks_df['p-value'])
+                                            with validation_tabs[0]:
+                                                st.subheader("生成数据与统计指标比较")
+                                                st.write("使用训练好的生成器模型结合条件信息生成模拟数据，并与插补数据集进行统计指标比较。")
                                                 
-                                                # Add a horizontal line at p=0.05
-                                                ax.axhline(y=0.05, color='red', linestyle='--', alpha=0.7)
-                                                ax.text(0, 0.06, 'p=0.05 threshold', color='red')
-                                                
-                                                # Color bars based on significance
-                                                for i, p in enumerate(ks_df['p-value']):
-                                                    if p < 0.05:
-                                                        bars[i].set_color('red')
-                                                    else:
-                                                        bars[i].set_color('green')
-                                                
-                                                ax.set_title('Distribution Similarity Test (p-values)')
-                                                ax.set_ylabel('p-value')
-                                                ax.set_xlabel('Feature')
-                                                plt.xticks(rotation=45, ha='right')
-                                                plt.tight_layout()
-                                                st.pyplot(fig)
-                                                
-                                                # Success message based on p-values
-                                                if (ks_df['p-value'] >= 0.05).all():
-                                                    st.success("All features show similar distributions between evaluation and synthetic data (p >= 0.05)")
-                                                    st.success("This suggests the interpolated data maintains the same statistical properties as the original data.")
-                                                elif (ks_df['p-value'] >= 0.01).all():
-                                                    st.warning("Some features show slight distribution differences (p < 0.05 but >= 0.01)")
-                                                    st.info("Minor differences are expected, but the overall structure appears preserved.")
-                                                else:
-                                                    st.error("Some features show significant distribution differences (p < 0.01)")
-                                                    st.warning("Consider adjusting the interpolation parameters to better preserve the original data's distribution.")
-                                        
-                                        # Display comparison plots
-                                        if 'comparison_plots' in analysis_info and analysis_info['comparison_plots']:
-                                            st.write("#### Feature Distribution Comparison")
-                                            st.write("Visual comparison between evaluation data (blue) and synthetic data (orange):")
-                                            for feature, plot in analysis_info['comparison_plots'].items():
-                                                st.write(f"**{feature}**")
-                                                st.pyplot(plot)
-                                        
-                                        # If old format, provide a basic visualization
-                                        else:
-                                            st.write("#### Distribution Comparison")
-                                            st.write("Compare evaluation vs. synthetic data distributions:")
-                                            
-                                            # Select a column to visualize
-                                            viz_col = st.selectbox(
-                                                "Select column to visualize:",
-                                                options=st.session_state.cgan_results['target_cols']
-                                            )
-                                        
-                                            if viz_col:
-                                                # Create a distribution comparison plot
-                                                fig, ax = plt.subplots(figsize=(10, 6))
-                                                
-                                                # Evaluation data distribution
-                                                ax.hist(eval_data[viz_col], bins=20, alpha=0.5, label='Evaluation', color='blue')
-                                                
-                                                # Synthetic data distribution
-                                                if viz_col in cgan_results.columns:
-                                                    ax.hist(cgan_results[viz_col], bins=20, alpha=0.5, label='Synthetic', color='green')
-                                                
-                                                ax.set_xlabel(viz_col)
-                                                ax.set_ylabel('Frequency')
-                                                ax.set_title(f'Distribution Comparison for {viz_col}')
-                                                ax.legend()
-                                                st.pyplot(fig)
-                                                
-                                                # Add statistical tests
-                                                st.write("#### Statistical Comparison")
-                                                
-                                                # Calculate KS test
                                                 try:
-                                                    # First import stats from scipy explicitly
-                                                    from scipy import stats
-                                                    
-                                                    ks_stat, ks_pval = stats.ks_2samp(
-                                                        eval_data[viz_col].dropna(), 
-                                                        cgan_results[viz_col].dropna()
+                                                    # 使用新的方法生成数据并比较统计指标
+                                                    generated_results, stats_analysis = advanced_processor.cgan_generate_and_compare(
+                                                        cgan_analysis_data,  # 使用选择的数据集
+                                                        noise_samples=noise_samples,
+                                                        custom_conditions=custom_conditions,
+                                                        original_data=st.session_state.original_data if 'original_data' in st.session_state else None
                                                     )
                                                     
-                                                    st.write(f"**Kolmogorov-Smirnov Test**")
-                                                    st.write(f"KS Statistic: {ks_stat:.4f}")
-                                                    st.write(f"p-value: {ks_pval:.4f}")
+                                                    st.success(f"模型已成功生成样本并进行了统计比较分析。")
                                                     
-                                                    if ks_pval < 0.05:
-                                                        st.warning("Distributions are significantly different (p < 0.05)")
-                                                    else:
-                                                        st.success("Distributions are not significantly different (p >= 0.05)")
+                                                    # 保存生成结果供应用程序其他部分使用
+                                                    cgan_results = generated_results
+                                                    analysis_info = stats_analysis
+                                                
                                                 except Exception as e:
-                                                    st.error(f"Error calculating KS test: {str(e)}")
-                                        
-                                        # Feature correlation analysis
-                                        st.write("#### Feature Correlation Analysis")
-                                        st.write("Compare correlation matrices between evaluation and synthetic data:")
-                                        
-                                        # Calculate correlation matrices
-                                        cols_to_compare = st.session_state.cgan_results['target_cols'] + st.session_state.cgan_results['condition_cols']
-                                        cols_to_compare = list(set(cols_to_compare))  # Remove duplicates
-                                        
-                                        # Ensure all columns are available in both datasets
-                                        cols_to_compare = [col for col in cols_to_compare if col in eval_data.columns and col in cgan_results.columns]
-                                        
-                                        # Skip if no common columns
-                                        if not cols_to_compare:
-                                            st.warning("No common columns found between evaluation and synthetic data for correlation analysis.")
-                                        else:
-                                            # Evaluation data correlation (include both features and targets)
-                                            original_corr = eval_data[cols_to_compare].corr()
-                                            
-                                            # Synthetic data correlation
-                                            synthetic_corr = cgan_results[cols_to_compare].corr()
-                                            
-                                            # Absolute difference in correlations
-                                            diff_corr = (original_corr - synthetic_corr).abs()
-                                            
-                                            # Display comprehensive parameter analysis if available
-                                            if 'all_parameter_analysis' in analysis_info and analysis_info['all_parameter_analysis']:
-                                                st.write("### Comprehensive Parameter Analysis")
-                                                st.write("Statistical comparison of all parameters (both features and targets) between interpolated and synthetic data:")
+                                                    st.error(f"生成与统计比较分析出错: {str(e)}")
+                                                    st.code(traceback.format_exc())
+                                                    # 回退到最基本的选项
+                                                    cgan_results, analysis_info = advanced_processor.cgan_analysis(
+                                                        eval_data,  # 使用评估数据
+                                                        noise_samples=noise_samples,
+                                                        custom_conditions=custom_conditions,
+                                                        original_data=st.session_state.original_data if 'original_data' in st.session_state else None
+                                                    )
                                                 
-                                                # Convert the parameter analysis to a DataFrame for display
-                                                param_rows = []
-                                                for param, analysis in analysis_info['all_parameter_analysis'].items():
-                                                    if 'synthetic_mean' in analysis:  # Only include parameters with synthetic comparisons
-                                                        row = {
-                                                            'Parameter': param,
-                                                            'Original Mean': f"{analysis['mean']:.4f}",
-                                                            'Synthetic Mean': f"{analysis['synthetic_mean']:.4f}",
-                                                            'Mean Diff %': f"{analysis['mean_diff_pct']:.2f}%",
-                                                            'Original Std': f"{analysis['std']:.4f}",
-                                                            'Synthetic Std': f"{analysis['synthetic_std']:.4f}",
-                                                            'Std Diff %': f"{analysis['std_diff_pct']:.2f}%",
-                                                            'Preservation': analysis['preservation']
-                                                        }
-                                                        param_rows.append(row)
-                                                
-                                                if param_rows:
-                                                    param_df = pd.DataFrame(param_rows)
+                                                # 如果有统计分析结果，显示它们
+                                                if "statistics" not in locals():
+                                                    statistics = {}
+                                                if "statistical_analysis" in analysis_info and analysis_info["statistical_analysis"]:
+                                                    stat_analysis_data = analysis_info["statistical_analysis"]
                                                     
-                                                    # Color-code the preservation quality
-                                                    def highlight_preservation(val):
-                                                        if val == 'Excellent':
-                                                            return 'background-color: #c6efce; color: #006100'
-                                                        elif val == 'Good':
-                                                            return 'background-color: #ffeb9c; color: #9c5700'
-                                                        elif val == 'Fair':
-                                                            return 'background-color: #ffc7ce; color: #9c0006'
-                                                        else:  # Poor
-                                                            return 'background-color: #ff7c80; color: #9c0006'
+                                                    # 显示指标
+                                                    st.write("##### 关键统计指标比较")
                                                     
-                                                    styled_param_df = param_df.style.applymap(
-                                                        highlight_preservation, subset=['Preservation']
+                                                    # 创建汇总表格
+                                                    summary_stats = []
+                                                    for col, analysis in stat_analysis_data.items():
+                                                        summary_stats.append({
+                                                            "特征": col,
+                                                            "插补数据均值": f"{analysis.get('real_mean', 'N/A'):.4f}",
+                                                            "合成数据均值": f"{analysis.get('synthetic_mean', 'N/A'):.4f}",
+                                                            "均值差异%": f"{analysis.get('mean_diff_pct', 'N/A'):.2f}%",
+                                                            "插补数据标准差": f"{analysis.get('real_std', 'N/A'):.4f}",
+                                                            "合成数据标准差": f"{analysis.get('synthetic_std', 'N/A'):.4f}",
+                                                            "标准差差异%": f"{analysis.get('std_diff_pct', 'N/A'):.2f}%",
+                                                            "保存质量": analysis.get('preservation_quality', 'N/A'),
+                                                            "分布相似性(p值)": f"{analysis.get('ks_p_value', 'N/A'):.4f}"
+                                                        })
+                                                    
+                                                    # 创建并显示表格
+                                                    summary_df = pd.DataFrame(summary_stats)
+                                                    
+                                                    # 定义样式突出显示函数
+                                                    def highlight_quality(val):
+                                                        if val == '优秀':
+                                                            return 'background-color: #90EE90'  # 浅绿色
+                                                        elif val == '良好':
+                                                            return 'background-color: #E0FFFF'  # 浅青色
+                                                        elif val == '一般':
+                                                            return 'background-color: #FFE4B5'  # 浅黄色
+                                                        elif val == '差':
+                                                            return 'background-color: #FFC0CB'  # 浅红色
+                                                        return ''
+                                                    
+                                                    # 应用样式
+                                                    styled_summary_df = summary_df.style.applymap(
+                                                        highlight_quality, subset=['保存质量']
                                                     )
                                                     
-                                                    st.dataframe(styled_param_df)
-                                        
-                                            # Display correlation matrices side by side
-                                            col1, col2 = st.columns(2)
+                                                    # 显示带样式的表格
+                                                    st.dataframe(styled_summary_df)
+                                                    
+                                                    # 计算总体保存质量分数
+                                                    mean_diffs = [analysis.get('mean_diff_pct', 0) for analysis in stat_analysis_data.values()
+                                                                if isinstance(analysis.get('mean_diff_pct'), (int, float))]
+                                                    std_diffs = [analysis.get('std_diff_pct', 0) for analysis in stat_analysis_data.values()
+                                                                if isinstance(analysis.get('std_diff_pct'), (int, float))]
+                                                    
+                                                    if mean_diffs and std_diffs:
+                                                        avg_mean_diff = np.mean(mean_diffs)
+                                                        avg_std_diff = np.mean(std_diffs)
+                                                        
+                                                        # 显示总体评分
+                                                        st.write(f"**总体统计指标保存分数：** 均值差异{avg_mean_diff:.2f}%，标准差差异{avg_std_diff:.2f}%")
+                                                        
+                                                        # 解释
+                                                        if avg_mean_diff < 5 and avg_std_diff < 10:
+                                                            st.success("优秀的统计指标保存 - 所有特征的统计属性在插补数据和合成数据间保持一致。")
+                                                        elif avg_mean_diff < 10 and avg_std_diff < 20:
+                                                            st.success("良好的统计指标保存 - 大多数特征的统计属性保持一致。")
+                                                        elif avg_mean_diff < 20 and avg_std_diff < 30:
+                                                            st.warning("一般的统计指标保存 - 部分特征显示出中等程度的差异。")
+                                                        else:
+                                                            st.error("较差的统计指标保存 - 考虑调整模型或插补过程。")
+                                                    
+                                                    # 显示每个特征的分布比较图表
+                                                    st.write("##### 特征分布比较")
+                                                    st.write("插补数据(蓝色)与合成数据(橙色)的分布对比：")
+                                                    
+                                                    # 创建多列布局以显示多个图表
+                                                    cols = st.columns(2)
+                                                    col_idx = 0
+                                                    
+                                                    for col, analysis in stat_analysis_data.items():
+                                                        if 'distribution_plot' in analysis:
+                                                            with cols[col_idx % 2]:
+                                                                st.write(f"**{col}** (p值: {analysis.get('ks_p_value', 'N/A'):.4f})")
+                                                                st.pyplot(analysis['distribution_plot'])
+                                                            col_idx += 1
+                                                
+                                                # 显示生成的数据样本
+                                                if "synthetic_data" in analysis_info and not analysis_info["synthetic_data"].empty:
+                                                    with st.expander("查看生成的数据样本"):
+                                                        st.write("生成的合成数据样本：")
+                                                        st.dataframe(analysis_info["synthetic_data"].head(10))
                                             
-                                            with col1:
-                                                st.write("Evaluation Data Correlation")
-                                                fig, ax = plt.subplots(figsize=(8, 6))
-                                                sns.heatmap(original_corr, annot=True, cmap='coolwarm', ax=ax, fmt='.2f', linewidths=0.5)
-                                                st.pyplot(fig)
+                                            with validation_tabs[1]:
+                                                st.subheader("判别器评分分析")
+                                                st.write("使用训练好的判别器对插补数据和原始数据进行真实性评分比较。")
+                                                
+                                                # 确保我们有原始数据进行比较
+                                                if 'original_data' not in st.session_state or st.session_state.original_data is None:
+                                                    st.warning("需要原始数据才能进行判别器评分分析。请先上传或选择原始数据。")
+                                                else:
+                                                    # 允许用户设置用于比较的样本大小
+                                                    sample_size = st.slider(
+                                                        "从原始数据中抽取的样本大小", 
+                                                        min_value=10, 
+                                                        max_value=min(1000, len(st.session_state.original_data)),
+                                                        value=min(100, len(st.session_state.original_data)),
+                                                        step=10
+                                                    )
+                                                    
+                                                    try:
+                                                        # 使用判别器评估数据
+                                                        discriminator_results = advanced_processor.cgan_discriminator_evaluation(
+                                                            interpolated_data=cgan_analysis_data,
+                                                            original_data=st.session_state.original_data,
+                                                            sample_size=sample_size
+                                                        )
+                                                        
+                                                        st.success("判别器评分分析完成。")
+                                                        
+                                                        # 显示平均评分
+                                                        st.write("##### 判别器评分结果")
+                                                        
+                                                        # 创建指标卡片的列布局
+                                                        metrics_cols = st.columns(3)
+                                                        
+                                                        with metrics_cols[0]:
+                                                            st.metric(
+                                                                "原始数据平均评分", 
+                                                                f"{discriminator_results['original_mean_score']:.4f}"
+                                                            )
+                                                        
+                                                        with metrics_cols[1]:
+                                                            st.metric(
+                                                                "插补数据平均评分", 
+                                                                f"{discriminator_results['interpolated_mean_score']:.4f}"
+                                                            )
+                                                        
+                                                        with metrics_cols[2]:
+                                                            st.metric(
+                                                                "评分差异", 
+                                                                f"{discriminator_results['score_difference']:.4f}",
+                                                                delta=f"{discriminator_results['score_difference']:.4f}"
+                                                            )
+                                                        
+                                                        # 显示t检验结果
+                                                        if 'p_value' in discriminator_results and discriminator_results['p_value'] is not None:
+                                                            p_value = discriminator_results['p_value']
+                                                            significance = "存在显著差异" if p_value < 0.05 else "无显著差异"
+                                                            
+                                                            st.write(f"**t检验结果:** p值 = {p_value:.4f} ({significance})")
+                                                        
+                                                        # 显示评分分布图
+                                                        if 'score_distribution_plot' in discriminator_results:
+                                                            st.write("##### 判别器评分分布")
+                                                            st.pyplot(discriminator_results['score_distribution_plot'])
+                                                        
+                                                        # 显示解释和建议
+                                                        if 'interpretation' in discriminator_results:
+                                                            interpretation = discriminator_results['interpretation']
+                                                            
+                                                            st.write("##### 质量评估与建议")
+                                                            st.info(f"**质量评估:** {interpretation.get('score_quality', 'N/A')}")
+                                                            st.info(f"**建议:** {interpretation.get('recommendation', 'N/A')}")
+                                                        
+                                                        # 保存判别器结果到session state
+                                                        if 'cgan_results' in st.session_state and isinstance(st.session_state.cgan_results, dict):
+                                                            st.session_state.cgan_results['discriminator_results'] = discriminator_results
+                                                    
+                                                    except Exception as e:
+                                                        st.error(f"判别器评分分析出错: {str(e)}")
+                                                        st.code(traceback.format_exc())
+                                                    
+                                                    # 显示最终结果
+                                                    if "error" in analysis_info:
+                                                        st.error(f"Error in CGAN analysis: {analysis_info['error']}")
+                                                    else:
+                                                        st.success("CGAN分析已成功完成！")
                                             
-                                            with col2:
-                                                st.write("Synthetic Data Correlation")
-                                                fig, ax = plt.subplots(figsize=(8, 6))
-                                                sns.heatmap(synthetic_corr, annot=True, cmap='coolwarm', ax=ax, fmt='.2f', linewidths=0.5)
-                                                st.pyplot(fig)
-                                            
-                                            # Show correlation difference
-                                            st.write("Correlation Difference (Evaluation - Synthetic)")
-                                            fig, ax = plt.subplots(figsize=(10, 8))
-                                            sns.heatmap(diff_corr, annot=True, cmap='YlOrRd', ax=ax, fmt='.2f', linewidths=0.5)
-                                            st.pyplot(fig)
-                                            
-                                            # Calculate average absolute correlation difference
-                                            avg_diff = diff_corr.abs().mean().mean()
-                                            st.write(f"Average Absolute Correlation Difference: {avg_diff:.4f}")
-                                            
-                                            if avg_diff < 0.1:
-                                                st.success("Excellent correlation preservation (Avg. Diff < 0.1)")
-                                            elif avg_diff < 0.2:
-                                                st.info("Good correlation preservation (Avg. Diff < 0.2)")
-                                            else:
-                                                st.warning("Poor correlation preservation (Avg. Diff >= 0.2)")
-                                        
-                                            # Save results to session state
-                                            st.session_state.cgan_analysis_results = {
-                                                'synthetic_data': cgan_results,
-                                                'original_corr': original_corr,
-                                                'synthetic_corr': synthetic_corr,
-                                                'correlation_diff': diff_corr,
-                                                'avg_correlation_diff': avg_diff,
-                                                'analysis_info': analysis_info
-                                            }
-                                        
+                                                    # 显示指标
+                                                    if "metrics" in analysis_info:
+                                                        try:
+                                                            metrics = analysis_info["metrics"]
+                                                            st.write("#### 分析指标")
+                                                            metrics_df = pd.DataFrame([metrics])
+                                                            st.dataframe(metrics_df.T)
+                                                        except Exception as e:
+                                                            st.error(f"显示分析指标时出错: {str(e)}")
+                                                    
+                                                    # Display results
+                                                    st.write("#### Synthetic Data vs. Evaluation Data Statistics")
+                                                    st.write("Compare statistics between evaluation data and synthetic data generated by the CGAN model.")
+                                                
+                                                    # Get KS test results from the analysis
+                                                    if 'ks_test_results' in analysis_info and analysis_info['ks_test_results']:
+                                                        st.write("#### Distribution Similarity Test")
+                                                        st.write("Kolmogorov-Smirnov test to compare evaluation and synthetic data distributions:")
+                                                        
+                                                        ks_df = pd.DataFrame(analysis_info['ks_test_results'])
+                                                        st.dataframe(ks_df)
+                                                        
+                                                        if len(ks_df) > 0 and 'p-value' in ks_df.columns:
+                                                            # Plot KS test p-values
+                                                            fig, ax = plt.subplots(figsize=(10, 5))
+                                                            bars = ax.bar(ks_df['Feature'], ks_df['p-value'])
+                                                            
+                                                            # Add a horizontal line at p=0.05
+                                                            ax.axhline(y=0.05, color='red', linestyle='--', alpha=0.7)
+                                                            ax.text(0, 0.06, 'p=0.05 threshold', color='red')
+                                                            
+                                                            # Color bars based on significance
+                                                            for i, p in enumerate(ks_df['p-value']):
+                                                                if p < 0.05:
+                                                                    bars[i].set_color('red')
+                                                                else:
+                                                                    bars[i].set_color('green')
+                                                            
+                                                            ax.set_title('Distribution Similarity Test (p-values)')
+                                                            ax.set_ylabel('p-value')
+                                                            ax.set_xlabel('Feature')
+                                                            plt.xticks(rotation=45, ha='right')
+                                                            plt.tight_layout()
+                                                            st.pyplot(fig)
+                                                            
+                                                            # Success message based on p-values
+                                                            if (ks_df['p-value'] >= 0.05).all():
+                                                                st.success("All features show similar distributions between evaluation and synthetic data (p >= 0.05)")
+                                                                st.success("This suggests the interpolated data maintains the same statistical properties as the original data.")
+                                                            elif (ks_df['p-value'] >= 0.01).all():
+                                                                st.warning("Some features show slight distribution differences (p < 0.05 but >= 0.01)")
+                                                                st.info("Minor differences are expected, but the overall structure appears preserved.")
+                                                            else:
+                                                                st.error("Some features show significant distribution differences (p < 0.01)")
+                                                                st.warning("Consider adjusting the interpolation parameters to better preserve the original data's distribution.")
+                                                    
+                                                    # Display comparison plots
+                                                    if 'comparison_plots' in analysis_info and analysis_info['comparison_plots']:
+                                                        st.write("#### Feature Distribution Comparison")
+                                                        st.write("Visual comparison between evaluation data (blue) and synthetic data (orange):")
+                                                        for feature, plot in analysis_info['comparison_plots'].items():
+                                                            st.write(f"**{feature}**")
+                                                            st.pyplot(plot)
+                                                    
+                                                    # If old format, provide a basic visualization
+                                                    else:
+                                                        st.write("#### Distribution Comparison")
+                                                        st.write("Compare evaluation vs. synthetic data distributions:")
+                                                        
+                                                        # Select a column to visualize
+                                                        viz_col = st.selectbox(
+                                                            "Select column to visualize:",
+                                                            options=st.session_state.cgan_results['target_cols']
+                                                        )
+                                                    
+                                                        if viz_col:
+                                                            # Create a distribution comparison plot
+                                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                                            
+                                                            # Evaluation data distribution
+                                                            ax.hist(eval_data[viz_col], bins=20, alpha=0.5, label='Evaluation', color='blue')
+                                                            
+                                                            # Synthetic data distribution
+                                                            if viz_col in cgan_results.columns:
+                                                                ax.hist(cgan_results[viz_col], bins=20, alpha=0.5, label='Synthetic', color='green')
+                                                            
+                                                            ax.set_xlabel(viz_col)
+                                                            ax.set_ylabel('Frequency')
+                                                            ax.set_title(f'Distribution Comparison for {viz_col}')
+                                                            ax.legend()
+                                                            st.pyplot(fig)
+                                                            
+                                                            # Add statistical tests
+                                                            st.write("#### Statistical Comparison")
+                                                            
+                                                            # Calculate KS test
+                                                            try:
+                                                                # First import stats from scipy explicitly
+                                                                from scipy import stats
+                                                                
+                                                                ks_stat, ks_pval = stats.ks_2samp(
+                                                                    eval_data[viz_col].dropna(), 
+                                                                    cgan_results[viz_col].dropna()
+                                                                )
+                                                                
+                                                                st.write(f"**Kolmogorov-Smirnov Test**")
+                                                                st.write(f"KS Statistic: {ks_stat:.4f}")
+                                                                st.write(f"p-value: {ks_pval:.4f}")
+                                                                
+                                                                if ks_pval < 0.05:
+                                                                    st.warning("Distributions are significantly different (p < 0.05)")
+                                                                else:
+                                                                    st.success("Distributions are not significantly different (p >= 0.05)")
+                                                            except Exception as e:
+                                                                st.error(f"Error calculating KS test: {str(e)}")
+                                                    
+                                                    # Feature correlation analysis
+                                                    st.write("#### Feature Correlation Analysis")
+                                                    st.write("Compare correlation matrices between evaluation and synthetic data:")
+                                                    
+                                                    # Calculate correlation matrices
+                                                    cols_to_compare = st.session_state.cgan_results['target_cols'] + st.session_state.cgan_results['condition_cols']
+                                                    cols_to_compare = list(set(cols_to_compare))  # Remove duplicates
+                                                    
+                                                    # Ensure all columns are available in both datasets
+                                                    cols_to_compare = [col for col in cols_to_compare if col in eval_data.columns and col in cgan_results.columns]
+                                                    
+                                                    # Skip if no common columns
+                                                    if not cols_to_compare:
+                                                        st.warning("No common columns found between evaluation and synthetic data for correlation analysis.")
+                                                    else:
+                                                        # Evaluation data correlation (include both features and targets)
+                                                        original_corr = eval_data[cols_to_compare].corr()
+                                                        
+                                                        # Synthetic data correlation
+                                                        synthetic_corr = cgan_results[cols_to_compare].corr()
+                                                        
+                                                        # Absolute difference in correlations
+                                                        diff_corr = (original_corr - synthetic_corr).abs()
+                                                        
+                                                        # Display comprehensive parameter analysis if available
+                                                        if 'all_parameter_analysis' in analysis_info and analysis_info['all_parameter_analysis']:
+                                                            st.write("### Comprehensive Parameter Analysis")
+                                                            st.write("Statistical comparison of all parameters (both features and targets) between interpolated and synthetic data:")
+                                                            
+                                                            # Convert the parameter analysis to a DataFrame for display
+                                                            param_rows = []
+                                                            for param, analysis in analysis_info['all_parameter_analysis'].items():
+                                                                if 'synthetic_mean' in analysis:  # Only include parameters with synthetic comparisons
+                                                                    row = {
+                                                                        'Parameter': param,
+                                                                        'Original Mean': f"{analysis['mean']:.4f}",
+                                                                        'Synthetic Mean': f"{analysis['synthetic_mean']:.4f}",
+                                                                        'Mean Diff %': f"{analysis['mean_diff_pct']:.2f}%",
+                                                                        'Original Std': f"{analysis['std']:.4f}",
+                                                                        'Synthetic Std': f"{analysis['synthetic_std']:.4f}",
+                                                                        'Std Diff %': f"{analysis['std_diff_pct']:.2f}%",
+                                                                        'Preservation': analysis['preservation']
+                                                                    }
+                                                                    param_rows.append(row)
+                                                            
+                                                            if param_rows:
+                                                                param_df = pd.DataFrame(param_rows)
+                                                                
+                                                                # Color-code the preservation quality
+                                                                def highlight_preservation(val):
+                                                                    if val == 'Excellent':
+                                                                        return 'background-color: #c6efce; color: #006100'
+                                                                    elif val == 'Good':
+                                                                        return 'background-color: #ffeb9c; color: #9c5700'
+                                                                    elif val == 'Fair':
+                                                                        return 'background-color: #ffc7ce; color: #9c0006'
+                                                                    else:  # Poor
+                                                                        return 'background-color: #ff7c80; color: #9c0006'
+                                                                
+                                                                styled_param_df = param_df.style.applymap(
+                                                                    highlight_preservation, subset=['Preservation']
+                                                                )
+                                                                
+                                                                st.dataframe(styled_param_df)
+                                                        
+                                                        # Display correlation matrices side by side
+                                                        col1, col2 = st.columns(2)
+                                                        
+                                                        with col1:
+                                                            st.write("Evaluation Data Correlation")
+                                                            fig, ax = plt.subplots(figsize=(8, 6))
+                                                            sns.heatmap(original_corr, annot=True, cmap='coolwarm', ax=ax, fmt='.2f', linewidths=0.5)
+                                                            st.pyplot(fig)
+                                                        
+                                                        with col2:
+                                                            st.write("Synthetic Data Correlation")
+                                                            fig, ax = plt.subplots(figsize=(8, 6))
+                                                            sns.heatmap(synthetic_corr, annot=True, cmap='coolwarm', ax=ax, fmt='.2f', linewidths=0.5)
+                                                            st.pyplot(fig)
+                                                        
+                                                        # Show correlation difference
+                                                        st.write("Correlation Difference (Evaluation - Synthetic)")
+                                                        fig, ax = plt.subplots(figsize=(10, 8))
+                                                        sns.heatmap(diff_corr, annot=True, cmap='YlOrRd', ax=ax, fmt='.2f', linewidths=0.5)
+                                                        st.pyplot(fig)
+                                                        
+                                                        # Calculate average absolute correlation difference
+                                                        avg_diff = diff_corr.abs().mean().mean()
+                                                        st.write(f"Average Absolute Correlation Difference: {avg_diff:.4f}")
+                                                        
+                                                        if avg_diff < 0.1:
+                                                            st.success("Excellent correlation preservation (Avg. Diff < 0.1)")
+                                                        elif avg_diff < 0.2:
+                                                            st.info("Good correlation preservation (Avg. Diff < 0.2)")
+                                                        else:
+                                                            st.warning("Poor correlation preservation (Avg. Diff >= 0.2)")
+                                                    
+                                                        # Save results to session state
+                                                        st.session_state.cgan_analysis_results = {
+                                                            'synthetic_data': cgan_results,
+                                                            'original_corr': original_corr,
+                                                            'synthetic_corr': synthetic_corr,
+                                                            'correlation_diff': diff_corr,
+                                                            'avg_correlation_diff': avg_diff,
+                                                            'analysis_info': analysis_info
+                                                        }
+                                                
                                     except Exception as e:
                                         st.error(f"Error in CGAN analysis: {str(e)}")
                                         st.write("Exception details:")

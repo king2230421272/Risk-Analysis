@@ -2799,32 +2799,61 @@ with main_container:
                                                     
                                                     # Check if convergence is good overall and if so, output the dataset to CGAN Analysis
                                                     max_psrf = max(psrf_results.values())
-                                                    if max_psrf < 1.1:
-                                                        # Good convergence - prepare for CGAN Analysis
-                                                        st.success("Good convergence detected! The dataset will be available for CGAN Analysis.")
+                                                    
+                                                    # Store convergence quality for this dataset in the dataset metadata
+                                                    current_dataset_index = st.session_state.get('current_dataset_index', 0)
+                                                    if 'convergence_datasets' in st.session_state and len(st.session_state.convergence_datasets) > current_dataset_index:
+                                                        dataset = st.session_state.convergence_datasets[current_dataset_index]
+                                                        if 'convergence_quality' not in dataset:
+                                                            dataset['convergence_quality'] = {}
                                                         
-                                                        # Find the dataset with the best convergence (use first one if multiple)
-                                                        best_dataset = None
-                                                        # Use datasets from convergence_datasets in session state
-                                                        if 'convergence_datasets' in st.session_state and len(st.session_state.convergence_datasets) > 0:
-                                                            for dataset in st.session_state.convergence_datasets:
-                                                                if dataset['data'] is not None:
-                                                                    best_dataset = dataset['data']
-                                                                    break
+                                                        # Evaluate PSRF convergence quality
+                                                        if max_psrf < 1.1:
+                                                            dataset['convergence_quality']['psrf'] = 'Good'
+                                                            psrf_status = "Good convergence detected! The dataset will be available for CGAN Analysis."
+                                                        elif max_psrf < 1.2:
+                                                            dataset['convergence_quality']['psrf'] = 'Fair'
+                                                            psrf_status = "Fair convergence. You may proceed to CGAN Analysis, but results may not be optimal."
+                                                        else:
+                                                            dataset['convergence_quality']['psrf'] = 'Poor'
+                                                            psrf_status = "Poor convergence detected. Consider improving the interpolation process before proceeding to CGAN Analysis."
+                                                            
+                                                        # Display status message
+                                                        if dataset['convergence_quality']['psrf'] == 'Good':
+                                                            st.success(psrf_status)
+                                                        elif dataset['convergence_quality']['psrf'] == 'Fair':
+                                                            st.info(psrf_status)
+                                                        else:
+                                                            st.warning(psrf_status)
+                                                            
+                                                        # Find datasets with "Good" evaluation in all analysis methods
+                                                        good_datasets = []
+                                                        for ds_index, ds in enumerate(st.session_state.convergence_datasets):
+                                                            if ds.get('data') is not None and 'convergence_quality' in ds:
+                                                                # Check all convergence metrics - must all be "Good"
+                                                                all_good = all(quality == 'Good' for quality in ds['convergence_quality'].values())
+                                                                if all_good:
+                                                                    good_datasets.append(ds)
                                                         
-                                                        if best_dataset is not None:
-                                                            # Store in session state for CGAN Analysis to use
-                                                            st.session_state.cgan_analysis_data = best_dataset
+                                                        # If we have datasets with good convergence, make them available for CGAN Analysis
+                                                        if good_datasets:
+                                                            st.session_state.cgan_analysis_datasets = good_datasets
+                                                            st.success(f"{len(good_datasets)} dataset(s) with 'Good' evaluation in all analysis methods will be passed to CGAN Analysis.")
                                                             
                                                             # Create a button to go directly to CGAN Analysis tab
                                                             if st.button("Proceed to CGAN Analysis"):
                                                                 # We'll use a session state flag to indicate we should switch to CGAN Analysis
                                                                 st.session_state.switch_to_cgan = True
                                                                 st.rerun()
-                                                    elif max_psrf < 1.2:
-                                                        st.info("Fair convergence. You may proceed to CGAN Analysis, but results may not be optimal.")
+                                                        else:
+                                                            st.warning("No datasets with 'Good' evaluation in all analysis methods are available for CGAN Analysis.")
                                                     else:
-                                                        st.warning("Poor convergence detected. Consider improving the interpolation process before proceeding to CGAN Analysis.")
+                                                        if max_psrf < 1.1:
+                                                            st.success("Good convergence detected!")
+                                                        elif max_psrf < 1.2:
+                                                            st.info("Fair convergence.")
+                                                        else:
+                                                            st.warning("Poor convergence detected.")
                                                     
                                                     # Display Between/Within Ratio
                                                     st.write("#### Between/Within Variance Ratio")
@@ -2836,13 +2865,38 @@ with main_container:
                                                     # Format B/W Ratio values to 2 decimal places
                                                     formatted_ratio_values = [f"{v:.2f}" for v in between_within_ratio.values()]
                                                     
+                                                    # Create evaluation statuses
+                                                    impact_values = ['Low (< 0.5)' if v < 0.5 else 'Moderate (0.5-1.0)' if v < 1.0 else 'High (> 1.0)' for v in between_within_ratio.values()]
+                                                    quality_values = ['Good' if v < 0.5 else 'Fair' if v < 1.0 else 'Poor' for v in between_within_ratio.values()]
+                                                    
                                                     ratio_df = pd.DataFrame({
                                                         'Parameter': list(between_within_ratio.keys()),
                                                         'B/W Ratio': formatted_ratio_values,
-                                                        'Impact': ['Low (< 0.5)' if v < 0.5 else 'Moderate (0.5-1.0)' if v < 1.0 else 'High (> 1.0)' for v in between_within_ratio.values()]
+                                                        'Impact': impact_values,
+                                                        'Quality': quality_values
                                                     })
                                                     
                                                     st.dataframe(ratio_df)
+                                                    
+                                                    # Store the between/within convergence quality in the dataset
+                                                    if 'convergence_datasets' in st.session_state and len(st.session_state.convergence_datasets) > current_dataset_index:
+                                                        dataset = st.session_state.convergence_datasets[current_dataset_index]
+                                                        if 'convergence_quality' not in dataset:
+                                                            dataset['convergence_quality'] = {}
+                                                        
+                                                        # Use the worst quality as the overall B/W ratio quality
+                                                        if 'Poor' in quality_values:
+                                                            dataset['convergence_quality']['bw_ratio'] = 'Poor'
+                                                            bw_status = "High between/within variance ratio detected. Consider improving the interpolation process."
+                                                            st.warning(bw_status)
+                                                        elif 'Fair' in quality_values:
+                                                            dataset['convergence_quality']['bw_ratio'] = 'Fair'
+                                                            bw_status = "Moderate between/within variance ratio detected. Results may be acceptable."
+                                                            st.info(bw_status)
+                                                        else:
+                                                            dataset['convergence_quality']['bw_ratio'] = 'Good'
+                                                            bw_status = "Low between/within variance ratio detected. Good interpolation quality."
+                                                            st.success(bw_status)
                                                     
                                                     # Parameter Trace Plots and MCMC Chain Traces modules removed as requested
                                                 else:

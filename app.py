@@ -14,6 +14,7 @@ from modules.risk_assessment import RiskAssessor
 from utils.data_handler import DataHandler
 from utils.visualization import Visualizer
 from utils.database import DatabaseHandler
+from utils.llm_handler import LlmHandler
 
 # Set page configuration
 st.set_page_config(
@@ -76,6 +77,7 @@ predictor = Predictor()
 risk_assessor = RiskAssessor()
 visualizer = Visualizer()
 db_handler = DatabaseHandler()
+llm_handler = LlmHandler()
 
 # Application title and description
 st.title("Integrated Data Analysis Platform")

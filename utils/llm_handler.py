@@ -78,7 +78,7 @@ class LlmHandler:
             Structured condition data as a dictionary
         """
         if not self.openai_available:
-            return {"error": "OpenAI API key is not available"}
+            return {"error": "OpenAI API key is not available or invalid. Please add your API key in the settings."}
         
         try:
             # Prepare system message with context about the columns
@@ -145,7 +145,7 @@ class LlmHandler:
             Structured condition data as a dictionary
         """
         if not self.anthropic_available:
-            return {"error": "Anthropic API key is not available"}
+            return {"error": "Anthropic API key is not available or invalid. Please add your API key in the settings."}
         
         try:
             # Prepare prompt with context about the columns
@@ -230,7 +230,7 @@ class LlmHandler:
             elif self.openai_available:
                 service = "openai"
             else:
-                return {"error": "No LLM service available. Please provide an API key."}
+                return {"error": "No LLM service available. Please add either OpenAI or Anthropic API key in the settings."}
         
         # Use the specified service
         if service == "openai" and self.openai_available:
@@ -238,7 +238,7 @@ class LlmHandler:
         elif service == "anthropic" and self.anthropic_available:
             return self.parse_condition_text_with_anthropic(natural_language_text, column_info, example_data)
         else:
-            return {"error": f"Selected service '{service}' is not available"}
+            return {"error": f"Selected service '{service}' is not available. Please check your API key settings."}
     
     def parse_condition_text_with_code(self, natural_language_text, column_info):
         """

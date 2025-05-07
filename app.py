@@ -3415,14 +3415,17 @@ with main_container:
                                 if len(condition_cols) > 0:
                                     st.write("**Condition Variables Distribution**")
                                     
-                                    # Create a simple visualization of the distribution of condition variables
+                                    # Create a simple visualization of the distribution of condition variables using Streamlit's native plotting
                                     for col in condition_cols[:3]:  # Show at most 3 to avoid cluttering
-                                        fig, ax = plt.subplots(figsize=(8, 4))
-                                        training_data[col].hist(bins=20, ax=ax)
-                                        ax.set_title(f"Distribution of {col}")
-                                        ax.set_xlabel("Value")
-                                        ax.set_ylabel("Frequency")
-                                        st.pyplot(fig)
+                                        st.write(f"**Distribution of {col}**")
+                                        # Use Streamlit's built-in histogram function to avoid matplotlib axis binding issues
+                                        hist_values = training_data[col].dropna()
+                                        if len(hist_values) > 0:
+                                            st.bar_chart(pd.DataFrame({
+                                                col: hist_values
+                                            }).reset_index().rename(columns={'index': 'id'}).set_index('id'))
+                                        else:
+                                            st.warning(f"No data available to plot histogram for {col}")
                                     
                                     if len(condition_cols) > 3:
                                         st.info(f"Showing only 3 of {len(condition_cols)} condition variables. The rest are hidden to save space.")

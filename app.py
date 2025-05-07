@@ -3112,74 +3112,204 @@ with main_container:
                                         # Display statistics from training data
                                         st.write("Using statistical information from training data:")
                                         
-                                        # Create DataFrame and display
-                                        condition_info_df = pd.DataFrame(condition_info_data)
-                                        # Set height to show all rows without scrolling and width to fill container
-                                        st.dataframe(
-                                            condition_info_df,
-                                            height=min(35 * (len(condition_info_data) + 1), 500),
-                                            use_container_width=True
-                                        )
+                                        # Show original data column statistics
+                                        if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                                            # Create tabs for better organization
+                                            data_ref_tabs = st.tabs(["选中的条件列", "原始数据统计", "原始数据预览"])
+                                            
+                                            with data_ref_tabs[0]:
+                                                # Create DataFrame and display
+                                                condition_info_df = pd.DataFrame(condition_info_data)
+                                                # Set height to show all rows without scrolling and width to fill container
+                                                st.dataframe(
+                                                    condition_info_df,
+                                                    height=min(35 * (len(condition_info_data) + 1), 500),
+                                                    use_container_width=True
+                                                )
+                                            
+                                            with data_ref_tabs[1]:
+                                                # Show statistics for all numeric columns in original data
+                                                orig_numeric_cols = st.session_state.original_data.select_dtypes(include=np.number).columns
+                                                st.dataframe(
+                                                    st.session_state.original_data[orig_numeric_cols].describe(),
+                                                    height=min(35 * (len(orig_numeric_cols) + 1), 500),
+                                                    use_container_width=True
+                                                )
+                                            
+                                            with data_ref_tabs[2]:
+                                                # Show preview of original data
+                                                st.dataframe(
+                                                    st.session_state.original_data.head(10),
+                                                    height=400,
+                                                    use_container_width=True
+                                                )
+                                        else:
+                                            # Create DataFrame and display if original data not available
+                                            condition_info_df = pd.DataFrame(condition_info_data)
+                                            # Set height to show all rows without scrolling and width to fill container
+                                            st.dataframe(
+                                                condition_info_df,
+                                                height=min(35 * (len(condition_info_data) + 1), 500),
+                                                use_container_width=True
+                                            )
                                         
                                         st.info("When generating data, the model will use these statistics to sample condition values.")
                                         
                                     elif condition_input_mode == "Define specific values":
                                         st.write("Define custom condition values:")
                                         
-                                        # Create columns for each condition column with input fields
-                                        col_count = len(condition_cols)
-                                        cols_per_row = 3
-                                        rows_needed = (col_count + cols_per_row - 1) // cols_per_row
-                                        
-                                        for row_idx in range(rows_needed):
-                                            cols = st.columns(min(cols_per_row, col_count - row_idx * cols_per_row))
+                                        # Show original data column statistics as reference
+                                        if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                                            # Create tabs for better organization
+                                            data_ref_tabs = st.tabs(["条件值设置", "原始数据统计", "原始数据预览"])
                                             
-                                            for col_idx, column in enumerate(cols):
-                                                actual_idx = row_idx * cols_per_row + col_idx
-                                                if actual_idx < col_count:
-                                                    col_name = condition_cols[actual_idx]
+                                            with data_ref_tabs[0]:
+                                                # Create columns for each condition column with input fields
+                                                col_count = len(condition_cols)
+                                                cols_per_row = 3
+                                                rows_needed = (col_count + cols_per_row - 1) // cols_per_row
+                                                
+                                                for row_idx in range(rows_needed):
+                                                    cols = st.columns(min(cols_per_row, col_count - row_idx * cols_per_row))
                                                     
-                                                    # Get column statistics for min/max values
-                                                    col_min = float(training_data[col_name].min())
-                                                    col_max = float(training_data[col_name].max())
-                                                    col_mean = float(training_data[col_name].mean())
-                                                    
-                                                    # Set default value to mean if not already in session state
-                                                    if col_name not in st.session_state.manual_condition_inputs:
-                                                        st.session_state.manual_condition_inputs[col_name] = col_mean
-                                                    
-                                                    with column:
-                                                        # Display input slider for the condition column
-                                                        st.session_state.manual_condition_inputs[col_name] = st.slider(
-                                                            f"{col_name}", 
-                                                            min_value=col_min,
-                                                            max_value=col_max,
-                                                            value=st.session_state.manual_condition_inputs[col_name],
-                                                            step=(col_max-col_min)/100,
-                                                            key=f"condition_value_{col_name}"
-                                                        )
-                                        
-                                        # Display the selected values in a nice format
-                                        st.write("Selected condition values:")
-                                        condition_values = {col: st.session_state.manual_condition_inputs[col] for col in condition_cols}
-                                        st.json(condition_values)
-                                        
-                                        # Store these values to session state for use during generation
-                                        st.session_state.condition_values = condition_values
+                                                    for col_idx, column in enumerate(cols):
+                                                        actual_idx = row_idx * cols_per_row + col_idx
+                                                        if actual_idx < col_count:
+                                                            col_name = condition_cols[actual_idx]
+                                                            
+                                                            # Get column statistics for min/max values
+                                                            col_min = float(training_data[col_name].min())
+                                                            col_max = float(training_data[col_name].max())
+                                                            col_mean = float(training_data[col_name].mean())
+                                                            
+                                                            # Set default value to mean if not already in session state
+                                                            if col_name not in st.session_state.manual_condition_inputs:
+                                                                st.session_state.manual_condition_inputs[col_name] = col_mean
+                                                            
+                                                            with column:
+                                                                # Display input slider for the condition column
+                                                                st.session_state.manual_condition_inputs[col_name] = st.slider(
+                                                                    f"{col_name}", 
+                                                                    min_value=col_min,
+                                                                    max_value=col_max,
+                                                                    value=st.session_state.manual_condition_inputs[col_name],
+                                                                    step=(col_max-col_min)/100,
+                                                                    key=f"condition_value_{col_name}"
+                                                                )
+                                                
+                                                # Display the selected values in a nice format
+                                                st.write("Selected condition values:")
+                                                condition_values = {col: st.session_state.manual_condition_inputs[col] for col in condition_cols}
+                                                st.json(condition_values)
+                                                
+                                                # Store these values to session state for use during generation
+                                                st.session_state.condition_values = condition_values
+                                                
+                                            with data_ref_tabs[1]:
+                                                # Show statistics for all numeric columns in original data
+                                                orig_numeric_cols = st.session_state.original_data.select_dtypes(include=np.number).columns
+                                                st.dataframe(
+                                                    st.session_state.original_data[orig_numeric_cols].describe(),
+                                                    height=min(35 * (len(orig_numeric_cols) + 1), 500),
+                                                    use_container_width=True
+                                                )
+                                            
+                                            with data_ref_tabs[2]:
+                                                # Show preview of original data
+                                                st.dataframe(
+                                                    st.session_state.original_data.head(10),
+                                                    height=400,
+                                                    use_container_width=True
+                                                )
+                                        else:
+                                            # Fallback if original data not available
+                                            # Create columns for each condition column with input fields
+                                            col_count = len(condition_cols)
+                                            cols_per_row = 3
+                                            rows_needed = (col_count + cols_per_row - 1) // cols_per_row
+                                            
+                                            for row_idx in range(rows_needed):
+                                                cols = st.columns(min(cols_per_row, col_count - row_idx * cols_per_row))
+                                                
+                                                for col_idx, column in enumerate(cols):
+                                                    actual_idx = row_idx * cols_per_row + col_idx
+                                                    if actual_idx < col_count:
+                                                        col_name = condition_cols[actual_idx]
+                                                        
+                                                        # Get column statistics for min/max values
+                                                        col_min = float(training_data[col_name].min())
+                                                        col_max = float(training_data[col_name].max())
+                                                        col_mean = float(training_data[col_name].mean())
+                                                        
+                                                        # Set default value to mean if not already in session state
+                                                        if col_name not in st.session_state.manual_condition_inputs:
+                                                            st.session_state.manual_condition_inputs[col_name] = col_mean
+                                                        
+                                                        with column:
+                                                            # Display input slider for the condition column
+                                                            st.session_state.manual_condition_inputs[col_name] = st.slider(
+                                                                f"{col_name}", 
+                                                                min_value=col_min,
+                                                                max_value=col_max,
+                                                                value=st.session_state.manual_condition_inputs[col_name],
+                                                                step=(col_max-col_min)/100,
+                                                                key=f"condition_value_{col_name}"
+                                                            )
+                                            
+                                            # Display the selected values in a nice format
+                                            st.write("Selected condition values:")
+                                            condition_values = {col: st.session_state.manual_condition_inputs[col] for col in condition_cols}
+                                            st.json(condition_values)
+                                            
+                                            # Store these values to session state for use during generation
+                                            st.session_state.condition_values = condition_values
                                         
                                     else:  # Use natural language input
                                         st.write("### 使用自然语言描述条件")
                                         st.write("您可以用自然语言描述想要的条件值，系统将自动解析为CGAN可用的参数。")
                                         
-                                        # Show column info as reference
+                                        # Show column info as reference with enhanced display
                                         st.write("##### 数据列信息（作为参考）")
-                                        condition_info_df = pd.DataFrame(condition_info_data)
-                                        # Set height to show all rows without scrolling and width to fill container
-                                        st.dataframe(
-                                            condition_info_df,
-                                            height=min(35 * (len(condition_info_data) + 1), 500),
-                                            use_container_width=True
-                                        )
+                                        
+                                        # Show original data column statistics
+                                        if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                                            # Create tabs for better organization
+                                            data_ref_tabs = st.tabs(["条件列统计", "原始数据统计", "原始数据预览"])
+                                            
+                                            with data_ref_tabs[0]:
+                                                condition_info_df = pd.DataFrame(condition_info_data)
+                                                # Set height to show all rows without scrolling and width to fill container
+                                                st.dataframe(
+                                                    condition_info_df,
+                                                    height=min(35 * (len(condition_info_data) + 1), 500),
+                                                    use_container_width=True
+                                                )
+                                            
+                                            with data_ref_tabs[1]:
+                                                # Show statistics for all numeric columns in original data
+                                                orig_numeric_cols = st.session_state.original_data.select_dtypes(include=np.number).columns
+                                                st.dataframe(
+                                                    st.session_state.original_data[orig_numeric_cols].describe(),
+                                                    height=min(35 * (len(orig_numeric_cols) + 1), 500),
+                                                    use_container_width=True
+                                                )
+                                            
+                                            with data_ref_tabs[2]:
+                                                # Show preview of original data
+                                                st.dataframe(
+                                                    st.session_state.original_data.head(10),
+                                                    height=400,
+                                                    use_container_width=True
+                                                )
+                                        else:
+                                            # Fallback if original data not available
+                                            condition_info_df = pd.DataFrame(condition_info_data)
+                                            # Set height to show all rows without scrolling and width to fill container
+                                            st.dataframe(
+                                                condition_info_df,
+                                                height=min(35 * (len(condition_info_data) + 1), 500),
+                                                use_container_width=True
+                                            )
                                         st.write("在自然语言描述中，您可以参考这些数据列名称和它们的取值范围。")
                                         
                                         # Natural language input

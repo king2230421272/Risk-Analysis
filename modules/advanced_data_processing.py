@@ -66,9 +66,9 @@ class AdvancedDataProcessor:
         
         return processed_data
     
-    def mcmc_interpolation(self, data, num_samples=500, chains=2):
+    def mcmc_interpolation(self, data, num_samples=500, chains=2, experimental_data=None, experimental_weight=0.5):
         """
-        Use Markov Chain Monte Carlo to interpolate missing values.
+        Use Markov Chain Monte Carlo to interpolate missing values with optional experimental data fusion.
         
         Parameters:
         -----------
@@ -78,6 +78,10 @@ class AdvancedDataProcessor:
             Number of samples to draw
         chains : int
             Number of chains to run
+        experimental_data : pandas.DataFrame, optional
+            Experimental data to incorporate into the model as prior information
+        experimental_weight : float
+            Weight to give to experimental data (0.0 - 1.0)
             
         Returns:
         --------
@@ -102,6 +106,34 @@ class AdvancedDataProcessor:
         if not numeric_cols_with_missing:
             print("No missing values in numeric columns.")
             return processed_data
+            
+        # Process experimental data if provided
+        if experimental_data is not None:
+            print(f"Incorporating experimental data with weight {experimental_weight}")
+            # Find common columns between data and experimental_data
+            common_cols = list(set(numeric_cols_with_missing) & set(experimental_data.columns))
+            
+            if not common_cols:
+                print("No common numeric columns with missing values found between the data and experimental data.")
+                print("Proceeding with standard MCMC interpolation without experimental data.")
+            else:
+                print(f"Found {len(common_cols)} common columns with missing values.")
+                
+                # Scale experimental data to match original data's distribution
+                for col in common_cols:
+                    # Skip columns with all NaNs
+                    if processed_data[col].isna().all() or experimental_data[col].isna().all():
+                        continue
+                        
+                    # Get stats for scaling
+                    orig_mean = processed_data[col].mean()
+                    orig_std = processed_data[col].std() if processed_data[col].std() > 0 else 1.0
+                    
+                    exp_mean = experimental_data[col].mean()
+                    exp_std = experimental_data[col].std() if experimental_data[col].std() > 0 else 1.0
+                    
+                    # Apply scaling: standardize, then transform to original data's distribution
+                    experimental_data[col] = ((experimental_data[col] - exp_mean) / exp_std) * orig_std + orig_mean
         
         # Standardize the data
         scaler = StandardScaler()
@@ -126,6 +158,38 @@ class AdvancedDataProcessor:
                     sigma=sigma, 
                     observed=scaled_data[col].where(~missing_mask[col])
                 )
+                
+                # If experimental data is available, incorporate it as additional observations
+                if experimental_data is not None and col in experimental_data.columns:
+                    # Skip columns with all NaN values
+                    if experimental_data[col].isna().all():
+                        continue
+                    
+                    # Standardize experimental data to match the scaled original data
+                    exp_col_data = experimental_data[col].dropna().values
+                    if len(exp_col_data) > 0:
+                        # Create a new scaler for just this column to match the original scaling
+                        col_scaler = StandardScaler()
+                        col_scaler.fit(processed_data[[col]].fillna(0))
+                        
+                        # Scale the experimental data
+                        exp_col_scaled = col_scaler.transform(
+                            exp_col_data.reshape(-1, 1)
+                        ).flatten()
+                        
+                        # Create an observed variable with the experimental data
+                        # Weight is controlled by the experimental_weight parameter
+                        # Low weight = larger sigma (less influence), high weight = smaller sigma (more influence)
+                        exp_sigma = sigma * (1.0 / max(0.1, experimental_weight))
+                        
+                        # Add experimental observations with appropriate weight
+                        pm.Normal(
+                            f'{col}_exp', 
+                            mu=mu,
+                            sigma=exp_sigma,
+                            observed=exp_col_scaled
+                        )
+                        print(f"Added experimental data for column {col} with weight {experimental_weight}")
             
             # Sample from the posterior
             self.mcmc_samples = pm.sample(num_samples, chains=chains, progressbar=True)

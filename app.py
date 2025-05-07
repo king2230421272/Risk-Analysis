@@ -3851,138 +3851,179 @@ with main_container:
                                     cgan_analysis_data = eval_data  # Default to evaluation data
                                     data_source_label = "evaluation data"
                                     
-                                    # Check if we have convergence-tested datasets to use for analysis
-                                    if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
-                                        st.info("Using datasets from Convergence Diagnostics for comprehensive analysis.")
+                                    # Check if we have convergence-tested datasets with "Good" quality in all metrics 
+                                    datasets_source = None
+                                    if 'cgan_analysis_datasets' in st.session_state and st.session_state.cgan_analysis_datasets:
+                                        datasets_source = 'cgan_analysis_datasets'
+                                        st.success("Using datasets with 'Good' convergence quality in all metrics for comprehensive analysis.")
+                                    elif 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
+                                        datasets_source = 'convergence_datasets'
+                                        st.info("Using datasets from Convergence Diagnostics for analysis (may include datasets with varied quality).")
+                                    
+                                    if datasets_source:
+                                        # Get the correct dataset collection
+                                        dataset_collection = st.session_state[datasets_source]
                                         
-                                        # Make sure convergence_datasets is a dictionary, not a list
-                                        if isinstance(st.session_state.convergence_datasets, dict):
-                                            # Allow users to select which convergence dataset to use
-                                            dataset_options = list(st.session_state.convergence_datasets.keys())
+                                        if isinstance(dataset_collection, dict):
+                                            # Dictionary-based collection
+                                            dataset_options = list(dataset_collection.keys())
                                             selected_dataset = st.selectbox(
                                                 "Select dataset from Convergence Diagnostics:",
                                                 options=dataset_options,
                                                 index=0 if dataset_options else None
                                             )
                                             
-                                            if selected_dataset and selected_dataset in st.session_state.convergence_datasets:
-                                                dataset_item = st.session_state.convergence_datasets[selected_dataset]
+                                            if selected_dataset and selected_dataset in dataset_collection:
+                                                dataset_item = dataset_collection[selected_dataset]
                                                 # Extract the actual data if this is a dictionary with a 'data' key
                                                 if isinstance(dataset_item, dict) and 'data' in dataset_item:
                                                     cgan_analysis_data = dataset_item['data']
                                                     dataset_name = dataset_item.get('name', selected_dataset)
+                                                    # Show convergence quality if available
+                                                    if 'convergence_quality' in dataset_item:
+                                                        quality_info = ", ".join([f"{k}: {v}" for k, v in dataset_item['convergence_quality'].items()])
+                                                        st.info(f"Dataset quality metrics: {quality_info}")
                                                     data_source_label = f"convergence-tested dataset '{dataset_name}'"
                                                 else:
                                                     cgan_analysis_data = dataset_item
                                                     data_source_label = f"convergence-tested dataset '{selected_dataset}'"
-                                                st.success(f"Using {data_source_label} for enhanced analysis.")
-                                        elif isinstance(st.session_state.convergence_datasets, list) and len(st.session_state.convergence_datasets) > 0:
-                                            # If it's a list, offer numbered options
-                                            dataset_indices = list(range(len(st.session_state.convergence_datasets)))
-                                            dataset_options = [f"Dataset {i+1}" for i in dataset_indices]
+                                                st.success(f"Using {data_source_label} for analysis.")
+                                        elif isinstance(dataset_collection, list) and len(dataset_collection) > 0:
+                                            # List-based collection
+                                            # Create more informative labels for the datasets
+                                            dataset_options = []
+                                            for i, ds in enumerate(dataset_collection):
+                                                if isinstance(ds, dict):
+                                                    name = ds.get('name', f"Dataset {i+1}")
+                                                    # Add convergence quality indicators if available
+                                                    if 'convergence_quality' in ds:
+                                                        quality_count = sum(1 for q in ds['convergence_quality'].values() if q == 'Good')
+                                                        total_metrics = len(ds['convergence_quality'])
+                                                        name = f"{name} ({quality_count}/{total_metrics} Good metrics)"
+                                                    dataset_options.append(name)
+                                                else:
+                                                    dataset_options.append(f"Dataset {i+1}")
+                                            
                                             selected_index = st.selectbox(
                                                 "Select dataset from Convergence Diagnostics:",
-                                                options=dataset_indices,
+                                                options=range(len(dataset_collection)),
                                                 format_func=lambda i: dataset_options[i],
                                                 index=0
                                             )
                                             
-                                            dataset_item = st.session_state.convergence_datasets[selected_index]
+                                            dataset_item = dataset_collection[selected_index]
                                             # Extract the actual data if this is a dictionary with a 'data' key
                                             if isinstance(dataset_item, dict) and 'data' in dataset_item:
                                                 cgan_analysis_data = dataset_item['data']
                                                 dataset_name = dataset_item.get('name', f"#{selected_index+1}")
+                                                # Display quality metrics if available
+                                                if 'convergence_quality' in dataset_item:
+                                                    st.info("Dataset convergence quality metrics:")
+                                                    for metric, quality in dataset_item['convergence_quality'].items():
+                                                        color = "green" if quality == "Good" else "orange" if quality == "Fair" else "red"
+                                                        st.markdown(f"- {metric}: <span style='color:{color}'>{quality}</span>", unsafe_allow_html=True)
                                                 data_source_label = f"convergence-tested dataset {dataset_name}"
                                             else:
                                                 cgan_analysis_data = dataset_item
                                                 data_source_label = f"convergence-tested dataset #{selected_index+1}"
                                             
-                                            st.success(f"Using {data_source_label} for validation.")
+                                            st.success(f"Using {data_source_label} for analysis.")
                                     
-                                    # 创建一个CGAN模型分析验证模块
-                                    st.header("CGAN模型分析验证")
+                                    # Create a CGAN model analysis validation module
+                                    st.header("CGAN Model Analysis Validation")
                                     
-                                    # 使用两个模块实现不同的功能
-                                    validation_tabs = st.tabs(["生成数据与统计指标比较", "判别器评分分析"])
+                                    # Use two modules to implement different functionalities
+                                    validation_tabs = st.tabs(["Generated Data & Statistical Metrics Comparison", "Discriminator Score Analysis"])
                                             
                                     with validation_tabs[0]:
-                                        st.subheader("生成数据与统计指标比较")
-                                        st.write("使用训练好的生成器模型结合条件信息生成模拟数据，并与插补数据集进行统计指标比较。")
+                                        st.subheader("Generated Data & Statistical Metrics Comparison")
+                                        st.write("Using the trained generator model with condition information to generate synthetic data and compare statistical metrics with the interpolated dataset.")
                                         
                                         try:
-                                            # 使用新的方法生成数据并比较统计指标
+                                            # Use the new method to generate data and compare statistical metrics
                                             generated_results, stats_analysis = advanced_processor.cgan_generate_and_compare(
-                                                cgan_analysis_data,  # 使用选择的数据集
+                                                cgan_analysis_data,  # Use the selected dataset
                                                 noise_samples=noise_samples,
                                                 custom_conditions=custom_conditions,
                                                 original_data=st.session_state.original_data if 'original_data' in st.session_state else None
                                             )
                                             
-                                            st.success(f"模型已成功生成样本并进行了统计比较分析。")
+                                            st.success(f"Model has successfully generated samples and performed statistical comparison analysis.")
                                             
-                                            # 保存生成结果供应用程序其他部分使用
+                                            # Save generated results for use in other parts of the application
                                             cgan_results = generated_results
                                             analysis_info = stats_analysis
                                         
                                         except Exception as e:
-                                            st.error(f"生成与统计比较分析出错: {str(e)}")
+                                            st.error(f"Error in generation and statistical comparison analysis: {str(e)}")
                                             st.code(traceback.format_exc())
-                                            # 回退到最基本的选项
+                                            # Fall back to the basic options
                                             cgan_results, analysis_info = advanced_processor.cgan_analysis(
-                                                eval_data,  # 使用评估数据
+                                                eval_data,  # Use evaluation data
                                                 noise_samples=noise_samples,
                                                 custom_conditions=custom_conditions,
                                                 original_data=st.session_state.original_data if 'original_data' in st.session_state else None
                                             )
                                         
-                                        # 如果有统计分析结果，显示它们
+                                        # If there are statistical analysis results, display them
                                         if "statistics" not in locals():
                                             statistics = {}
                                         if "statistical_analysis" in analysis_info and analysis_info["statistical_analysis"]:
                                             stat_analysis_data = analysis_info["statistical_analysis"]
                                             
-                                            # 显示指标
-                                            st.write("##### 关键统计指标比较")
+                                            # Display metrics
+                                            st.write("##### Key Statistical Metrics Comparison")
                                             
-                                            # 创建汇总表格
+                                            # Create summary table
                                             summary_stats = []
                                             for col, analysis in stat_analysis_data.items():
                                                 summary_stats.append({
-                                                    "特征": col,
-                                                    "插补数据均值": f"{analysis.get('real_mean', 'N/A'):.4f}",
-                                                    "合成数据均值": f"{analysis.get('synthetic_mean', 'N/A'):.4f}",
-                                                    "均值差异%": f"{analysis.get('mean_diff_pct', 'N/A'):.2f}%",
-                                                    "插补数据标准差": f"{analysis.get('real_std', 'N/A'):.4f}",
-                                                    "合成数据标准差": f"{analysis.get('synthetic_std', 'N/A'):.4f}",
-                                                    "标准差差异%": f"{analysis.get('std_diff_pct', 'N/A'):.2f}%",
-                                                    "保存质量": analysis.get('preservation_quality', 'N/A'),
-                                                    "分布相似性(p值)": f"{analysis.get('ks_p_value', 'N/A'):.4f}"
+                                                    "Feature": col,
+                                                    "Interpolated Mean": f"{analysis.get('real_mean', 'N/A'):.4f}",
+                                                    "Synthetic Mean": f"{analysis.get('synthetic_mean', 'N/A'):.4f}",
+                                                    "Mean Diff %": f"{analysis.get('mean_diff_pct', 'N/A'):.2f}%",
+                                                    "Interpolated StdDev": f"{analysis.get('real_std', 'N/A'):.4f}",
+                                                    "Synthetic StdDev": f"{analysis.get('synthetic_std', 'N/A'):.4f}",
+                                                    "StdDev Diff %": f"{analysis.get('std_diff_pct', 'N/A'):.2f}%",
+                                                    "Preservation Quality": analysis.get('preservation_quality', 'N/A'),
+                                                    "Distribution Similarity (p-value)": f"{analysis.get('ks_p_value', 'N/A'):.4f}"
                                                 })
                                             
-                                            # 创建并显示表格
+                                            # Create and display table
                                             summary_df = pd.DataFrame(summary_stats)
                                             
-                                            # 定义样式突出显示函数
+                                            # Define highlighting function for quality
                                             def highlight_quality(val):
-                                                if val == '优秀':
-                                                    return 'background-color: #90EE90'  # 浅绿色
-                                                elif val == '良好':
-                                                    return 'background-color: #E0FFFF'  # 浅青色
-                                                elif val == '一般':
-                                                    return 'background-color: #FFE4B5'  # 浅黄色
-                                                elif val == '差':
-                                                    return 'background-color: #FFC0CB'  # 浅红色
+                                                if val == 'Excellent':
+                                                    return 'background-color: #90EE90'  # Light green
+                                                elif val == 'Good':
+                                                    return 'background-color: #E0FFFF'  # Light cyan
+                                                elif val == 'Fair':
+                                                    return 'background-color: #FFE4B5'  # Light yellow
+                                                elif val == 'Poor':
+                                                    return 'background-color: #FFC0CB'  # Light red
                                                 return ''
                                             
-                                            # 应用样式
+                                            # Update preservation quality to English if needed
+                                            for i, row in summary_df.iterrows():
+                                                if row['Preservation Quality'] == '优秀':
+                                                    summary_df.at[i, 'Preservation Quality'] = 'Excellent'
+                                                elif row['Preservation Quality'] == '良好':
+                                                    summary_df.at[i, 'Preservation Quality'] = 'Good'
+                                                elif row['Preservation Quality'] == '一般':
+                                                    summary_df.at[i, 'Preservation Quality'] = 'Fair'
+                                                elif row['Preservation Quality'] == '差':
+                                                    summary_df.at[i, 'Preservation Quality'] = 'Poor'
+                                            
+                                            # Apply styles
                                             styled_summary_df = summary_df.style.applymap(
-                                                highlight_quality, subset=['保存质量']
+                                                highlight_quality, subset=['Preservation Quality']
                                             )
                                             
-                                            # 显示带样式的表格
+                                            # Display styled table
                                             st.dataframe(styled_summary_df)
                                             
-                                            # 计算总体保存质量分数
+                                            # Calculate overall preservation quality score
                                             mean_diffs = [analysis.get('mean_diff_pct', 0) for analysis in stat_analysis_data.values()
                                                         if isinstance(analysis.get('mean_diff_pct'), (int, float))]
                                             std_diffs = [analysis.get('std_diff_pct', 0) for analysis in stat_analysis_data.values()
@@ -3992,38 +4033,38 @@ with main_container:
                                                 avg_mean_diff = np.mean(mean_diffs)
                                                 avg_std_diff = np.mean(std_diffs)
                                                 
-                                                # 显示总体评分
-                                                st.write(f"**总体统计指标保存分数：** 均值差异{avg_mean_diff:.2f}%，标准差差异{avg_std_diff:.2f}%")
+                                                # Display overall score
+                                                st.write(f"**Overall Statistical Metrics Preservation Score:** Mean difference {avg_mean_diff:.2f}%, Standard deviation difference {avg_std_diff:.2f}%")
                                                 
-                                                # 解释
+                                                # Explanation
                                                 if avg_mean_diff < 5 and avg_std_diff < 10:
-                                                    st.success("优秀的统计指标保存 - 所有特征的统计属性在插补数据和合成数据间保持一致。")
+                                                    st.success("Excellent statistical metrics preservation - All feature statistical properties remain consistent between interpolated and synthetic data.")
                                                 elif avg_mean_diff < 10 and avg_std_diff < 20:
-                                                    st.success("良好的统计指标保存 - 大多数特征的统计属性保持一致。")
+                                                    st.success("Good statistical metrics preservation - Most feature statistical properties remain consistent.")
                                                 elif avg_mean_diff < 20 and avg_std_diff < 30:
-                                                    st.warning("一般的统计指标保存 - 部分特征显示出中等程度的差异。")
+                                                    st.warning("Fair statistical metrics preservation - Some features show moderate differences.")
                                                 else:
-                                                    st.error("较差的统计指标保存 - 考虑调整模型或插补过程。")
+                                                    st.error("Poor statistical metrics preservation - Consider adjusting the model or interpolation process.")
                                             
-                                            # 显示每个特征的分布比较图表
-                                            st.write("##### 特征分布比较")
-                                            st.write("插补数据(蓝色)与合成数据(橙色)的分布对比：")
+                                            # Display distribution comparison charts for each feature
+                                            st.write("##### Feature Distribution Comparison")
+                                            st.write("Interpolated data (blue) vs synthetic data (orange) distribution comparison:")
                                             
-                                            # 创建多列布局以显示多个图表
+                                            # Create multi-column layout to display multiple charts
                                             cols = st.columns(2)
                                             col_idx = 0
                                             
                                             for col, analysis in stat_analysis_data.items():
                                                 if 'distribution_plot' in analysis:
                                                     with cols[col_idx % 2]:
-                                                        st.write(f"**{col}** (p值: {analysis.get('ks_p_value', 'N/A'):.4f})")
+                                                        st.write(f"**{col}** (p-value: {analysis.get('ks_p_value', 'N/A'):.4f})")
                                                         st.pyplot(analysis['distribution_plot'])
                                                     col_idx += 1
                                             
-                                            # 显示生成的数据样本
+                                            # Display generated data samples
                                             if "synthetic_data" in analysis_info and not analysis_info["synthetic_data"].empty:
-                                                with st.expander("查看生成的数据样本"):
-                                                    st.write("生成的合成数据样本：")
+                                                with st.expander("View generated data samples"):
+                                                    st.write("Generated synthetic data samples:")
                                                     st.dataframe(analysis_info["synthetic_data"].head(10))
                                             
                                             with validation_tabs[1]:

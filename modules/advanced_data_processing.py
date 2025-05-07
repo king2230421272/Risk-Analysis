@@ -556,11 +556,13 @@ class AdvancedDataProcessor:
     def cgan_analysis(self, interpolated_data, noise_samples=100, custom_conditions=None):
         """
         Use trained CGAN model to analyze interpolated data.
+        Evaluates all parameters including both feature values and target values
+        to assess the quality of interpolation from convergence-tested datasets.
         
         Parameters:
         -----------
         interpolated_data : pandas.DataFrame
-            The interpolated data to analyze
+            The interpolated data to analyze (typically from Convergence Diagnostics)
         noise_samples : int
             Number of noise samples to generate for each condition
         custom_conditions : dict, optional
@@ -572,7 +574,8 @@ class AdvancedDataProcessor:
         pandas.DataFrame
             Data with CGAN analysis results
         dict
-            Additional analysis information including KS test results and visualization plots
+            Additional analysis information including KS test results, visualization plots,
+            and comprehensive evaluations of both feature and target parameters
         """
         if self.cgan_model is None:
             raise ValueError("CGAN model not trained. Please call train_cgan first.")

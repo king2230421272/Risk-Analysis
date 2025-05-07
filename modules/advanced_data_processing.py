@@ -553,7 +553,7 @@ class AdvancedDataProcessor:
         
         return generator, discriminator
     
-    def cgan_analysis(self, interpolated_data, noise_samples=100, custom_conditions=None):
+    def cgan_analysis(self, interpolated_data, noise_samples=100, custom_conditions=None, original_data=None):
         """
         Use trained CGAN model to analyze interpolated data.
         Evaluates all parameters including both feature values and target values
@@ -568,6 +568,9 @@ class AdvancedDataProcessor:
         custom_conditions : dict, optional
             Dictionary with column names as keys and custom condition values to use
             instead of the values from the interpolated data
+        original_data : pandas.DataFrame, optional
+            Original non-interpolated data to use as reference for comparison.
+            If None, only the interpolated data will be used for analysis.
             
         Returns:
         --------
@@ -772,15 +775,86 @@ class AdvancedDataProcessor:
                     except Exception as e:
                         print(f"Error analyzing column {col}: {str(e)}")
         
+        # Perform comprehensive analysis on all parameters (including both features and targets)
+        all_parameter_analysis = {}
+        
+        # Include all numeric columns in the analysis (both condition and target columns)
+        all_parameter_cols = list(set(condition_cols + target_cols))
+        
+        # Analyze distribution characteristics for all parameters
+        if not comparison_data.empty and interpolated_data is not None:
+            print("Performing comprehensive analysis on all parameters (features and targets)...")
+            
+            # Get the numeric columns from interpolated data
+            numeric_cols = interpolated_data.select_dtypes(include=np.number).columns
+            
+            # Filter to only include columns that exist in both datasets
+            valid_cols = [col for col in all_parameter_cols if col in numeric_cols]
+            
+            # For each parameter, compare basic statistics
+            for col in valid_cols:
+                try:
+                    # Get actual values from interpolated data
+                    actual_values = interpolated_data[col].dropna().values
+                    
+                    # Skip if no actual values
+                    if len(actual_values) == 0:
+                        continue
+                    
+                    # Calculate basic statistics
+                    param_analysis = {
+                        'mean': np.mean(actual_values),
+                        'median': np.median(actual_values),
+                        'std': np.std(actual_values),
+                        'min': np.min(actual_values),
+                        'max': np.max(actual_values),
+                        'q1': np.percentile(actual_values, 25),
+                        'q3': np.percentile(actual_values, 75)
+                    }
+                    
+                    # If synthetic data is available for this parameter, compare with it
+                    if col in synthetic_df.columns:
+                        synthetic_values = synthetic_df[col].dropna().values
+                        if len(synthetic_values) > 0:
+                            param_analysis['synthetic_mean'] = np.mean(synthetic_values)
+                            param_analysis['synthetic_median'] = np.median(synthetic_values)
+                            param_analysis['synthetic_std'] = np.std(synthetic_values)
+                            param_analysis['synthetic_min'] = np.min(synthetic_values)
+                            param_analysis['synthetic_max'] = np.max(synthetic_values)
+                            param_analysis['synthetic_q1'] = np.percentile(synthetic_values, 25)
+                            param_analysis['synthetic_q3'] = np.percentile(synthetic_values, 75)
+                            
+                            # Calculate differences
+                            param_analysis['mean_diff'] = abs(param_analysis['mean'] - param_analysis['synthetic_mean'])
+                            param_analysis['mean_diff_pct'] = (param_analysis['mean_diff'] / max(abs(param_analysis['mean']), 1e-10)) * 100
+                            param_analysis['std_diff'] = abs(param_analysis['std'] - param_analysis['synthetic_std'])
+                            param_analysis['std_diff_pct'] = (param_analysis['std_diff'] / max(abs(param_analysis['std']), 1e-10)) * 100
+                            
+                            # Evaluate preservation quality
+                            if param_analysis['mean_diff_pct'] < 5 and param_analysis['std_diff_pct'] < 10:
+                                param_analysis['preservation'] = 'Excellent'
+                            elif param_analysis['mean_diff_pct'] < 10 and param_analysis['std_diff_pct'] < 20:
+                                param_analysis['preservation'] = 'Good'
+                            elif param_analysis['mean_diff_pct'] < 20 and param_analysis['std_diff_pct'] < 30:
+                                param_analysis['preservation'] = 'Fair'
+                            else:
+                                param_analysis['preservation'] = 'Poor'
+                    
+                    all_parameter_analysis[col] = param_analysis
+                except Exception as e:
+                    print(f"Error analyzing parameter {col}: {str(e)}")
+        
         # Create analysis results dictionary with additional information
         analysis_info = {
             'ks_test_results': ks_test_results,
             'comparison_plots': comparison_plots,
             'conditions_used': custom_conditions if custom_conditions else "Original data conditions",
+            'all_parameter_analysis': all_parameter_analysis,  # Added comprehensive parameter analysis
             'metrics': {
                 'num_conditions': len(condition_data),
                 'num_samples_per_condition': noise_samples,
-                'total_synthetic_samples': len(synthetic_df)
+                'total_synthetic_samples': len(synthetic_df),
+                'num_parameters_analyzed': len(all_parameter_analysis)
             }
         }
         

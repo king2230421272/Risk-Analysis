@@ -3925,12 +3925,46 @@ with main_container:
                                                 custom_conditions = st.session_state.condition_values
                                                 st.success(f"Using custom condition values: {custom_conditions}")
                                         
-                                        # Analyze using the trained model and the selected evaluation data
-                                        cgan_results, analysis_info = advanced_processor.cgan_analysis(
-                                            eval_data,  # Use the selected evaluation data
-                                            noise_samples=noise_samples,
-                                            custom_conditions=custom_conditions
-                                        )
+                                        # Check if we have convergence-tested datasets to use for analysis
+                                        if 'convergence_datasets' in st.session_state and st.session_state.convergence_datasets:
+                                            st.info("Using datasets from Convergence Diagnostics for comprehensive analysis.")
+                                            
+                                            # Allow users to select which convergence dataset to use
+                                            dataset_options = list(st.session_state.convergence_datasets.keys())
+                                            selected_dataset = st.selectbox(
+                                                "Select dataset from Convergence Diagnostics:",
+                                                options=dataset_options,
+                                                index=0 if dataset_options else None
+                                            )
+                                            
+                                            if selected_dataset and selected_dataset in st.session_state.convergence_datasets:
+                                                convergence_data = st.session_state.convergence_datasets[selected_dataset]
+                                                
+                                                # Use convergence-tested dataset for analysis with original data for reference
+                                                cgan_results, analysis_info = advanced_processor.cgan_analysis(
+                                                    convergence_data,  # Use the selected convergence-tested dataset
+                                                    noise_samples=noise_samples,
+                                                    custom_conditions=custom_conditions,
+                                                    original_data=st.session_state.original_data if 'original_data' in st.session_state else None
+                                                )
+                                                
+                                                st.success(f"Using convergence-tested dataset '{selected_dataset}' for enhanced analysis.")
+                                            else:
+                                                # Fallback to evaluation data if no convergence dataset is selected
+                                                cgan_results, analysis_info = advanced_processor.cgan_analysis(
+                                                    eval_data,  # Use the selected evaluation data
+                                                    noise_samples=noise_samples,
+                                                    custom_conditions=custom_conditions,
+                                                    original_data=st.session_state.original_data if 'original_data' in st.session_state else None
+                                                )
+                                        else:
+                                            # Use the selected evaluation data if no convergence datasets available
+                                            cgan_results, analysis_info = advanced_processor.cgan_analysis(
+                                                eval_data,  # Use the selected evaluation data
+                                                noise_samples=noise_samples,
+                                                custom_conditions=custom_conditions,
+                                                original_data=st.session_state.original_data if 'original_data' in st.session_state else None
+                                            )
                                         
                                         if "error" in analysis_info:
                                             st.error(f"Error in CGAN analysis: {analysis_info['error']}")
@@ -4065,7 +4099,7 @@ with main_container:
                                         if not cols_to_compare:
                                             st.warning("No common columns found between evaluation and synthetic data for correlation analysis.")
                                         else:
-                                            # Evaluation data correlation
+                                            # Evaluation data correlation (include both features and targets)
                                             original_corr = eval_data[cols_to_compare].corr()
                                             
                                             # Synthetic data correlation
@@ -4073,6 +4107,47 @@ with main_container:
                                             
                                             # Absolute difference in correlations
                                             diff_corr = (original_corr - synthetic_corr).abs()
+                                            
+                                            # Display comprehensive parameter analysis if available
+                                            if 'all_parameter_analysis' in analysis_info and analysis_info['all_parameter_analysis']:
+                                                st.write("### Comprehensive Parameter Analysis")
+                                                st.write("Statistical comparison of all parameters (both features and targets) between interpolated and synthetic data:")
+                                                
+                                                # Convert the parameter analysis to a DataFrame for display
+                                                param_rows = []
+                                                for param, analysis in analysis_info['all_parameter_analysis'].items():
+                                                    if 'synthetic_mean' in analysis:  # Only include parameters with synthetic comparisons
+                                                        row = {
+                                                            'Parameter': param,
+                                                            'Original Mean': f"{analysis['mean']:.4f}",
+                                                            'Synthetic Mean': f"{analysis['synthetic_mean']:.4f}",
+                                                            'Mean Diff %': f"{analysis['mean_diff_pct']:.2f}%",
+                                                            'Original Std': f"{analysis['std']:.4f}",
+                                                            'Synthetic Std': f"{analysis['synthetic_std']:.4f}",
+                                                            'Std Diff %': f"{analysis['std_diff_pct']:.2f}%",
+                                                            'Preservation': analysis['preservation']
+                                                        }
+                                                        param_rows.append(row)
+                                                
+                                                if param_rows:
+                                                    param_df = pd.DataFrame(param_rows)
+                                                    
+                                                    # Color-code the preservation quality
+                                                    def highlight_preservation(val):
+                                                        if val == 'Excellent':
+                                                            return 'background-color: #c6efce; color: #006100'
+                                                        elif val == 'Good':
+                                                            return 'background-color: #ffeb9c; color: #9c5700'
+                                                        elif val == 'Fair':
+                                                            return 'background-color: #ffc7ce; color: #9c0006'
+                                                        else:  # Poor
+                                                            return 'background-color: #ff7c80; color: #9c0006'
+                                                    
+                                                    styled_param_df = param_df.style.applymap(
+                                                        highlight_preservation, subset=['Preservation']
+                                                    )
+                                                    
+                                                    st.dataframe(styled_param_df)
                                         
                                             # Display correlation matrices side by side
                                             col1, col2 = st.columns(2)

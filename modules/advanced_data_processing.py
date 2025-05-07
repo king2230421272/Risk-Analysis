@@ -844,6 +844,15 @@ class AdvancedDataProcessor:
                 except Exception as e:
                     print(f"Error analyzing parameter {col}: {str(e)}")
         
+        # Make sure all_parameter_analysis is properly initialized, even if empty
+        if all_parameter_analysis is None:
+            all_parameter_analysis = {}
+        
+        # Use dictionary type check for all_parameter_analysis
+        if not isinstance(all_parameter_analysis, dict):
+            print(f"Warning: all_parameter_analysis is not a dictionary, it's {type(all_parameter_analysis)}")
+            all_parameter_analysis = {}  # Reset to empty dict to avoid later errors
+            
         # Create analysis results dictionary with additional information
         analysis_info = {
             'ks_test_results': ks_test_results,
@@ -854,7 +863,7 @@ class AdvancedDataProcessor:
                 'num_conditions': len(condition_data),
                 'num_samples_per_condition': noise_samples,
                 'total_synthetic_samples': len(synthetic_df),
-                'num_parameters_analyzed': len(all_parameter_analysis)
+                'num_parameters_analyzed': len(all_parameter_analysis) if isinstance(all_parameter_analysis, dict) else 0
             }
         }
         

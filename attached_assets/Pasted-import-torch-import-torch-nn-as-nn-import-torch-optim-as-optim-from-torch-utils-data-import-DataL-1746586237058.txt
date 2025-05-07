@@ -1,0 +1,138 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from models import Generator, Discriminator
+from transformers import AutoTokenizer
+import numpy as np
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+from dataset import create_dataloader
+
+# 设置随机种子
+torch.manual_seed(42)
+np.random.seed(42)
+
+# 超参数
+latent_dim = 100
+condition_dim = 256
+batch_size = 64
+num_epochs = 100
+lr = 0.0002
+beta1 = 0.5
+
+# 数据类型配置
+data_type = 'tensor'  # 可选: 'tensor', 'sequence', 'graph'
+output_dim = 784  # 根据实际数据维度设置
+
+# 初始化模型
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+generator = Generator(latent_dim, condition_dim, output_dim, data_type).to(device)
+discriminator = Discriminator(condition_dim, output_dim, data_type).to(device)
+
+# 初始化优化器
+g_optimizer = optim.Adam(generator.parameters(), lr=lr, betas=(beta1, 0.999))
+d_optimizer = optim.Adam(discriminator.parameters(), lr=lr, betas=(beta1, 0.999))
+
+# 损失函数
+criterion = nn.BCELoss()
+
+# 初始化tokenizer
+tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm3-6b")
+
+def train_step(real_data, condition_texts):
+    batch_size = real_data.size(0)
+    
+    # 准备标签
+    real_label = torch.ones(batch_size, 1).to(device)
+    fake_label = torch.zeros(batch_size, 1).to(device)
+    
+    # 训练判别器
+    d_optimizer.zero_grad()
+    
+    # 真实数据的损失
+    outputs_real = discriminator(real_data, condition_texts)
+    d_loss_real = criterion(outputs_real, real_label)
+    
+    # 生成假数据
+    if data_type == 'sequence':
+        noise = torch.randn(batch_size, real_data.size(1), latent_dim).to(device)
+    else:
+        noise = torch.randn(batch_size, latent_dim).to(device)
+    
+    fake_data = generator(noise, condition_texts)
+    
+    # 假数据的损失
+    outputs_fake = discriminator(fake_data.detach(), condition_texts)
+    d_loss_fake = criterion(outputs_fake, fake_label)
+    
+    # 总判别器损失
+    d_loss = d_loss_real + d_loss_fake
+    d_loss.backward()
+    d_optimizer.step()
+    
+    # 训练生成器
+    g_optimizer.zero_grad()
+    
+    # 生成器损失
+    outputs = discriminator(fake_data, condition_texts)
+    g_loss = criterion(outputs, real_label)
+    
+    g_loss.backward()
+    g_optimizer.step()
+    
+    return d_loss.item(), g_loss.item()
+
+def train(dataloader):
+    for epoch in range(num_epochs):
+        d_losses = []
+        g_losses = []
+        
+        for real_data, condition_texts in tqdm(dataloader):
+            real_data = real_data.to(device)
+            condition_texts = tokenizer(condition_texts, padding=True, truncation=True, return_tensors="pt").to(device)
+            
+            d_loss, g_loss = train_step(real_data, condition_texts)
+            d_losses.append(d_loss)
+            g_losses.append(g_loss)
+        
+        # 打印训练进度
+        print(f'Epoch [{epoch+1}/{num_epochs}], d_loss: {np.mean(d_losses):.4f}, g_loss: {np.mean(g_losses):.4f}')
+        
+        # 保存生成的数据
+        if (epoch + 1) % 10 == 0:
+            save_generated_data(epoch + 1)
+
+def save_generated_data(epoch):
+    generator.eval()
+    with torch.no_grad():
+        # 生成一些示例数据
+        if data_type == 'sequence':
+            noise = torch.randn(16, 10, latent_dim).to(device)  # 假设序列长度为10
+        else:
+            noise = torch.randn(16, latent_dim).to(device)
+            
+        sample_texts = ["示例条件文本"] * 16
+        sample_texts = tokenizer(sample_texts, padding=True, truncation=True, return_tensors="pt").to(device)
+        
+        fake_data = generator(noise, sample_texts)
+        
+        # 保存生成的数据
+        if data_type == 'tensor':
+            np.save(f'generated_data_epoch_{epoch}.npy', fake_data.cpu().numpy())
+        elif data_type == 'sequence':
+            np.save(f'generated_sequences_epoch_{epoch}.npy', fake_data.cpu().numpy())
+        elif data_type == 'graph':
+            np.save(f'generated_graphs_epoch_{epoch}.npy', fake_data.cpu().numpy())
+    
+    generator.train()
+
+if __name__ == '__main__':
+    # 创建数据加载器
+    dataloader = create_dataloader(
+        data_file='path/to/your/data.npy',
+        condition_file='path/to/your/conditions.json',
+        data_type=data_type,
+        batch_size=batch_size
+    )
+    train(dataloader) 

@@ -2977,10 +2977,10 @@ with main_container:
                                         st.write("您可以用自然语言描述想要的条件值，系统将自动解析为CGAN可用的参数。")
                                         
                                         # Show column info as reference
-                                        with st.expander("查看数据列信息（作为参考）", expanded=True):
-                                            condition_info_df = pd.DataFrame(condition_info_data)
-                                            st.dataframe(condition_info_df)
-                                            st.write("在自然语言描述中，您可以参考这些数据列名称和它们的取值范围。")
+                                        st.write("##### 数据列信息（作为参考）")
+                                        condition_info_df = pd.DataFrame(condition_info_data)
+                                        st.dataframe(condition_info_df)
+                                        st.write("在自然语言描述中，您可以参考这些数据列名称和它们的取值范围。")
                                         
                                         # Natural language input
                                         nl_description = st.text_area(

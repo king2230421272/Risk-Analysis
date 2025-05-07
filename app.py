@@ -2994,6 +2994,80 @@ with main_container:
                                             st.error("❌ 实验数据与原始数据没有共同的列，无法进行比较分析。")
                                         else:
                                             st.info(f"✓ 检测到 {len(common_cols)} 个共同列，可以进行比较分析。")
+                                            
+                                            # Add option for scaling experimental data
+                                            apply_scaling = st.checkbox(
+                                                "应用数据缩放使实验数据与原始数据量级一致", 
+                                                value=True,
+                                                key="cgan_apply_scaling",
+                                                help="将实验数据缩放到与原始数据相似的分布范围"
+                                            )
+                                            
+                                            if apply_scaling:
+                                                try:
+                                                    with st.spinner("正在缩放实验数据..."):
+                                                        # Create deep copy to avoid modifying the original
+                                                        scaled_exp_data = experimental_data.copy()
+                                                        
+                                                        # Get only numeric columns from the common columns
+                                                        numeric_common_cols = [
+                                                            col for col in common_cols 
+                                                            if col in st.session_state.original_data.select_dtypes(include=np.number).columns
+                                                            and col in scaled_exp_data.select_dtypes(include=np.number).columns
+                                                        ]
+                                                        
+                                                        if len(numeric_common_cols) > 0:
+                                                            for col in numeric_common_cols:
+                                                                # Skip columns with all NaNs
+                                                                if scaled_exp_data[col].isna().all() or st.session_state.original_data[col].isna().all():
+                                                                    continue
+                                                                    
+                                                                # Get stats for scaling
+                                                                orig_mean = st.session_state.original_data[col].mean()
+                                                                orig_std = st.session_state.original_data[col].std() if st.session_state.original_data[col].std() > 0 else 1.0
+                                                                
+                                                                exp_mean = scaled_exp_data[col].mean()
+                                                                exp_std = scaled_exp_data[col].std() if scaled_exp_data[col].std() > 0 else 1.0
+                                                                
+                                                                # Apply scaling: standardize, then transform to original data's distribution
+                                                                scaled_exp_data[col] = ((scaled_exp_data[col] - exp_mean) / exp_std) * orig_std + orig_mean
+                                                            
+                                                            # Store the scaled data
+                                                            st.session_state.cgan_experimental_data = scaled_exp_data
+                                                            
+                                                            # Show before/after stats for a random numeric column as example
+                                                            if len(numeric_common_cols) > 0:
+                                                                sample_col = numeric_common_cols[0]
+                                                                col1, col2, col3 = st.columns(3)
+                                                                
+                                                                with col1:
+                                                                    st.write(f"**原始数据 '{sample_col}' 统计:**")
+                                                                    st.write(f"均值: {st.session_state.original_data[sample_col].mean():.2f}")
+                                                                    st.write(f"标准差: {st.session_state.original_data[sample_col].std():.2f}")
+                                                                    st.write(f"最小值: {st.session_state.original_data[sample_col].min():.2f}")
+                                                                    st.write(f"最大值: {st.session_state.original_data[sample_col].max():.2f}")
+                                                                
+                                                                with col2:
+                                                                    st.write(f"**缩放前 '{sample_col}' 统计:**")
+                                                                    st.write(f"均值: {experimental_data[sample_col].mean():.2f}")
+                                                                    st.write(f"标准差: {experimental_data[sample_col].std():.2f}")
+                                                                    st.write(f"最小值: {experimental_data[sample_col].min():.2f}")
+                                                                    st.write(f"最大值: {experimental_data[sample_col].max():.2f}")
+                                                                
+                                                                with col3:
+                                                                    st.write(f"**缩放后 '{sample_col}' 统计:**")
+                                                                    st.write(f"均值: {scaled_exp_data[sample_col].mean():.2f}")
+                                                                    st.write(f"标准差: {scaled_exp_data[sample_col].std():.2f}")
+                                                                    st.write(f"最小值: {scaled_exp_data[sample_col].min():.2f}")
+                                                                    st.write(f"最大值: {scaled_exp_data[sample_col].max():.2f}")
+                                                                
+                                                            st.success("✓ 实验数据已成功缩放，统计分布现在与原始数据更相似")
+                                                        else:
+                                                            st.warning("未找到可缩放的共同数值列")
+                                                except Exception as e:
+                                                    st.error(f"缩放实验数据时出错: {str(e)}")
+                                                    # Revert to original data
+                                                    st.session_state.cgan_experimental_data = experimental_data
                                 except Exception as e:
                                     st.error(f"导入实验数据时出错: {str(e)}")
                             

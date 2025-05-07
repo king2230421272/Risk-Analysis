@@ -2899,7 +2899,7 @@ with main_container:
                                     # Select condition input mode
                                     condition_input_mode = st.radio(
                                         "How would you like to provide condition information?",
-                                        options=["Use training data statistics", "Define specific values"],
+                                        options=["Use training data statistics", "Define specific values", "Use natural language input"],
                                         index=0,
                                         key="condition_input_mode"
                                     )
@@ -2907,19 +2907,20 @@ with main_container:
                                     # Create a DataFrame to store and display condition information
                                     condition_info_data = []
                                     
+                                    # Collect column statistics for all cases
+                                    for col in condition_cols:
+                                        col_stats = {
+                                            "Column": col,
+                                            "Mean": training_data[col].mean(),
+                                            "Std Dev": training_data[col].std(),
+                                            "Min": training_data[col].min(),
+                                            "Max": training_data[col].max()
+                                        }
+                                        condition_info_data.append(col_stats)
+                                    
                                     if condition_input_mode == "Use training data statistics":
                                         # Display statistics from training data
                                         st.write("Using statistical information from training data:")
-                                        
-                                        for col in condition_cols:
-                                            col_stats = {
-                                                "Column": col,
-                                                "Mean": training_data[col].mean(),
-                                                "Std Dev": training_data[col].std(),
-                                                "Min": training_data[col].min(),
-                                                "Max": training_data[col].max()
-                                            }
-                                            condition_info_data.append(col_stats)
                                         
                                         # Create DataFrame and display
                                         condition_info_df = pd.DataFrame(condition_info_data)
@@ -2927,7 +2928,7 @@ with main_container:
                                         
                                         st.info("When generating data, the model will use these statistics to sample condition values.")
                                         
-                                    else:  # Define specific values
+                                    elif condition_input_mode == "Define specific values":
                                         st.write("Define custom condition values:")
                                         
                                         # Create columns for each condition column with input fields
@@ -2970,6 +2971,109 @@ with main_container:
                                         
                                         # Store these values to session state for use during generation
                                         st.session_state.condition_values = condition_values
+                                        
+                                    else:  # Use natural language input
+                                        st.write("### 使用自然语言描述条件")
+                                        st.write("您可以用自然语言描述想要的条件值，系统将自动解析为CGAN可用的参数。")
+                                        
+                                        # Show column info as reference
+                                        with st.expander("查看数据列信息（作为参考）", expanded=True):
+                                            condition_info_df = pd.DataFrame(condition_info_data)
+                                            st.dataframe(condition_info_df)
+                                            st.write("在自然语言描述中，您可以参考这些数据列名称和它们的取值范围。")
+                                        
+                                        # Natural language input
+                                        nl_description = st.text_area(
+                                            "请输入您的自然语言描述：",
+                                            height=150,
+                                            key="nl_condition_input",
+                                            help="例如：'年龄约45岁，收入较高，信用评分在中等偏上'"
+                                        )
+                                        
+                                        # Processing method selection
+                                        processing_method = st.radio(
+                                            "处理方法",
+                                            options=["使用大语言模型（需要API密钥）", "使用代码规则解析"],
+                                            index=0 if llm_handler.is_any_service_available() else 1,
+                                            key="nl_processing_method"
+                                        )
+                                        
+                                        # LLM service selection if applicable
+                                        llm_service = None
+                                        if processing_method == "使用大语言模型（需要API密钥）":
+                                            available_services = llm_handler.get_available_services()
+                                            if available_services:
+                                                llm_service = st.selectbox(
+                                                    "选择大语言模型服务",
+                                                    options=available_services,
+                                                    index=0,
+                                                    key="llm_service_select"
+                                                )
+                                                st.info(f"将使用 {llm_service} 解析您的自然语言输入")
+                                            else:
+                                                st.error("未检测到任何可用的大语言模型API密钥。请提供OpenAI或Anthropic的API密钥，或者选择使用代码规则解析。")
+                                                processing_method = "使用代码规则解析"
+                                        
+                                        # Preview button
+                                        if st.button("预览解析结果", key="preview_nl_button"):
+                                            if not nl_description:
+                                                st.warning("请先输入自然语言描述")
+                                            else:
+                                                with st.spinner("正在解析自然语言描述..."):
+                                                    # Map LLM service display name to service ID
+                                                    service = "auto"
+                                                    if llm_service:
+                                                        if "OpenAI" in llm_service:
+                                                            service = "openai"
+                                                        elif "Anthropic" in llm_service:
+                                                            service = "anthropic"
+                                                    
+                                                    # Parse using appropriate method
+                                                    if processing_method == "使用大语言模型（需要API密钥）":
+                                                        parsed_values = llm_handler.parse_condition_text(
+                                                            nl_description,
+                                                            condition_info_data,
+                                                            service=service,
+                                                            example_data=training_data.head(3) if len(training_data) > 3 else None
+                                                        )
+                                                    else:
+                                                        parsed_values = llm_handler.parse_condition_text_with_code(
+                                                            nl_description,
+                                                            condition_info_data
+                                                        )
+                                                    
+                                                    # Check for errors
+                                                    if isinstance(parsed_values, dict) and "error" in parsed_values:
+                                                        st.error(f"解析错误: {parsed_values['error']}")
+                                                        if "traceback" in parsed_values:
+                                                            with st.expander("查看详细错误信息", expanded=False):
+                                                                st.code(parsed_values["traceback"])
+                                                    else:
+                                                        # Display the parsed values
+                                                        st.success("成功解析自然语言描述！")
+                                                        st.write("解析结果:")
+                                                        
+                                                        # Create a comparison dataframe
+                                                        results_data = []
+                                                        for col in condition_cols:
+                                                            if col in parsed_values:
+                                                                # Find the original stats
+                                                                orig_stats = next((x for x in condition_info_data if x["Column"] == col), None)
+                                                                if orig_stats:
+                                                                    results_data.append({
+                                                                        "列名": col,
+                                                                        "解析值": parsed_values[col],
+                                                                        "原始平均值": orig_stats["Mean"],
+                                                                        "原始最小值": orig_stats["Min"],
+                                                                        "原始最大值": orig_stats["Max"]
+                                                                    })
+                                                        
+                                                        if results_data:
+                                                            st.dataframe(pd.DataFrame(results_data))
+                                                            st.session_state.condition_values = parsed_values
+                                                            st.info("这些值将在生成数据时使用。点击 '训练CGAN模型' 按钮继续。")
+                                                        else:
+                                                            st.warning("未能解析出任何有效的条件值。请尝试更明确的自然语言描述。")
                             
                             # Dataset Balance Analysis
                             with st.expander("Training Data Analysis", expanded=False):
@@ -3041,7 +3145,7 @@ with main_container:
                                         # Use custom condition values if selected earlier
                                         custom_conditions = None
                                         if 'condition_input_mode' in st.session_state and 'condition_values' in st.session_state:
-                                            if st.session_state.condition_input_mode == "Define specific values":
+                                            if st.session_state.condition_input_mode in ["Define specific values", "Use natural language input"]:
                                                 custom_conditions = st.session_state.condition_values
                                                 st.success(f"Using custom condition values: {custom_conditions}")
                                         

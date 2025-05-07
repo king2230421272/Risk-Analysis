@@ -2993,14 +2993,20 @@ with main_container:
                                 else:
                                     with st.spinner("Training CGAN model on original data... This may take a few minutes."):
                                         try:
-                                            # Train the CGAN model using original data
+                                            # Train the CGAN model using original data with enhanced stability parameters
                                             generator, discriminator = advanced_processor.train_cgan(
                                                 training_data,
                                                 condition_cols=condition_cols,
                                                 target_cols=target_cols,
                                                 epochs=epochs,
                                                 batch_size=batch_size,
-                                                noise_dim=noise_dim
+                                                noise_dim=noise_dim,
+                                                learning_rate=0.0002,
+                                                beta1=0.5,
+                                                beta2=0.999,
+                                                early_stopping_patience=20,
+                                                dropout_rate=0.3,
+                                                label_smoothing=0.1
                                             )
                                             
                                             # Store in session state
@@ -3171,57 +3177,62 @@ with main_container:
                                         cols_to_compare = list(set(cols_to_compare))  # Remove duplicates
                                         
                                         # Ensure all columns are available in both datasets
-                                        cols_to_compare = [col for col in cols_to_compare if col in eval_data.columns and col in analysis_results.columns]
+                                        cols_to_compare = [col for col in cols_to_compare if col in eval_data.columns and col in cgan_results.columns]
                                         
-                                        # Evaluation data correlation
-                                        original_corr = eval_data[cols_to_compare].corr()
-                                        
-                                        # Synthetic data correlation
-                                        synthetic_corr = analysis_results[cols_to_compare].corr()
-                                        
-                                        # Absolute difference in correlations
-                                        diff_corr = (original_corr - synthetic_corr).abs()
-                                        
-                                        # Display correlation matrices side by side
-                                        col1, col2 = st.columns(2)
-                                        
-                                        with col1:
-                                            st.write("Evaluation Data Correlation")
-                                            fig, ax = plt.subplots(figsize=(8, 6))
-                                            sns.heatmap(original_corr, annot=True, cmap='coolwarm', ax=ax, fmt='.2f', linewidths=0.5)
-                                            st.pyplot(fig)
-                                        
-                                        with col2:
-                                            st.write("Synthetic Data Correlation")
-                                            fig, ax = plt.subplots(figsize=(8, 6))
-                                            sns.heatmap(synthetic_corr, annot=True, cmap='coolwarm', ax=ax, fmt='.2f', linewidths=0.5)
-                                            st.pyplot(fig)
-                                        
-                                        # Show correlation difference
-                                        st.write("Correlation Difference (Evaluation - Synthetic)")
-                                        fig, ax = plt.subplots(figsize=(10, 8))
-                                        sns.heatmap(diff_corr, annot=True, cmap='YlOrRd', ax=ax, fmt='.2f', linewidths=0.5)
-                                        st.pyplot(fig)
-                                        
-                                        # Calculate average absolute correlation difference
-                                        avg_diff = diff_corr.abs().mean().mean()
-                                        st.write(f"Average Absolute Correlation Difference: {avg_diff:.4f}")
-                                        
-                                        if avg_diff < 0.1:
-                                            st.success("Excellent correlation preservation (Avg. Diff < 0.1)")
-                                        elif avg_diff < 0.2:
-                                            st.info("Good correlation preservation (Avg. Diff < 0.2)")
+                                        # Skip if no common columns
+                                        if not cols_to_compare:
+                                            st.warning("No common columns found between evaluation and synthetic data for correlation analysis.")
                                         else:
-                                            st.warning("Poor correlation preservation (Avg. Diff >= 0.2)")
+                                            # Evaluation data correlation
+                                            original_corr = eval_data[cols_to_compare].corr()
+                                            
+                                            # Synthetic data correlation
+                                            synthetic_corr = cgan_results[cols_to_compare].corr()
+                                            
+                                            # Absolute difference in correlations
+                                            diff_corr = (original_corr - synthetic_corr).abs()
                                         
-                                        # Save results to session state
-                                        st.session_state.cgan_analysis_results = {
-                                            'synthetic_data': analysis_results,
-                                            'original_corr': original_corr,
-                                            'synthetic_corr': synthetic_corr,
-                                            'correlation_diff': diff_corr,
-                                            'avg_correlation_diff': avg_diff
-                                        }
+                                            # Display correlation matrices side by side
+                                            col1, col2 = st.columns(2)
+                                            
+                                            with col1:
+                                                st.write("Evaluation Data Correlation")
+                                                fig, ax = plt.subplots(figsize=(8, 6))
+                                                sns.heatmap(original_corr, annot=True, cmap='coolwarm', ax=ax, fmt='.2f', linewidths=0.5)
+                                                st.pyplot(fig)
+                                            
+                                            with col2:
+                                                st.write("Synthetic Data Correlation")
+                                                fig, ax = plt.subplots(figsize=(8, 6))
+                                                sns.heatmap(synthetic_corr, annot=True, cmap='coolwarm', ax=ax, fmt='.2f', linewidths=0.5)
+                                                st.pyplot(fig)
+                                            
+                                            # Show correlation difference
+                                            st.write("Correlation Difference (Evaluation - Synthetic)")
+                                            fig, ax = plt.subplots(figsize=(10, 8))
+                                            sns.heatmap(diff_corr, annot=True, cmap='YlOrRd', ax=ax, fmt='.2f', linewidths=0.5)
+                                            st.pyplot(fig)
+                                            
+                                            # Calculate average absolute correlation difference
+                                            avg_diff = diff_corr.abs().mean().mean()
+                                            st.write(f"Average Absolute Correlation Difference: {avg_diff:.4f}")
+                                            
+                                            if avg_diff < 0.1:
+                                                st.success("Excellent correlation preservation (Avg. Diff < 0.1)")
+                                            elif avg_diff < 0.2:
+                                                st.info("Good correlation preservation (Avg. Diff < 0.2)")
+                                            else:
+                                                st.warning("Poor correlation preservation (Avg. Diff >= 0.2)")
+                                        
+                                            # Save results to session state
+                                            st.session_state.cgan_analysis_results = {
+                                                'synthetic_data': cgan_results,
+                                                'original_corr': original_corr,
+                                                'synthetic_corr': synthetic_corr,
+                                                'correlation_diff': diff_corr,
+                                                'avg_correlation_diff': avg_diff,
+                                                'analysis_info': analysis_info
+                                            }
                                         
                                     except Exception as e:
                                         st.error(f"Error in CGAN analysis: {str(e)}")
@@ -3276,14 +3287,20 @@ with main_container:
                                     else:
                                         with st.spinner("Training CGAN model... This may take a few minutes."):
                                             try:
-                                                # Train the CGAN model
+                                                # Train the CGAN model with enhanced stability parameters
                                                 generator, discriminator = advanced_processor.train_cgan(
                                                     data_to_analyze,
                                                     condition_cols=condition_cols,
                                                     target_cols=target_cols,
                                                     epochs=epochs,
                                                     batch_size=batch_size,
-                                                    noise_dim=noise_dim
+                                                    noise_dim=noise_dim,
+                                                    learning_rate=0.0002,
+                                                    beta1=0.5,
+                                                    beta2=0.999,
+                                                    early_stopping_patience=20,
+                                                    dropout_rate=0.3,
+                                                    label_smoothing=0.1
                                                 )
                                                 
                                                 # Store in session state

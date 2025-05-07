@@ -3375,9 +3375,10 @@ with main_container:
                                                     # Check for errors
                                                     if isinstance(parsed_values, dict) and "error" in parsed_values:
                                                         st.error(f"解析错误: {parsed_values['error']}")
+                                                        # Show error code without nested expander to avoid Streamlit error
                                                         if "traceback" in parsed_values:
-                                                            with st.expander("查看详细错误信息", expanded=False):
-                                                                st.code(parsed_values["traceback"])
+                                                            st.write("**详细错误信息:**")
+                                                            st.code(parsed_values["traceback"])
                                                     else:
                                                         # Display the parsed values
                                                         st.success("成功解析自然语言描述！")

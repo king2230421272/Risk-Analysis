@@ -5205,14 +5205,640 @@ with main_container:
                     # 4. DISTRIBUTION TESTING TAB
                     with advanced_options[3]:
                         st.write("### Distribution Testing")
-                        # Placeholder for Distribution Testing
-                        st.info("Distribution Testing functionality to be implemented.")
+                        st.write("""
+                        This module performs statistical tests to compare the distributions of two datasets:
+                        1. Kolmogorov-Smirnov (K-S) test: Checks if two samples come from the same probability distribution
+                        2. Spearman Rank Correlation: Measures the strength and direction of monotonic relationship
+                        3. Permutation Test: Non-parametric test for statistical significance
+                        """)
+                        
+                        # Check if we have both original and interpolated data
+                        if 'original_data' not in st.session_state or st.session_state.original_data is None:
+                            st.error("Original data is not available. Please import data in the Data Import tab.")
+                        elif 'interpolated_data' not in st.session_state or st.session_state.interpolated_data is None:
+                            st.error("Interpolated data is not available. Please run MCMC interpolation first.")
+                        else:
+                            st.success("Both original and interpolated datasets are available for testing.")
+                            
+                            # Create tabs for different tests
+                            test_tabs = st.tabs([
+                                "Kolmogorov-Smirnov Test", 
+                                "Spearman Correlation",
+                                "Permutation Test"
+                            ])
+                            
+                            # Get numeric columns common to both datasets
+                            original_data = st.session_state.original_data
+                            test_data = st.session_state.interpolated_data
+                            
+                            # Get common columns
+                            common_cols = [col for col in test_data.columns if col in original_data.columns]
+                            if not common_cols:
+                                st.error("No common columns found between the test dataset and original data.")
+                            else:
+                                # Define styling function for results
+                                def highlight_significance(val):
+                                    if val == "Similar" or val == "High" or val == "Not Significant":
+                                        return 'background-color: #90EE90'  # light green
+                                    elif val == "Moderate":
+                                        return 'background-color: #E0FFFF'  # light cyan
+                                    elif val == "Low":
+                                        return 'background-color: #FFE4B5'  # light yellow
+                                    else:
+                                        return 'background-color: #FFC0CB'  # light red
+                                
+                                # Initialize AdvancedDataProcessor from modules
+                                from modules.advanced_data_processing import AdvancedDataProcessor
+                                advanced_processor = AdvancedDataProcessor()
+                                
+                                #################################
+                                # 1. K-S TEST TAB
+                                #################################
+                                with test_tabs[0]:
+                                    st.write("### Kolmogorov-Smirnov Tests")
+                                    st.write("K-S tests compare the distribution of two datasets to determine if they come from the same distribution.")
+                                    
+                                    st.write(f"Performing K-S tests on {len(common_cols)} common columns...")
+                                    
+                                    # Run K-S test using the advanced processor
+                                    try:
+                                        results_df = advanced_processor.ks_distribution_test(
+                                            test_data, 
+                                            original_data
+                                        )
+                                        
+                                        # Format results
+                                        display_df = results_df.copy()
+                                        display_df['Distribution'] = display_df['significant'].apply(
+                                            lambda x: "Different" if x else "Similar"
+                                        )
+                                        display_df = display_df.rename(columns={
+                                            'column': 'Feature',
+                                            'statistic': 'Statistic',
+                                            'p_value': 'p-value'
+                                        })
+                                        
+                                        # Apply styling
+                                        styled_df = display_df[['Feature', 'Statistic', 'p-value', 'Distribution']].style.applymap(
+                                            highlight_significance, subset=['Distribution']
+                                        )
+                                        
+                                        st.dataframe(styled_df)
+                                        
+                                        # Calculate summary statistics
+                                        similar_count = (display_df["Distribution"] == "Similar").sum()
+                                        total_count = len(display_df)
+                                        similar_percent = (similar_count / total_count) * 100 if total_count > 0 else 0
+                                        
+                                        st.write(f"**Summary:** {similar_count} out of {total_count} features ({similar_percent:.1f}%) have similar distributions.")
+                                        
+                                        if similar_percent >= 80:
+                                            st.success("The dataset distributions are highly similar to the original data.")
+                                        elif similar_percent >= 50:
+                                            st.info("The dataset distributions are moderately similar to the original data.")
+                                        else:
+                                            st.warning("The dataset distributions show significant differences from the original data.")
+                                        
+                                        # Add visualization
+                                        st.write("#### K-S Test Results Visualization")
+                                        
+                                        fig, ax = plt.subplots(figsize=(10, 6))
+                                        bars = ax.bar(display_df["Feature"], display_df["p-value"])
+                                        
+                                        # Add threshold line
+                                        ax.axhline(y=0.05, color='red', linestyle='--', alpha=0.7)
+                                        ax.text(0, 0.06, 'p=0.05 threshold', color='red')
+                                        
+                                        # Color bars based on significance
+                                        for i, p in enumerate(display_df["p-value"]):
+                                            if p >= 0.05:
+                                                bars[i].set_color('green')
+                                            else:
+                                                bars[i].set_color('red')
+                                        
+                                        ax.set_xlabel('Features')
+                                        ax.set_ylabel('p-value')
+                                        ax.set_title('K-S Test p-values (Higher is Better)')
+                                        ax.set_xticklabels(display_df["Feature"], rotation=45, ha='right')
+                                        
+                                        st.pyplot(fig)
+                                        
+                                    except Exception as e:
+                                        st.error(f"Error performing K-S tests: {str(e)}")
+                                        st.exception(e)
+                                
+                                #################################
+                                # 2. SPEARMAN CORRELATION TAB
+                                #################################
+                                with test_tabs[1]:
+                                    st.write("### Spearman Rank Correlation")
+                                    st.write("Spearman correlation measures the monotonic relationship between two datasets.")
+                                    
+                                    st.write(f"Calculating Spearman correlations for {len(common_cols)} common columns...")
+                                    
+                                    # Run Spearman correlation using the advanced processor
+                                    try:
+                                        results_df = advanced_processor.spearman_correlation(
+                                            test_data, 
+                                            original_data
+                                        )
+                                        
+                                        # Format results
+                                        display_df = results_df.copy()
+                                        
+                                        # Add strength column
+                                        def get_correlation_strength(corr):
+                                            if corr >= 0.8:
+                                                return "High"
+                                            elif corr >= 0.5:
+                                                return "Moderate"
+                                            else:
+                                                return "Low"
+                                        
+                                        display_df['Strength'] = display_df['correlation'].apply(get_correlation_strength)
+                                        display_df['Significance'] = display_df['significant'].apply(
+                                            lambda x: "Significant" if x else "Not Significant"
+                                        )
+                                        
+                                        display_df = display_df.rename(columns={
+                                            'column': 'Feature',
+                                            'correlation': 'Correlation',
+                                            'p_value': 'p-value'
+                                        })
+                                        
+                                        # Apply styling
+                                        styled_df = display_df[['Feature', 'Correlation', 'Strength', 'p-value', 'Significance']].style.applymap(
+                                            highlight_significance, subset=['Strength', 'Significance']
+                                        )
+                                        
+                                        st.dataframe(styled_df)
+                                        
+                                        # Calculate summary statistics
+                                        high_count = (display_df["Strength"] == "High").sum()
+                                        moderate_count = (display_df["Strength"] == "Moderate").sum()
+                                        total_count = len(display_df)
+                                        good_percent = ((high_count + moderate_count) / total_count) * 100 if total_count > 0 else 0
+                                        
+                                        st.write(f"**Summary:** {high_count} high and {moderate_count} moderate correlations out of {total_count} features ({good_percent:.1f}% with meaningful correlation).")
+                                        
+                                        if good_percent >= 80:
+                                            st.success("Features in the interpolated dataset have strong correlations with the original data.")
+                                        elif good_percent >= 50:
+                                            st.info("Features in the interpolated dataset have moderate correlations with the original data.")
+                                        else:
+                                            st.warning("Features in the interpolated dataset have weak correlations with the original data.")
+                                        
+                                        # Visualization
+                                        st.write("#### Feature Correlation Visualization")
+                                        
+                                        # Choose a feature to plot
+                                        selected_features = st.multiselect(
+                                            "Select features to visualize:",
+                                            options=display_df["Feature"].tolist(),
+                                            default=display_df["Feature"].tolist()[:min(3, len(display_df))]
+                                        )
+                                        
+                                        if selected_features:
+                                            # Create correlation scatter plots
+                                            fig, axes = plt.subplots(1, len(selected_features), figsize=(5*len(selected_features), 5))
+                                            
+                                            # Ensure axes is a list even for a single plot
+                                            if len(selected_features) == 1:
+                                                axes = [axes]
+                                            
+                                            for i, feature in enumerate(selected_features):
+                                                feature_df = display_df[display_df['Feature'] == feature].iloc[0]
+                                                corr = feature_df['Correlation']
+                                                pval = feature_df['p-value']
+                                                strength = feature_df['Strength']
+                                                
+                                                # Get the data
+                                                test_values = test_data[feature].dropna()
+                                                original_values = original_data[feature].dropna()
+                                                
+                                                # Get common indices
+                                                common_indices = test_values.index.intersection(original_values.index)
+                                                
+                                                # Create scatter plot
+                                                ax = axes[i]
+                                                ax.scatter(test_values.loc[common_indices], original_values.loc[common_indices], alpha=0.7)
+                                                
+                                                # Add perfect correlation line
+                                                min_val = min(test_values.min(), original_values.min())
+                                                max_val = max(test_values.max(), original_values.max())
+                                                ax.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.5)
+                                                
+                                                ax.set_title(f'{feature}\nCorrelation: {corr:.4f} ({strength}, p={pval:.4f})')
+                                                ax.set_xlabel('Test Data')
+                                                ax.set_ylabel('Original Data')
+                                            
+                                            plt.tight_layout()
+                                            st.pyplot(fig)
+                                            
+                                    except Exception as e:
+                                        st.error(f"Error calculating Spearman correlations: {str(e)}")
+                                        st.exception(e)
+                                
+                                #################################
+                                # 3. PERMUTATION TEST TAB
+                                #################################
+                                with test_tabs[2]:
+                                    st.write("### Permutation Test")
+                                    st.write("Permutation tests provide a rigorous way to assess differences between datasets by randomly shuffling data.")
+                                    
+                                    # Set permutation parameters
+                                    num_permutations = st.slider(
+                                        "Number of permutations:", 
+                                        min_value=100, 
+                                        max_value=2000, 
+                                        value=1000, 
+                                        step=100
+                                    )
+                                    
+                                    st.write(f"Running permutation tests with {num_permutations} permutations...")
+                                    
+                                    run_permutation_test = st.button("Run Permutation Test")
+                                    
+                                    if run_permutation_test:
+                                        # Run permutation test using the advanced processor
+                                        try:
+                                            results_df = advanced_processor.permutation_test(
+                                                test_data, 
+                                                original_data,
+                                                num_permutations=num_permutations
+                                            )
+                                            
+                                            # Format results
+                                            display_df = results_df.copy()
+                                            display_df['Significance'] = display_df['significant'].apply(
+                                                lambda x: "Significant" if x else "Not Significant"
+                                            )
+                                            
+                                            display_df = display_df.rename(columns={
+                                                'column': 'Feature',
+                                                'observed_diff': 'Observed Difference',
+                                                'p_value': 'p-value'
+                                            })
+                                            
+                                            # Apply styling
+                                            styled_df = display_df[['Feature', 'Observed Difference', 'p-value', 'Significance']].style.applymap(
+                                                highlight_significance, subset=['Significance']
+                                            )
+                                            
+                                            st.dataframe(styled_df)
+                                            
+                                            # Calculate summary statistics
+                                            not_sig_count = (display_df["Significance"] == "Not Significant").sum()
+                                            total_count = len(display_df)
+                                            not_sig_percent = (not_sig_count / total_count) * 100 if total_count > 0 else 0
+                                            
+                                            st.write(f"**Summary:** {not_sig_count} out of {total_count} features ({not_sig_percent:.1f}%) show no significant differences.")
+                                            
+                                            if not_sig_percent >= 80:
+                                                st.success("Permutation tests indicate the datasets are statistically similar.")
+                                            elif not_sig_percent >= 50:
+                                                st.info("Permutation tests indicate moderate similarity between datasets.")
+                                            else:
+                                                st.warning("Permutation tests indicate significant differences between datasets.")
+                                            
+                                            # Visualization
+                                            st.write("#### Select Feature to Visualize Permutation Distribution")
+                                            
+                                            selected_feature = st.selectbox(
+                                                "Choose feature:",
+                                                options=display_df["Feature"].tolist()
+                                            )
+                                            
+                                            if selected_feature:
+                                                st.write(f"Visualizing permutation test for {selected_feature}")
+                                                
+                                                # Extract feature data
+                                                test_values = test_data[selected_feature].dropna().values
+                                                original_values = original_data[selected_feature].dropna().values
+                                                
+                                                # Calculate observed difference in means
+                                                obs_diff = np.abs(np.mean(test_values) - np.mean(original_values))
+                                                
+                                                # Perform permutation test
+                                                combined = np.concatenate([test_values, original_values])
+                                                perm_diffs = []
+                                                
+                                                for _ in range(min(100, num_permutations)):  # Use subset for visualization
+                                                    np.random.shuffle(combined)
+                                                    perm_test = combined[:len(test_values)]
+                                                    perm_orig = combined[len(test_values):]
+                                                    perm_diff = np.abs(np.mean(perm_test) - np.mean(perm_orig))
+                                                    perm_diffs.append(perm_diff)
+                                                
+                                                # Calculate p-value from display_df
+                                                p_value = float(display_df[display_df['Feature'] == selected_feature]['p-value'].values[0])
+                                                significance = "Not Significant" if p_value >= 0.05 else "Significant"
+                                                
+                                                # Create visualization
+                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                
+                                                # Plot histogram of permutation statistics
+                                                ax.hist(perm_diffs, bins=30, alpha=0.7, color='blue')
+                                                
+                                                # Add vertical line for observed statistic
+                                                ax.axvline(x=obs_diff, color='red', linestyle='--', linewidth=2)
+                                                
+                                                # Add text annotation
+                                                ax.text(
+                                                    0.98, 0.95, 
+                                                    f"Observed: {obs_diff:.4f}\np-value: {p_value:.4f}\n{significance}", 
+                                                    transform=ax.transAxes, 
+                                                    horizontalalignment='right',
+                                                    verticalalignment='top',
+                                                    bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8)
+                                                )
+                                                
+                                                ax.set_title(f'Permutation Test for {selected_feature}')
+                                                ax.set_xlabel('Absolute Difference in Means')
+                                                ax.set_ylabel('Frequency')
+                                                
+                                                st.pyplot(fig)
+                                            
+                                        except Exception as e:
+                                            st.error(f"Error running permutation tests: {str(e)}")
+                                            st.exception(e)
                     
                     # 5. OUTLIER DETECTION TAB
                     with advanced_options[4]:
                         st.write("### Outlier Detection")
-                        # Placeholder for Outlier Detection
-                        st.info("Outlier Detection functionality to be implemented.")
+                        st.write("""
+                        This module identifies outliers in the datasets using Isolation Forest algorithm.
+                        Outliers may indicate data quality issues or interesting special cases that deserve further investigation.
+                        """)
+                        
+                        # Check if we have both original and interpolated data
+                        if 'original_data' not in st.session_state or st.session_state.original_data is None:
+                            st.error("Original data is not available. Please import data in the Data Import tab.")
+                        elif 'interpolated_data' not in st.session_state or st.session_state.interpolated_data is None:
+                            st.error("Interpolated data is not available. Please run MCMC interpolation first.")
+                        else:
+                            st.success("Both original and interpolated datasets are available for outlier detection.")
+                            
+                            # Data selection
+                            analysis_tabs = st.tabs(["Original Data Analysis", "Interpolated Data Analysis"])
+                            
+                            # Initialize AdvancedDataProcessor
+                            from modules.advanced_data_processing import AdvancedDataProcessor
+                            advanced_processor = AdvancedDataProcessor()
+                            
+                            # Parameters
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                contamination = st.slider(
+                                    "Expected proportion of outliers:", 
+                                    min_value=0.01, 
+                                    max_value=0.2, 
+                                    value=0.05, 
+                                    step=0.01,
+                                    help="Higher values will detect more points as outliers"
+                                )
+                            
+                            with col2:
+                                n_estimators = st.slider(
+                                    "Number of estimators:", 
+                                    min_value=50, 
+                                    max_value=500, 
+                                    value=100, 
+                                    step=50,
+                                    help="More estimators typically give better results but are slower"
+                                )
+                            
+                            run_outlier_detection = st.button("Run Outlier Detection")
+                            
+                            if run_outlier_detection:
+                                #################################
+                                # 1. ORIGINAL DATA ANALYSIS
+                                #################################
+                                with analysis_tabs[0]:
+                                    st.write("### Original Data Outlier Analysis")
+                                    
+                                    try:
+                                        # Run outlier detection on original data
+                                        original_data = st.session_state.original_data
+                                        
+                                        # Use only numeric columns
+                                        numeric_cols = original_data.select_dtypes(include=np.number).columns.tolist()
+                                        if not numeric_cols:
+                                            st.error("No numeric columns found in the original data.")
+                                        else:
+                                            outlier_df = advanced_processor.isolated_forest_detection(
+                                                original_data[numeric_cols], 
+                                                contamination=contamination
+                                            )
+                                            
+                                            # Add outlier column to original data
+                                            analysis_df = original_data.copy()
+                                            analysis_df['is_outlier'] = outlier_df['is_outlier']
+                                            analysis_df['outlier_score'] = outlier_df['outlier_score']
+                                            
+                                            # Display summary
+                                            outlier_count = analysis_df['is_outlier'].sum()
+                                            total_count = len(analysis_df)
+                                            outlier_percent = (outlier_count / total_count) * 100
+                                            
+                                            st.write(f"**Summary:** Detected {outlier_count} outliers out of {total_count} points ({outlier_percent:.1f}%).")
+                                            
+                                            # Display data with outliers highlighted
+                                            st.write("#### Data with Outliers Highlighted")
+                                            
+                                            # Format the dataframe for display
+                                            def highlight_outliers(s):
+                                                if s.name != 'is_outlier' and s.name != 'outlier_score':
+                                                    return ['background-color: #FFC0CB' if analysis_df.loc[i, 'is_outlier'] else '' for i in s.index]
+                                                return ['' for _ in s.index]
+                                            
+                                            styled_df = analysis_df.style.apply(highlight_outliers)
+                                            st.dataframe(styled_df, height=400)
+                                            
+                                            # Visualization
+                                            st.write("#### Outlier Visualization")
+                                            
+                                            # Select columns for visualization
+                                            if len(numeric_cols) > 1:
+                                                col_x = st.selectbox("X-axis column:", numeric_cols, key="orig_x_col")
+                                                col_y = st.selectbox("Y-axis column:", [c for c in numeric_cols if c != col_x], key="orig_y_col")
+                                                
+                                                # Create scatter plot
+                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                
+                                                # Plot normal points
+                                                normal_df = analysis_df[~analysis_df['is_outlier']]
+                                                outlier_df = analysis_df[analysis_df['is_outlier']]
+                                                
+                                                ax.scatter(normal_df[col_x], normal_df[col_y], alpha=0.5, label='Normal')
+                                                ax.scatter(outlier_df[col_x], outlier_df[col_y], color='red', marker='x', alpha=0.7, label='Outlier')
+                                                
+                                                ax.set_xlabel(col_x)
+                                                ax.set_ylabel(col_y)
+                                                ax.set_title(f'Outlier Detection - {col_x} vs {col_y}')
+                                                ax.legend()
+                                                
+                                                st.pyplot(fig)
+                                            else:
+                                                st.info("At least two numeric columns are needed for visualization.")
+                                            
+                                            # Distribution of outlier scores
+                                            st.write("#### Outlier Score Distribution")
+                                            
+                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                            
+                                            scores = analysis_df['outlier_score']
+                                            ax.hist(scores, bins=30, alpha=0.7)
+                                            
+                                            # Add vertical line for threshold
+                                            threshold = outlier_df['threshold'].iloc[0] if 'threshold' in outlier_df.columns else None
+                                            if threshold is not None:
+                                                ax.axvline(x=threshold, color='red', linestyle='--')
+                                                ax.text(threshold + 0.01, ax.get_ylim()[1] * 0.9, 'Threshold', color='red')
+                                            
+                                            ax.set_xlabel('Outlier Score')
+                                            ax.set_ylabel('Frequency')
+                                            ax.set_title('Distribution of Outlier Scores')
+                                            
+                                            st.pyplot(fig)
+                                    
+                                    except Exception as e:
+                                        st.error(f"Error in original data outlier detection: {str(e)}")
+                                        st.exception(e)
+                                
+                                #################################
+                                # 2. INTERPOLATED DATA ANALYSIS
+                                #################################
+                                with analysis_tabs[1]:
+                                    st.write("### Interpolated Data Outlier Analysis")
+                                    
+                                    try:
+                                        # Run outlier detection on interpolated data
+                                        interpolated_data = st.session_state.interpolated_data
+                                        
+                                        # Use only numeric columns
+                                        numeric_cols = interpolated_data.select_dtypes(include=np.number).columns.tolist()
+                                        if not numeric_cols:
+                                            st.error("No numeric columns found in the interpolated data.")
+                                        else:
+                                            outlier_df = advanced_processor.isolated_forest_detection(
+                                                interpolated_data[numeric_cols], 
+                                                contamination=contamination
+                                            )
+                                            
+                                            # Add outlier column to interpolated data
+                                            analysis_df = interpolated_data.copy()
+                                            analysis_df['is_outlier'] = outlier_df['is_outlier']
+                                            analysis_df['outlier_score'] = outlier_df['outlier_score']
+                                            
+                                            # Identify which of the outliers are from interpolated values
+                                            if 'interpolated' in analysis_df.columns:
+                                                interpolated_outliers = analysis_df[(analysis_df['is_outlier']) & (analysis_df['interpolated'])]
+                                                interp_outlier_count = len(interpolated_outliers)
+                                                interp_count = analysis_df['interpolated'].sum()
+                                                
+                                                if interp_count > 0:
+                                                    interp_outlier_percent = (interp_outlier_count / interp_count) * 100
+                                                    st.write(f"**Interpolated Values:** {interp_outlier_count} outliers out of {interp_count} interpolated points ({interp_outlier_percent:.1f}%).")
+                                            
+                                            # Display summary
+                                            outlier_count = analysis_df['is_outlier'].sum()
+                                            total_count = len(analysis_df)
+                                            outlier_percent = (outlier_count / total_count) * 100
+                                            
+                                            st.write(f"**Summary:** Detected {outlier_count} outliers out of {total_count} points ({outlier_percent:.1f}%).")
+                                            
+                                            # Display data with outliers highlighted
+                                            st.write("#### Data with Outliers Highlighted")
+                                            
+                                            # Format the dataframe for display
+                                            def highlight_outliers_and_interpolated(s):
+                                                if s.name != 'is_outlier' and s.name != 'outlier_score' and s.name != 'interpolated':
+                                                    colors = []
+                                                    for i in s.index:
+                                                        if analysis_df.loc[i, 'is_outlier'] and 'interpolated' in analysis_df.columns and analysis_df.loc[i, 'interpolated']:
+                                                            colors.append('background-color: #FF6347')  # Tomato for interpolated outliers
+                                                        elif analysis_df.loc[i, 'is_outlier']:
+                                                            colors.append('background-color: #FFC0CB')  # Light pink for regular outliers
+                                                        elif 'interpolated' in analysis_df.columns and analysis_df.loc[i, 'interpolated']:
+                                                            colors.append('background-color: #E0FFFF')  # Light cyan for interpolated values
+                                                        else:
+                                                            colors.append('')
+                                                    return colors
+                                                return ['' for _ in s.index]
+                                            
+                                            styled_df = analysis_df.style.apply(highlight_outliers_and_interpolated)
+                                            st.dataframe(styled_df, height=400)
+                                            
+                                            # Visualization
+                                            st.write("#### Outlier Visualization")
+                                            
+                                            # Select columns for visualization
+                                            if len(numeric_cols) > 1:
+                                                col_x = st.selectbox("X-axis column:", numeric_cols, key="interp_x_col")
+                                                col_y = st.selectbox("Y-axis column:", [c for c in numeric_cols if c != col_x], key="interp_y_col")
+                                                
+                                                # Create scatter plot
+                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                
+                                                # Plot different categories
+                                                normal_df = analysis_df[~analysis_df['is_outlier']]
+                                                outlier_df = analysis_df[analysis_df['is_outlier']]
+                                                
+                                                # If we have interpolated column information
+                                                if 'interpolated' in analysis_df.columns:
+                                                    # Normal, non-interpolated
+                                                    non_interp_normal = normal_df[~normal_df['interpolated']]
+                                                    ax.scatter(non_interp_normal[col_x], non_interp_normal[col_y], alpha=0.5, color='blue', label='Normal')
+                                                    
+                                                    # Normal, interpolated
+                                                    interp_normal = normal_df[normal_df['interpolated']]
+                                                    ax.scatter(interp_normal[col_x], interp_normal[col_y], alpha=0.6, color='cyan', marker='o', label='Interpolated')
+                                                    
+                                                    # Outlier, non-interpolated
+                                                    non_interp_outlier = outlier_df[~outlier_df['interpolated']]
+                                                    ax.scatter(non_interp_outlier[col_x], non_interp_outlier[col_y], alpha=0.7, color='red', marker='x', label='Outlier')
+                                                    
+                                                    # Outlier, interpolated
+                                                    interp_outlier = outlier_df[outlier_df['interpolated']]
+                                                    ax.scatter(interp_outlier[col_x], interp_outlier[col_y], alpha=0.8, color='magenta', marker='x', label='Interpolated Outlier')
+                                                else:
+                                                    # Just normal and outlier
+                                                    ax.scatter(normal_df[col_x], normal_df[col_y], alpha=0.5, label='Normal')
+                                                    ax.scatter(outlier_df[col_x], outlier_df[col_y], color='red', marker='x', alpha=0.7, label='Outlier')
+                                                
+                                                ax.set_xlabel(col_x)
+                                                ax.set_ylabel(col_y)
+                                                ax.set_title(f'Outlier Detection - {col_x} vs {col_y}')
+                                                ax.legend()
+                                                
+                                                st.pyplot(fig)
+                                            else:
+                                                st.info("At least two numeric columns are needed for visualization.")
+                                            
+                                            # Distribution of outlier scores
+                                            st.write("#### Outlier Score Distribution")
+                                            
+                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                            
+                                            scores = analysis_df['outlier_score']
+                                            ax.hist(scores, bins=30, alpha=0.7)
+                                            
+                                            # Add vertical line for threshold
+                                            threshold = outlier_df['threshold'].iloc[0] if 'threshold' in outlier_df.columns else None
+                                            if threshold is not None:
+                                                ax.axvline(x=threshold, color='red', linestyle='--')
+                                                ax.text(threshold + 0.01, ax.get_ylim()[1] * 0.9, 'Threshold', color='red')
+                                            
+                                            ax.set_xlabel('Outlier Score')
+                                            ax.set_ylabel('Frequency')
+                                            ax.set_title('Distribution of Outlier Scores')
+                                            
+                                            st.pyplot(fig)
+                                    
+                                    except Exception as e:
+                                        st.error(f"Error in interpolated data outlier detection: {str(e)}")
+                                        st.exception(e)
                     
                     # End of the Modules Analysis module
 

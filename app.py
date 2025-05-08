@@ -5258,74 +5258,78 @@ with main_container:
                                     st.write("### Kolmogorov-Smirnov Tests")
                                     st.write("K-S tests compare the distribution of two datasets to determine if they come from the same distribution.")
                                     
-                                    st.write(f"Performing K-S tests on {len(common_cols)} common columns...")
+                                    st.write(f"Ready to perform K-S tests on {len(common_cols)} common columns.")
+                                    
+                                    # Add button to run the tests
+                                    run_ks_test = st.button("Run K-S Test", key="run_ks_test_button")
                                     
                                     # Run K-S test using the advanced processor
-                                    try:
-                                        results_df = advanced_processor.ks_distribution_test(
-                                            test_data, 
-                                            original_data
-                                        )
+                                    if run_ks_test:
+                                        try:
+                                            results_df = advanced_processor.ks_distribution_test(
+                                                test_data, 
+                                                original_data
+                                            )
+                                            
+                                            # Format results
+                                            display_df = results_df.copy()
+                                            display_df['Distribution'] = display_df['significant'].apply(
+                                                lambda x: "Different" if x else "Similar"
+                                            )
+                                            
+                                            display_df = display_df.rename(columns={
+                                                'column': 'Feature',
+                                                'statistic': 'Statistic',
+                                                'p_value': 'p-value'
+                                            })
                                         
-                                        # Format results
-                                        display_df = results_df.copy()
-                                        display_df['Distribution'] = display_df['significant'].apply(
-                                            lambda x: "Different" if x else "Similar"
-                                        )
-                                        display_df = display_df.rename(columns={
-                                            'column': 'Feature',
-                                            'statistic': 'Statistic',
-                                            'p_value': 'p-value'
-                                        })
-                                        
-                                        # Apply styling
-                                        styled_df = display_df[['Feature', 'Statistic', 'p-value', 'Distribution']].style.applymap(
-                                            highlight_significance, subset=['Distribution']
-                                        )
-                                        
-                                        st.dataframe(styled_df)
-                                        
-                                        # Calculate summary statistics
-                                        similar_count = (display_df["Distribution"] == "Similar").sum()
-                                        total_count = len(display_df)
-                                        similar_percent = (similar_count / total_count) * 100 if total_count > 0 else 0
-                                        
-                                        st.write(f"**Summary:** {similar_count} out of {total_count} features ({similar_percent:.1f}%) have similar distributions.")
-                                        
-                                        if similar_percent >= 80:
-                                            st.success("The dataset distributions are highly similar to the original data.")
-                                        elif similar_percent >= 50:
-                                            st.info("The dataset distributions are moderately similar to the original data.")
-                                        else:
-                                            st.warning("The dataset distributions show significant differences from the original data.")
-                                        
-                                        # Add visualization
-                                        st.write("#### K-S Test Results Visualization")
-                                        
-                                        fig, ax = plt.subplots(figsize=(10, 6))
-                                        bars = ax.bar(display_df["Feature"], display_df["p-value"])
-                                        
-                                        # Add threshold line
-                                        ax.axhline(y=0.05, color='red', linestyle='--', alpha=0.7)
-                                        ax.text(0, 0.06, 'p=0.05 threshold', color='red')
-                                        
-                                        # Color bars based on significance
-                                        for i, p in enumerate(display_df["p-value"]):
-                                            if p >= 0.05:
-                                                bars[i].set_color('green')
+                                            # Apply styling
+                                            styled_df = display_df[['Feature', 'Statistic', 'p-value', 'Distribution']].style.applymap(
+                                                highlight_significance, subset=['Distribution']
+                                            )
+                                            
+                                            st.dataframe(styled_df)
+                                            
+                                            # Calculate summary statistics
+                                            similar_count = (display_df["Distribution"] == "Similar").sum()
+                                            total_count = len(display_df)
+                                            similar_percent = (similar_count / total_count) * 100 if total_count > 0 else 0
+                                            
+                                            st.write(f"**Summary:** {similar_count} out of {total_count} features ({similar_percent:.1f}%) have similar distributions.")
+                                            
+                                            if similar_percent >= 80:
+                                                st.success("The dataset distributions are highly similar to the original data.")
+                                            elif similar_percent >= 50:
+                                                st.info("The dataset distributions are moderately similar to the original data.")
                                             else:
-                                                bars[i].set_color('red')
-                                        
-                                        ax.set_xlabel('Features')
-                                        ax.set_ylabel('p-value')
-                                        ax.set_title('K-S Test p-values (Higher is Better)')
-                                        ax.set_xticklabels(display_df["Feature"], rotation=45, ha='right')
-                                        
-                                        st.pyplot(fig)
-                                        
-                                    except Exception as e:
-                                        st.error(f"Error performing K-S tests: {str(e)}")
-                                        st.exception(e)
+                                                st.warning("The dataset distributions show significant differences from the original data.")
+                                            
+                                            # Add visualization
+                                            st.write("#### K-S Test Results Visualization")
+                                            
+                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                            bars = ax.bar(display_df["Feature"], display_df["p-value"])
+                                            
+                                            # Add threshold line
+                                            ax.axhline(y=0.05, color='red', linestyle='--', alpha=0.7)
+                                            ax.text(0, 0.06, 'p=0.05 threshold', color='red')
+                                            
+                                            # Color bars based on significance
+                                            for i, p in enumerate(display_df["p-value"]):
+                                                if p >= 0.05:
+                                                    bars[i].set_color('green')
+                                                else:
+                                                    bars[i].set_color('red')
+                                            
+                                            ax.set_xlabel('Features')
+                                            ax.set_ylabel('p-value')
+                                            ax.set_title('K-S Test p-values (Higher is Better)')
+                                            ax.set_xticklabels(display_df["Feature"], rotation=45, ha='right')
+                                            
+                                            st.pyplot(fig)
+                                        except Exception as e:
+                                            st.error(f"Error performing K-S tests: {str(e)}")
+                                            st.exception(e)
                                 
                                 #################################
                                 # 2. SPEARMAN CORRELATION TAB
@@ -5334,110 +5338,113 @@ with main_container:
                                     st.write("### Spearman Rank Correlation")
                                     st.write("Spearman correlation measures the monotonic relationship between two datasets.")
                                     
-                                    st.write(f"Calculating Spearman correlations for {len(common_cols)} common columns...")
+                                    st.write(f"Ready to calculate Spearman correlations for {len(common_cols)} common columns.")
+                                    
+                                    # Add button to run the correlations
+                                    run_spearman = st.button("Run Spearman Correlation", key="run_spearman_button")
                                     
                                     # Run Spearman correlation using the advanced processor
-                                    try:
-                                        results_df = advanced_processor.spearman_correlation(
-                                            test_data, 
-                                            original_data
-                                        )
+                                    if run_spearman:
+                                        try:
+                                            results_df = advanced_processor.spearman_correlation(
+                                                test_data, 
+                                                original_data
+                                            )
+                                            
+                                            # Format results
+                                            display_df = results_df.copy()
                                         
-                                        # Format results
-                                        display_df = results_df.copy()
+                                            # Add strength column
+                                            def get_correlation_strength(corr):
+                                                if corr >= 0.8:
+                                                    return "High"
+                                                elif corr >= 0.5:
+                                                    return "Moderate"
+                                                else:
+                                                    return "Low"
+                                            
+                                            display_df['Strength'] = display_df['correlation'].apply(get_correlation_strength)
+                                            display_df['Significance'] = display_df['significant'].apply(
+                                                lambda x: "Significant" if x else "Not Significant"
+                                            )
+                                            
+                                            display_df = display_df.rename(columns={
+                                                'column': 'Feature',
+                                                'correlation': 'Correlation',
+                                                'p_value': 'p-value'
+                                            })
                                         
-                                        # Add strength column
-                                        def get_correlation_strength(corr):
-                                            if corr >= 0.8:
-                                                return "High"
-                                            elif corr >= 0.5:
-                                                return "Moderate"
+                                            # Apply styling
+                                            styled_df = display_df[['Feature', 'Correlation', 'Strength', 'p-value', 'Significance']].style.applymap(
+                                                highlight_significance, subset=['Strength', 'Significance']
+                                            )
+                                            
+                                            st.dataframe(styled_df)
+                                            
+                                            # Calculate summary statistics
+                                            high_count = (display_df["Strength"] == "High").sum()
+                                            moderate_count = (display_df["Strength"] == "Moderate").sum()
+                                            total_count = len(display_df)
+                                            good_percent = ((high_count + moderate_count) / total_count) * 100 if total_count > 0 else 0
+                                            
+                                            st.write(f"**Summary:** {high_count} high and {moderate_count} moderate correlations out of {total_count} features ({good_percent:.1f}% with meaningful correlation).")
+                                            
+                                            if good_percent >= 80:
+                                                st.success("Features in the interpolated dataset have strong correlations with the original data.")
+                                            elif good_percent >= 50:
+                                                st.info("Features in the interpolated dataset have moderate correlations with the original data.")
                                             else:
-                                                return "Low"
-                                        
-                                        display_df['Strength'] = display_df['correlation'].apply(get_correlation_strength)
-                                        display_df['Significance'] = display_df['significant'].apply(
-                                            lambda x: "Significant" if x else "Not Significant"
-                                        )
-                                        
-                                        display_df = display_df.rename(columns={
-                                            'column': 'Feature',
-                                            'correlation': 'Correlation',
-                                            'p_value': 'p-value'
-                                        })
-                                        
-                                        # Apply styling
-                                        styled_df = display_df[['Feature', 'Correlation', 'Strength', 'p-value', 'Significance']].style.applymap(
-                                            highlight_significance, subset=['Strength', 'Significance']
-                                        )
-                                        
-                                        st.dataframe(styled_df)
-                                        
-                                        # Calculate summary statistics
-                                        high_count = (display_df["Strength"] == "High").sum()
-                                        moderate_count = (display_df["Strength"] == "Moderate").sum()
-                                        total_count = len(display_df)
-                                        good_percent = ((high_count + moderate_count) / total_count) * 100 if total_count > 0 else 0
-                                        
-                                        st.write(f"**Summary:** {high_count} high and {moderate_count} moderate correlations out of {total_count} features ({good_percent:.1f}% with meaningful correlation).")
-                                        
-                                        if good_percent >= 80:
-                                            st.success("Features in the interpolated dataset have strong correlations with the original data.")
-                                        elif good_percent >= 50:
-                                            st.info("Features in the interpolated dataset have moderate correlations with the original data.")
-                                        else:
-                                            st.warning("Features in the interpolated dataset have weak correlations with the original data.")
-                                        
-                                        # Visualization
-                                        st.write("#### Feature Correlation Visualization")
-                                        
-                                        # Choose a feature to plot
-                                        selected_features = st.multiselect(
-                                            "Select features to visualize:",
-                                            options=display_df["Feature"].tolist(),
-                                            default=display_df["Feature"].tolist()[:min(3, len(display_df))]
-                                        )
-                                        
-                                        if selected_features:
-                                            # Create correlation scatter plots
-                                            fig, axes = plt.subplots(1, len(selected_features), figsize=(5*len(selected_features), 5))
+                                                st.warning("Features in the interpolated dataset have weak correlations with the original data.")
                                             
-                                            # Ensure axes is a list even for a single plot
-                                            if len(selected_features) == 1:
-                                                axes = [axes]
+                                            # Visualization
+                                            st.write("#### Feature Correlation Visualization")
                                             
-                                            for i, feature in enumerate(selected_features):
-                                                feature_df = display_df[display_df['Feature'] == feature].iloc[0]
-                                                corr = feature_df['Correlation']
-                                                pval = feature_df['p-value']
-                                                strength = feature_df['Strength']
-                                                
-                                                # Get the data
-                                                test_values = test_data[feature].dropna()
-                                                original_values = original_data[feature].dropna()
-                                                
-                                                # Get common indices
-                                                common_indices = test_values.index.intersection(original_values.index)
-                                                
-                                                # Create scatter plot
-                                                ax = axes[i]
-                                                ax.scatter(test_values.loc[common_indices], original_values.loc[common_indices], alpha=0.7)
-                                                
-                                                # Add perfect correlation line
-                                                min_val = min(test_values.min(), original_values.min())
-                                                max_val = max(test_values.max(), original_values.max())
-                                                ax.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.5)
-                                                
-                                                ax.set_title(f'{feature}\nCorrelation: {corr:.4f} ({strength}, p={pval:.4f})')
-                                                ax.set_xlabel('Test Data')
-                                                ax.set_ylabel('Original Data')
+                                            # Choose a feature to plot
+                                            selected_features = st.multiselect(
+                                                "Select features to visualize:",
+                                                options=display_df["Feature"].tolist(),
+                                                default=display_df["Feature"].tolist()[:min(3, len(display_df))]
+                                            )
                                             
-                                            plt.tight_layout()
-                                            st.pyplot(fig)
-                                            
-                                    except Exception as e:
-                                        st.error(f"Error calculating Spearman correlations: {str(e)}")
-                                        st.exception(e)
+                                            if selected_features:
+                                                # Create correlation scatter plots
+                                                fig, axes = plt.subplots(1, len(selected_features), figsize=(5*len(selected_features), 5))
+                                                
+                                                # Ensure axes is a list even for a single plot
+                                                if len(selected_features) == 1:
+                                                    axes = [axes]
+                                                
+                                                for i, feature in enumerate(selected_features):
+                                                    feature_df = display_df[display_df['Feature'] == feature].iloc[0]
+                                                    corr = feature_df['Correlation']
+                                                    pval = feature_df['p-value']
+                                                    strength = feature_df['Strength']
+                                                    
+                                                    # Get the data
+                                                    test_values = test_data[feature].dropna()
+                                                    original_values = original_data[feature].dropna()
+                                                    
+                                                    # Get common indices
+                                                    common_indices = test_values.index.intersection(original_values.index)
+                                                    
+                                                    # Create scatter plot
+                                                    ax = axes[i]
+                                                    ax.scatter(test_values.loc[common_indices], original_values.loc[common_indices], alpha=0.7)
+                                                    
+                                                    # Add perfect correlation line
+                                                    min_val = min(test_values.min(), original_values.min())
+                                                    max_val = max(test_values.max(), original_values.max())
+                                                    ax.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.5)
+                                                    
+                                                    ax.set_title(f'{feature}\nCorrelation: {corr:.4f} ({strength}, p={pval:.4f})')
+                                                    ax.set_xlabel('Test Data')
+                                                    ax.set_ylabel('Original Data')
+                                                
+                                                plt.tight_layout()
+                                                st.pyplot(fig)
+                                        except Exception as e:
+                                            st.error(f"Error calculating Spearman correlations: {str(e)}")
+                                            st.exception(e)
                                 
                                 #################################
                                 # 3. PERMUTATION TEST TAB
@@ -5455,9 +5462,9 @@ with main_container:
                                         step=100
                                     )
                                     
-                                    st.write(f"Running permutation tests with {num_permutations} permutations...")
+                                    st.write(f"Ready to run permutation tests with {num_permutations} permutations.")
                                     
-                                    run_permutation_test = st.button("Run Permutation Test")
+                                    run_permutation_test = st.button("Run Permutation Test", key="run_permutation_test_button")
                                     
                                     if run_permutation_test:
                                         # Run permutation test using the advanced processor

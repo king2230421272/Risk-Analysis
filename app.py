@@ -5641,6 +5641,46 @@ with main_container:
                                         except Exception as e:
                                             st.error(f"Error running permutation tests: {str(e)}")
                                             st.exception(e)
+                                
+                                # Add button to forward data to prediction module
+                                if st.session_state.run_ks_test and st.session_state.run_spearman and st.session_state.run_permutation:
+                                    st.markdown("---")
+                                    st.subheader("Forward Data to Prediction Module")
+                                    
+                                    # Check the test results to determine if data is suitable for prediction
+                                    # For simplicity, we'll use a threshold of 50% similar for all tests
+                                    ks_good = similar_percent >= 50 if 'similar_percent' in locals() else False
+                                    spearman_good = good_percent >= 50 if 'good_percent' in locals() else False 
+                                    perm_good = not_sig_percent >= 50 if 'not_sig_percent' in locals() else False
+                                    
+                                    all_tests_good = ks_good and spearman_good and perm_good
+                                    
+                                    if all_tests_good:
+                                        st.success("All distribution tests show good results. Data can be forwarded to the Prediction module.")
+                                    else:
+                                        st.warning("Some distribution tests show poor results. Consider improving data quality before prediction.")
+                                    
+                                    # Add forward button with conditional color
+                                    forward_col1, forward_col2 = st.columns([3, 1])
+                                    with forward_col1:
+                                        st.write("Click the button to forward the current test dataset to the Prediction module.")
+                                    
+                                    with forward_col2:
+                                        forward_to_prediction = st.button("Forward to Prediction")
+                                    
+                                    if forward_to_prediction:
+                                        # Save the test dataset to session state for use in prediction
+                                        st.session_state.prediction_data = test_data.copy()
+                                        # Save the original dataset as reference data
+                                        st.session_state.prediction_reference = original_data.copy()
+                                        # Set a flag to indicate data is available for prediction
+                                        st.session_state.prediction_data_available = True
+                                        
+                                        # Show confirmation
+                                        st.success("Data successfully forwarded to the Prediction module.")
+                                        
+                                        # Suggest next steps
+                                        st.info("Go to the 'Prediction' tab to train models and generate forecasts.")
                     
                     # 5. OUTLIER DETECTION TAB
                     with advanced_options[4]:

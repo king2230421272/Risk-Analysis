@@ -5960,6 +5960,558 @@ with main_container:
                                         st.exception(e)
                     
                     # End of the Modules Analysis module
+    
+    # 3. PREDICTION TAB
+    with tab3:
+        st.header("Prediction")
+        
+        # Check if we have data available for prediction
+        if 'prediction_data_available' not in st.session_state or not st.session_state.prediction_data_available:
+            st.warning("No data available for prediction. Please run Distribution Testing module and forward data to this module.")
+            
+            # Add an example of how to get data
+            st.info("""
+            ### How to get data for prediction:
+            1. Import original and test datasets in the Data Import tab
+            2. Go to the Data Processing tab and select "Advanced Processing"
+            3. Run Distribution Testing on your datasets
+            4. After all tests pass, use the "Forward to Prediction" button
+            """)
+        else:
+            st.success("Data is available for prediction modeling!")
+            
+            # Create columns for showing dataset info
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Prediction Dataset")
+                st.write(f"Shape: {st.session_state.prediction_data.shape[0]} rows, {st.session_state.prediction_data.shape[1]} columns")
+                st.dataframe(st.session_state.prediction_data.head(5))
+            
+            with col2:
+                st.subheader("Reference Dataset")
+                st.write(f"Shape: {st.session_state.prediction_reference.shape[0]} rows, {st.session_state.prediction_reference.shape[1]} columns")
+                st.dataframe(st.session_state.prediction_reference.head(5))
+            
+            # Create tabs for different steps in the prediction process
+            prediction_tabs = st.tabs(["Model Training", "Prediction Results", "Risk Assessment"])
+            
+            # 1. MODEL TRAINING TAB
+            with prediction_tabs[0]:
+                st.subheader("Train Prediction Model")
+                
+                # Initialize Predictor from modules
+                from modules.prediction import Predictor
+                predictor = Predictor()
+                
+                # Model parameters
+                st.write("### Model Configuration")
+                
+                # Target column selection
+                target_options = st.session_state.prediction_data.columns.tolist()
+                # Try to default to the last column
+                default_target_idx = len(target_options) - 1 if target_options else 0
+                
+                target_column = st.selectbox(
+                    "Select target column for prediction:",
+                    options=target_options,
+                    index=default_target_idx,
+                    key="prediction_target"
+                )
+                
+                # Model type selection
+                model_type = st.selectbox(
+                    "Select prediction model:",
+                    options=["Linear Regression", "Decision Tree", "Random Forest", "Gradient Boosting"],
+                    index=0,
+                    key="prediction_model_type"
+                )
+                
+                # Test size selection
+                test_size = st.slider(
+                    "Test set size (proportion):",
+                    min_value=0.1,
+                    max_value=0.5,
+                    value=0.2,
+                    step=0.05,
+                    key="prediction_test_size"
+                )
+                
+                # Model specific parameters
+                st.write("### Model Parameters")
+                
+                model_params = {}
+                
+                if model_type == "Linear Regression":
+                    fit_intercept = st.checkbox("Fit intercept", value=True, key="lr_fit_intercept")
+                    model_params["fit_intercept"] = fit_intercept
+                    
+                elif model_type == "Decision Tree":
+                    max_depth = st.slider("Maximum depth:", min_value=1, max_value=20, value=5, key="dt_max_depth")
+                    min_samples_split = st.slider("Minimum samples to split:", min_value=2, max_value=20, value=2, key="dt_min_samples_split")
+                    
+                    model_params["max_depth"] = max_depth
+                    model_params["min_samples_split"] = min_samples_split
+                    
+                elif model_type == "Random Forest":
+                    n_estimators = st.slider("Number of trees:", min_value=10, max_value=200, value=100, step=10, key="rf_n_estimators")
+                    max_depth = st.slider("Maximum depth:", min_value=1, max_value=20, value=5, key="rf_max_depth")
+                    
+                    model_params["n_estimators"] = n_estimators
+                    model_params["max_depth"] = max_depth
+                    
+                elif model_type == "Gradient Boosting":
+                    n_estimators = st.slider("Number of estimators:", min_value=10, max_value=200, value=100, step=10, key="gb_n_estimators")
+                    learning_rate = st.slider("Learning rate:", min_value=0.01, max_value=0.5, value=0.1, step=0.01, key="gb_learning_rate")
+                    max_depth = st.slider("Maximum depth:", min_value=1, max_value=10, value=3, key="gb_max_depth")
+                    
+                    model_params["n_estimators"] = n_estimators
+                    model_params["learning_rate"] = learning_rate
+                    model_params["max_depth"] = max_depth
+                
+                # Train model button
+                train_model = st.button("Train Model", key="train_prediction_model")
+                
+                if train_model:
+                    with st.spinner("Training model..."):
+                        try:
+                            # Train model and get predictions
+                            predictions_df, model_details, metrics = predictor.train_and_predict(
+                                data=st.session_state.prediction_data,
+                                target_column=target_column,
+                                model_type=model_type,
+                                test_size=test_size,
+                                **model_params
+                            )
+                            
+                            # Save results to session state
+                            st.session_state.prediction_results = predictions_df
+                            st.session_state.prediction_model_details = model_details
+                            st.session_state.prediction_metrics = metrics
+                            
+                            # Show success message
+                            st.success(f"{model_type} model trained successfully!")
+                            
+                            # Display model metrics
+                            st.subheader("Model Performance Metrics")
+                            
+                            # Create metrics display
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.write("Training Set Metrics:")
+                                st.metric("R² Score", f"{metrics['Training R²']:.4f}")
+                                st.metric("MSE", f"{metrics['Training MSE']:.4f}")
+                                st.metric("RMSE", f"{metrics['Training RMSE']:.4f}")
+                                st.metric("MAE", f"{metrics['Training MAE']:.4f}")
+                            
+                            with col2:
+                                st.write("Test Set Metrics:")
+                                st.metric("R² Score", f"{metrics['Test R²']:.4f}")
+                                st.metric("MSE", f"{metrics['Test MSE']:.4f}")
+                                st.metric("RMSE", f"{metrics['Test RMSE']:.4f}")
+                                st.metric("MAE", f"{metrics['Test MAE']:.4f}")
+                            
+                            # Display feature importance if available
+                            if 'feature_importance' in model_details:
+                                st.subheader("Feature Importance")
+                                
+                                # Create DataFrame for feature importance
+                                importance_df = pd.DataFrame({
+                                    'Feature': model_details['feature_names'],
+                                    'Importance': model_details['feature_importance']
+                                }).sort_values(by='Importance', ascending=False)
+                                
+                                # Display as a table
+                                st.dataframe(importance_df)
+                                
+                                # Display as a bar chart
+                                fig, ax = plt.subplots(figsize=(10, 6))
+                                ax.barh(importance_df['Feature'], importance_df['Importance'])
+                                ax.set_xlabel('Importance')
+                                ax.set_ylabel('Feature')
+                                ax.set_title('Feature Importance')
+                                plt.tight_layout()
+                                st.pyplot(fig)
+                            
+                        except Exception as e:
+                            st.error(f"Error training model: {str(e)}")
+                            st.exception(e)
+            
+            # 2. PREDICTION RESULTS TAB
+            with prediction_tabs[1]:
+                st.subheader("Prediction Results")
+                
+                if 'prediction_results' not in st.session_state:
+                    st.info("No prediction results available. Please train a model first.")
+                else:
+                    # Show prediction results
+                    st.write("### Test Set Predictions")
+                    
+                    results_df = st.session_state.prediction_results
+                    
+                    # Display the results table
+                    st.dataframe(results_df)
+                    
+                    # Show prediction vs actual scatter plot
+                    st.write("### Predicted vs Actual Values")
+                    
+                    # Get target column name
+                    target_col = [col for col in results_df.columns if col not in ['predicted', 'error']][0]
+                    
+                    # Create scatter plot
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.scatter(results_df[target_col], results_df['predicted'], alpha=0.7)
+                    
+                    # Add perfect prediction line
+                    min_val = min(results_df[target_col].min(), results_df['predicted'].min())
+                    max_val = max(results_df[target_col].max(), results_df['predicted'].max())
+                    ax.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.5)
+                    
+                    ax.set_xlabel('Actual Values')
+                    ax.set_ylabel('Predicted Values')
+                    ax.set_title('Predicted vs Actual Values')
+                    st.pyplot(fig)
+                    
+                    # Show error distribution
+                    st.write("### Error Distribution")
+                    
+                    # Create histogram of errors
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.hist(results_df['error'], bins=30, alpha=0.7)
+                    ax.axvline(x=0, color='red', linestyle='--')
+                    ax.set_xlabel('Prediction Error')
+                    ax.set_ylabel('Frequency')
+                    ax.set_title('Distribution of Prediction Errors')
+                    st.pyplot(fig)
+                    
+                    # Calculate error statistics
+                    error_mean = results_df['error'].mean()
+                    error_std = results_df['error'].std()
+                    error_abs_mean = results_df['error'].abs().mean()
+                    
+                    # Display error statistics
+                    st.write("### Error Statistics")
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Mean Error", f"{error_mean:.4f}")
+                    col2.metric("Error Std Dev", f"{error_std:.4f}")
+                    col3.metric("Mean Absolute Error", f"{error_abs_mean:.4f}")
+            
+            # 3. RISK ASSESSMENT TAB
+            with prediction_tabs[2]:
+                st.subheader("Risk Assessment")
+                
+                if 'prediction_results' not in st.session_state:
+                    st.info("No prediction results available. Please train a model first.")
+                else:
+                    # Initialize RiskAssessor from modules
+                    from modules.risk_assessment import RiskAssessor
+                    risk_assessor = RiskAssessor()
+                    
+                    # Create tabs for different risk assessment methods
+                    risk_tabs = st.tabs(["Prediction Intervals", "Error Distribution", "Outlier Detection"])
+                    
+                    # Results dataframe
+                    results_df = st.session_state.prediction_results
+                    
+                    # 1. PREDICTION INTERVALS TAB
+                    with risk_tabs[0]:
+                        st.write("### Prediction Intervals")
+                        st.write("This analysis shows the uncertainty in predictions by calculating confidence intervals.")
+                        
+                        # Set confidence level
+                        confidence_level = st.slider(
+                            "Confidence level (%):",
+                            min_value=50,
+                            max_value=99,
+                            value=95,
+                            step=1,
+                            key="risk_confidence_level"
+                        )
+                        
+                        # Calculate prediction intervals
+                        run_intervals = st.button("Calculate Prediction Intervals", key="run_prediction_intervals")
+                        
+                        if run_intervals:
+                            with st.spinner("Calculating prediction intervals..."):
+                                try:
+                                    # Get prediction intervals
+                                    intervals_df = risk_assessor.prediction_intervals(
+                                        results_df,
+                                        confidence_level=confidence_level
+                                    )
+                                    
+                                    # Display intervals
+                                    st.write(f"#### {confidence_level}% Prediction Intervals")
+                                    st.dataframe(intervals_df)
+                                    
+                                    # Check what percentage of actual values fall within the intervals
+                                    within_interval_pct = intervals_df['within_interval'].mean() * 100
+                                    
+                                    st.metric(
+                                        "Actual values within interval",
+                                        f"{within_interval_pct:.2f}%",
+                                        f"{within_interval_pct - confidence_level:.2f}%"
+                                    )
+                                    
+                                    # Plot intervals
+                                    st.write("#### Visualization of Prediction Intervals")
+                                    
+                                    # Get target column
+                                    target_col = [col for col in intervals_df.columns if col not in [
+                                        'predicted', 'error', 'lower_bound', 'upper_bound', 
+                                        'interval_width', 'within_interval'
+                                    ]][0]
+                                    
+                                    # Sort by actual values for better visualization
+                                    plot_df = intervals_df.sort_values(by=target_col).reset_index(drop=True)
+                                    
+                                    # Create plot
+                                    fig, ax = plt.subplots(figsize=(12, 6))
+                                    
+                                    # Plot actual values
+                                    ax.scatter(plot_df.index, plot_df[target_col], color='blue', alpha=0.7, label='Actual')
+                                    
+                                    # Plot predicted values
+                                    ax.scatter(plot_df.index, plot_df['predicted'], color='red', alpha=0.7, label='Predicted')
+                                    
+                                    # Plot prediction intervals
+                                    ax.fill_between(
+                                        plot_df.index,
+                                        plot_df['lower_bound'],
+                                        plot_df['upper_bound'],
+                                        alpha=0.2,
+                                        color='gray',
+                                        label=f'{confidence_level}% Prediction Interval'
+                                    )
+                                    
+                                    ax.set_xlabel('Data Point Index')
+                                    ax.set_ylabel('Value')
+                                    ax.set_title(f'Predictions with {confidence_level}% Confidence Intervals')
+                                    ax.legend()
+                                    
+                                    st.pyplot(fig)
+                                    
+                                except Exception as e:
+                                    st.error(f"Error calculating prediction intervals: {str(e)}")
+                                    st.exception(e)
+                    
+                    # 2. ERROR DISTRIBUTION TAB
+                    with risk_tabs[1]:
+                        st.write("### Error Distribution Analysis")
+                        st.write("This analysis examines the distribution and patterns in prediction errors.")
+                        
+                        # Run error distribution analysis
+                        run_error_analysis = st.button("Analyze Error Distribution", key="run_error_analysis")
+                        
+                        if run_error_analysis:
+                            with st.spinner("Analyzing error distribution..."):
+                                try:
+                                    # Get error distribution analysis
+                                    error_df = risk_assessor.error_distribution(results_df)
+                                    
+                                    # Display analysis results
+                                    st.write("#### Error Analysis Results")
+                                    
+                                    # Show statistics
+                                    st.dataframe(error_df)
+                                    
+                                    # Create error severity distribution
+                                    severity_counts = error_df['error_severity'].value_counts()
+                                    
+                                    # Display as a pie chart
+                                    fig, ax = plt.subplots(figsize=(8, 8))
+                                    ax.pie(
+                                        severity_counts,
+                                        labels=severity_counts.index,
+                                        autopct='%1.1f%%',
+                                        startangle=90,
+                                        colors=['green', 'yellow', 'orange', 'red']
+                                    )
+                                    ax.axis('equal')
+                                    ax.set_title('Error Severity Distribution')
+                                    
+                                    st.pyplot(fig)
+                                    
+                                    # Create a scatter plot of relative vs absolute error
+                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                    scatter = ax.scatter(
+                                        error_df['abs_error'],
+                                        error_df['rel_error'],
+                                        c=error_df['error_zscore'].abs(),
+                                        cmap='YlOrRd',
+                                        alpha=0.7
+                                    )
+                                    
+                                    plt.colorbar(scatter, label='Error Z-Score (abs)')
+                                    ax.set_xlabel('Absolute Error')
+                                    ax.set_ylabel('Relative Error (%)')
+                                    ax.set_title('Absolute vs Relative Error')
+                                    
+                                    st.pyplot(fig)
+                                    
+                                    # Get target column
+                                    target_col = [col for col in error_df.columns if col not in [
+                                        'predicted', 'error', 'abs_error', 'rel_error', 
+                                        'error_zscore', 'error_severity'
+                                    ]][0]
+                                    
+                                    # Create a scatter plot of actual values vs error
+                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                    scatter = ax.scatter(
+                                        error_df[target_col],
+                                        error_df['error'],
+                                        c=error_df['error_zscore'].abs(),
+                                        cmap='YlOrRd',
+                                        alpha=0.7
+                                    )
+                                    
+                                    plt.colorbar(scatter, label='Error Z-Score (abs)')
+                                    ax.axhline(y=0, color='blue', linestyle='--')
+                                    ax.set_xlabel('Actual Value')
+                                    ax.set_ylabel('Error')
+                                    ax.set_title('Error vs Actual Value')
+                                    
+                                    st.pyplot(fig)
+                                    
+                                except Exception as e:
+                                    st.error(f"Error analyzing error distribution: {str(e)}")
+                                    st.exception(e)
+                    
+                    # 3. OUTLIER DETECTION TAB
+                    with risk_tabs[2]:
+                        st.write("### Prediction Outlier Detection")
+                        st.write("This analysis identifies outliers in predictions, actual values, and errors.")
+                        
+                        # Set threshold
+                        threshold = st.slider(
+                            "Z-score threshold for outlier detection:",
+                            min_value=1.0,
+                            max_value=5.0,
+                            value=3.0,
+                            step=0.1,
+                            key="outlier_threshold"
+                        )
+                        
+                        # Run outlier detection
+                        run_outlier_detection = st.button("Detect Outliers", key="run_outlier_detection")
+                        
+                        if run_outlier_detection:
+                            with st.spinner("Detecting outliers..."):
+                                try:
+                                    # Get outlier detection results
+                                    outlier_df = risk_assessor.outlier_detection(
+                                        results_df,
+                                        threshold=threshold
+                                    )
+                                    
+                                    # Display results
+                                    st.write("#### Outlier Detection Results")
+                                    
+                                    # Count outliers
+                                    total_outliers = outlier_df['is_outlier'].sum()
+                                    actual_outliers = outlier_df['actual_outlier'].sum()
+                                    predicted_outliers = outlier_df['predicted_outlier'].sum()
+                                    error_outliers = outlier_df['error_outlier'].sum()
+                                    
+                                    total_points = len(outlier_df)
+                                    outlier_percent = (total_outliers / total_points) * 100
+                                    
+                                    # Display summary
+                                    st.write(f"**Found {total_outliers} outliers out of {total_points} points ({outlier_percent:.2f}%)**")
+                                    
+                                    col1, col2, col3 = st.columns(3)
+                                    col1.metric("Actual Value Outliers", actual_outliers)
+                                    col2.metric("Predicted Value Outliers", predicted_outliers)
+                                    col3.metric("Error Outliers", error_outliers)
+                                    
+                                    # Display outliers
+                                    st.write("#### Outlier Data Points")
+                                    
+                                    # Define highlighting function
+                                    def highlight_outliers(s):
+                                        if s.name not in ['actual_outlier', 'predicted_outlier', 'error_outlier', 'is_outlier', 'outlier_severity']:
+                                            return ['background-color: #FFC0CB' if outlier_df.loc[i, 'is_outlier'] else '' for i in s.index]
+                                        return ['' for _ in s.index]
+                                    
+                                    # Apply highlighting
+                                    styled_df = outlier_df.style.apply(highlight_outliers)
+                                    st.dataframe(styled_df)
+                                    
+                                    # Get target column
+                                    target_col = [col for col in outlier_df.columns if col not in [
+                                        'predicted', 'error', 'actual_zscore', 'predicted_zscore', 
+                                        'error_zscore', 'actual_outlier', 'predicted_outlier', 
+                                        'error_outlier', 'is_outlier', 'outlier_severity'
+                                    ]][0]
+                                    
+                                    # Create a scatter plot
+                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                    
+                                    # Plot non-outliers
+                                    non_outliers = outlier_df[~outlier_df['is_outlier']]
+                                    ax.scatter(
+                                        non_outliers[target_col],
+                                        non_outliers['predicted'],
+                                        color='blue',
+                                        alpha=0.5,
+                                        label='Normal'
+                                    )
+                                    
+                                    # Plot outliers
+                                    outliers = outlier_df[outlier_df['is_outlier']]
+                                    ax.scatter(
+                                        outliers[target_col],
+                                        outliers['predicted'],
+                                        color='red',
+                                        marker='x',
+                                        alpha=0.7,
+                                        label='Outlier'
+                                    )
+                                    
+                                    # Add reference line
+                                    min_val = min(outlier_df[target_col].min(), outlier_df['predicted'].min())
+                                    max_val = max(outlier_df[target_col].max(), outlier_df['predicted'].max())
+                                    ax.plot([min_val, max_val], [min_val, max_val], 'k--', alpha=0.3)
+                                    
+                                    ax.set_xlabel('Actual Values')
+                                    ax.set_ylabel('Predicted Values')
+                                    ax.set_title('Outliers in Predictions')
+                                    ax.legend()
+                                    
+                                    st.pyplot(fig)
+                                    
+                                    # Display outlier severity distribution
+                                    severity_counts = outlier_df['outlier_severity'].value_counts()
+                                    
+                                    # Plot severity distribution
+                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                    bars = ax.bar(
+                                        severity_counts.index,
+                                        severity_counts.values,
+                                        color=['green', 'yellow', 'orange', 'red']
+                                    )
+                                    
+                                    ax.set_xlabel('Outlier Severity')
+                                    ax.set_ylabel('Count')
+                                    ax.set_title('Outlier Severity Distribution')
+                                    
+                                    # Add count labels on bars
+                                    for bar in bars:
+                                        height = bar.get_height()
+                                        ax.text(
+                                            bar.get_x() + bar.get_width()/2.,
+                                            height,
+                                            f'{height}',
+                                            ha='center',
+                                            va='bottom'
+                                        )
+                                    
+                                    st.pyplot(fig)
+                                    
+                                except Exception as e:
+                                    st.error(f"Error detecting outliers: {str(e)}")
+                                    st.exception(e)
 
 if __name__ == "__main__":
     st.sidebar.info("Data Analysis Platform")

@@ -1431,26 +1431,24 @@ with main_container:
                                         
                                         # Add option to save interpolated result to database
                                         st.write("#### Save Interpolated Result to Database")
-                                        save_to_db = st.checkbox("Save this MCMC interpolation result to database", value=False, key="save_mcmc_to_db_checkbox")
                                         
-                                        if save_to_db:
-                                            save_col1, save_col2 = st.columns(2)
-                                            
-                                            with save_col1:
-                                                save_name = st.text_input(
-                                                    "Dataset name:",
-                                                    value=f"MCMC_Interpolated_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
-                                                    key="mcmc_save_name"
-                                                )
-                                            
-                                            with save_col2:
-                                                save_desc = st.text_input(
-                                                    "Description:",
-                                                    value=f"MCMC interpolated dataset with {num_samples} samples, {chains} chains",
-                                                    key="mcmc_save_desc"
-                                                )
-                                            
-                                            if st.button("Save to Database", key="save_mcmc_to_db_btn"):
+                                        save_col1, save_col2 = st.columns(2)
+                                        
+                                        with save_col1:
+                                            save_name = st.text_input(
+                                                "Dataset name:",
+                                                value=f"MCMC_Interpolated_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
+                                                key="mcmc_save_name"
+                                            )
+                                        
+                                        with save_col2:
+                                            save_desc = st.text_input(
+                                                "Description:",
+                                                value=f"MCMC interpolated dataset with {num_samples} samples, {chains} chains",
+                                                key="mcmc_save_desc"
+                                            )
+                                        
+                                        if st.button("Save Interpolated Result to Database", key="save_mcmc_to_db_btn"):
                                                 if 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None:
                                                     try:
                                                         # Import database handler if not already imported

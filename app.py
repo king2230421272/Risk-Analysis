@@ -6105,20 +6105,166 @@ with main_container:
     with tab3:
         st.header("Prediction")
         
-        # Check if we have data available for prediction
-        if 'prediction_data_available' not in st.session_state or not st.session_state.prediction_data_available:
-            st.warning("No data available for prediction. Please run Distribution Testing module and forward data to this module.")
+        # Add data source selection - can use data from session state or from database
+        data_source_type = st.radio(
+            "Choose data source:",
+            ["Session Data", "Database Data", "Upload New Data"],
+            key="prediction_data_source_type"
+        )
+        
+        if data_source_type == "Session Data":
+            # Check if we have data available for prediction in session state
+            if 'prediction_data_available' not in st.session_state or not st.session_state.prediction_data_available:
+                st.warning("No data available for prediction in the current session. Please run Distribution Testing module and forward data to this module, or select 'Database Data' to load data from the database.")
+                
+                # Add an example of how to get data
+                st.info("""
+                ### How to get data for prediction:
+                1. Import original and test datasets in the Data Import tab
+                2. Go to the Data Processing tab and select "Advanced Processing"
+                3. Run Distribution Testing on your datasets
+                4. After all tests pass, use the "Forward to Prediction" button
+                """)
+                prediction_data_loaded = False
+            else:
+                st.success("Data is available for prediction modeling from the current session!")
+                prediction_data_loaded = True
+        
+        elif data_source_type == "Database Data":
+            st.write("### Load Dataset from Database")
             
-            # Add an example of how to get data
-            st.info("""
-            ### How to get data for prediction:
-            1. Import original and test datasets in the Data Import tab
-            2. Go to the Data Processing tab and select "Advanced Processing"
-            3. Run Distribution Testing on your datasets
-            4. After all tests pass, use the "Forward to Prediction" button
-            """)
-        else:
-            st.success("Data is available for prediction modeling!")
+            try:
+                # Import database handler
+                from utils.database import DatabaseHandler
+                db_handler = DatabaseHandler()
+                
+                # Get all available datasets from database
+                all_datasets = db_handler.list_datasets()
+                
+                if not all_datasets:
+                    st.warning("No datasets found in the database.")
+                    prediction_data_loaded = False
+                else:
+                    # Create options for dataset selection
+                    dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']} rows, created {ds['created_at'].strftime('%Y-%m-%d %H:%M')})") for ds in all_datasets]
+                    
+                    # Create columns for database dataset selection
+                    db_col1, db_col2 = st.columns(2)
+                    
+                    with db_col1:
+                        # Filter options
+                        data_type_filter = st.multiselect(
+                            "Filter by data type:",
+                            options=list(set(ds['data_type'] for ds in all_datasets)),
+                            default=[],
+                            key="pred_db_data_type_filter"
+                        )
+                    
+                    # Filter datasets by selected data types if any filters applied
+                    filtered_datasets = all_datasets
+                    if data_type_filter:
+                        filtered_datasets = [ds for ds in all_datasets if ds['data_type'] in data_type_filter]
+                        dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']} rows, created {ds['created_at'].strftime('%Y-%m-%d %H:%M')})") for ds in filtered_datasets]
+                    
+                    # Dataset selection
+                    selected_dataset = st.selectbox(
+                        "Select main dataset from database:",
+                        options=dataset_options,
+                        format_func=lambda x: x[1],
+                        key="pred_db_dataset_select"
+                    )
+                    
+                    # Reference dataset selection (optional)
+                    st.write("#### Reference Dataset (Optional)")
+                    use_reference = st.checkbox("Use a reference dataset", value=False, key="pred_use_reference")
+                    
+                    if use_reference:
+                        reference_dataset = st.selectbox(
+                            "Select reference dataset from database:",
+                            options=dataset_options,
+                            format_func=lambda x: x[1],
+                            key="pred_db_reference_select"
+                        )
+                    
+                    # Load button
+                    if st.button("Load Selected Dataset(s)", key="pred_load_db_btn"):
+                        try:
+                            # Load main dataset
+                            main_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
+                            
+                            # Store in session state
+                            st.session_state.prediction_data = main_df
+                            
+                            if use_reference and 'reference_dataset' in locals():
+                                # Load reference dataset
+                                ref_df = db_handler.load_dataset(dataset_id=reference_dataset[0])
+                                st.session_state.prediction_reference = ref_df
+                            else:
+                                # Use main dataset as reference as well
+                                st.session_state.prediction_reference = main_df.copy()
+                            
+                            # Set flag to indicate data is available
+                            st.session_state.prediction_data_available = True
+                            prediction_data_loaded = True
+                            
+                            # Show success message
+                            st.success("✅ Successfully loaded dataset(s) from database!")
+                            
+                            # Show preview
+                            st.write("#### Preview of loaded dataset:")
+                            st.dataframe(main_df.head())
+                            
+                        except Exception as e:
+                            st.error(f"Error loading dataset: {e}")
+                            st.exception(e)
+                            prediction_data_loaded = False
+                    else:
+                        # If button not clicked, no data loaded
+                        prediction_data_loaded = 'prediction_data_available' in st.session_state and st.session_state.prediction_data_available
+            
+            except Exception as e:
+                st.error(f"Error accessing database: {e}")
+                st.exception(e)
+                prediction_data_loaded = False
+                
+        elif data_source_type == "Upload New Data":
+            st.write("### Upload New Dataset")
+            
+            # Create file uploader
+            uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xlsx", "xls"], key="pred_file_upload")
+            
+            if uploaded_file is not None:
+                try:
+                    # Import data handler
+                    from utils.data_handler import DataHandler
+                    data_handler = DataHandler()
+                    
+                    # Load data
+                    dataset_df = data_handler.import_data(uploaded_file)
+                    
+                    # Store in session state
+                    st.session_state.prediction_data = dataset_df
+                    st.session_state.prediction_reference = dataset_df.copy()
+                    st.session_state.prediction_data_available = True
+                    prediction_data_loaded = True
+                    
+                    # Show success message
+                    st.success(f"✅ Successfully loaded dataset with {dataset_df.shape[0]} rows and {dataset_df.shape[1]} columns")
+                    
+                    # Show preview
+                    st.write("#### Preview of loaded dataset:")
+                    st.dataframe(dataset_df.head())
+                    
+                except Exception as e:
+                    st.error(f"Error loading file: {e}")
+                    st.exception(e)
+                    prediction_data_loaded = False
+            else:
+                st.info("Please upload a CSV or Excel file to proceed.")
+                prediction_data_loaded = False
+        
+        # Proceed only if we have data available
+        if prediction_data_loaded:
             
             # Create columns for showing dataset info
             col1, col2 = st.columns(2)

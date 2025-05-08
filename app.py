@@ -2927,11 +2927,49 @@ with main_container:
                                                             st.session_state.cgan_analysis_datasets = good_datasets
                                                             st.success(f"{len(good_datasets)} dataset(s) with 'Good' evaluation in all analysis methods will be passed to CGAN Analysis.")
                                                             
-                                                            # Create a button to go directly to CGAN Analysis tab
-                                                            if st.button("Proceed to CGAN Analysis"):
-                                                                # We'll use a session state flag to indicate we should switch to CGAN Analysis
-                                                                st.session_state.switch_to_cgan = True
-                                                                st.rerun()
+                                                            # Add option to save good quality datasets to database
+                                                            save_col1, save_col2 = st.columns([1, 1])
+                                                            
+                                                            with save_col1:
+                                                                # Create a button to go directly to CGAN Analysis tab
+                                                                if st.button("Proceed to CGAN Analysis"):
+                                                                    # We'll use a session state flag to indicate we should switch to CGAN Analysis
+                                                                    st.session_state.switch_to_cgan = True
+                                                                    st.rerun()
+                                                            
+                                                            with save_col2:
+                                                                # Add option to save to database
+                                                                if st.button("Save Good Datasets to Database", key="save_good_datasets"):
+                                                                    saved_count = 0
+                                                                    for i, dataset in enumerate(good_datasets):
+                                                                        try:
+                                                                            # Create dataset name with timestamp and quality info
+                                                                            ds_name = f"Good_Quality_MCMC_{dataset['timestamp'].strftime('%Y%m%d_%H%M')}"
+                                                                            
+                                                                            # Create description with convergence metrics
+                                                                            ds_desc = f"MCMC dataset with Good convergence quality. "
+                                                                            if 'psrf' in dataset['convergence_quality']:
+                                                                                ds_desc += f"PSRF: {dataset['convergence_quality']['psrf']}. "
+                                                                            if 'bw_ratio' in dataset['convergence_quality']:
+                                                                                ds_desc += f"B/W Ratio: {dataset['convergence_quality']['bw_ratio']}. "
+                                                                            
+                                                                            # Save to database
+                                                                            result = db_handler.save_dataset(
+                                                                                dataset['data'],
+                                                                                name=ds_name,
+                                                                                description=ds_desc,
+                                                                                data_type="convergence_good_quality"
+                                                                            )
+                                                                            
+                                                                            if result:
+                                                                                saved_count += 1
+                                                                        except Exception as e:
+                                                                            st.error(f"Error saving dataset {i}: {e}")
+                                                                    
+                                                                    if saved_count > 0:
+                                                                        st.success(f"Successfully saved {saved_count} datasets to database")
+                                                                    else:
+                                                                        st.warning("No datasets were saved to database")
                                                         else:
                                                             st.warning("No datasets with 'Good' evaluation in all analysis methods are available for CGAN Analysis.")
                                                     else:
@@ -4285,6 +4323,38 @@ with main_container:
                                                                     'quality': score_quality,
                                                                     'discriminator_score': discriminator_results['interpolated_mean_score']
                                                                 }
+                                                                
+                                                                # Add option to save to database
+                                                                if st.checkbox("Save this dataset to database", value=False, key="save_cgan_good_dataset"):
+                                                                    save_name = st.text_input(
+                                                                        "Dataset name:",
+                                                                        value=f"CGAN_Quality_{score_quality}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
+                                                                        key="cgan_save_name"
+                                                                    )
+                                                                    
+                                                                    save_desc = st.text_area(
+                                                                        "Description (optional):",
+                                                                        value=f"Dataset with {score_quality} quality rating from CGAN Discriminator Score Analysis. Score: {discriminator_results['interpolated_mean_score']:.4f}",
+                                                                        key="cgan_save_desc"
+                                                                    )
+                                                                    
+                                                                    if st.button("Save to Database", key="save_cgan_to_db_btn"):
+                                                                        try:
+                                                                            # Save to database
+                                                                            result = db_handler.save_dataset(
+                                                                                cgan_analysis_data,
+                                                                                name=save_name,
+                                                                                description=save_desc,
+                                                                                data_type="cgan_good_quality"
+                                                                            )
+                                                                            
+                                                                            if result:
+                                                                                st.success(f"Successfully saved '{save_name}' to database with ID: {result}")
+                                                                            else:
+                                                                                st.error("Failed to save dataset to database")
+                                                                        
+                                                                        except Exception as e:
+                                                                            st.error(f"Error saving to database: {e}")
                                                         
                                                         # Save discriminator results to session state
                                                         if 'cgan_results' in st.session_state and isinstance(st.session_state.cgan_results, dict):

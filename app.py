@@ -3974,24 +3974,6 @@ with main_container:
                                             # Display metrics
                                             st.write("##### Key Statistical Metrics Comparison")
                                             
-                                            # Create summary table
-                                            summary_stats = []
-                                            for col, analysis in stat_analysis_data.items():
-                                                summary_stats.append({
-                                                    "Feature": col,
-                                                    "Interpolated Mean": f"{analysis.get('real_mean', 'N/A'):.4f}",
-                                                    "Synthetic Mean": f"{analysis.get('synthetic_mean', 'N/A'):.4f}",
-                                                    "Mean Diff %": f"{analysis.get('mean_diff_pct', 'N/A'):.2f}%",
-                                                    "Interpolated StdDev": f"{analysis.get('real_std', 'N/A'):.4f}",
-                                                    "Synthetic StdDev": f"{analysis.get('synthetic_std', 'N/A'):.4f}",
-                                                    "StdDev Diff %": f"{analysis.get('std_diff_pct', 'N/A'):.2f}%",
-                                                    "Preservation Quality": analysis.get('preservation_quality', 'N/A'),
-                                                    "Distribution Similarity (p-value)": f"{analysis.get('ks_p_value', 'N/A'):.4f}"
-                                                })
-                                            
-                                            # Create and display table
-                                            summary_df = pd.DataFrame(summary_stats)
-                                            
                                             # Define highlighting function for quality
                                             def highlight_quality(val):
                                                 if val == 'Excellent':
@@ -4003,6 +3985,57 @@ with main_container:
                                                 elif val == 'Poor':
                                                     return 'background-color: #FFC0CB'  # Light red
                                                 return ''
+                                            
+                                            # Create summary table
+                                            summary_stats = []
+                                            for col, analysis in stat_analysis_data.items():
+                                                # Extract all parameters for a comprehensive comparison
+                                                stats_row = {
+                                                    "Feature": col,
+                                                    "Interpolated Mean": f"{analysis.get('real_mean', 'N/A'):.4f}",
+                                                    "Synthetic Mean": f"{analysis.get('synthetic_mean', 'N/A'):.4f}",
+                                                    "Mean Diff %": f"{analysis.get('mean_diff_pct', 'N/A'):.2f}%",
+                                                    "Interpolated StdDev": f"{analysis.get('real_std', 'N/A'):.4f}",
+                                                    "Synthetic StdDev": f"{analysis.get('synthetic_std', 'N/A'):.4f}",
+                                                    "StdDev Diff %": f"{analysis.get('std_diff_pct', 'N/A'):.2f}%",
+                                                    "Preservation Quality": analysis.get('preservation_quality', 'N/A'),
+                                                    "Distribution Similarity (p-value)": f"{analysis.get('ks_p_value', 'N/A'):.4f}"
+                                                }
+                                                summary_stats.append(stats_row)
+                                                
+                                            # Create a more detailed metrics tab
+                                            with st.expander("View Detailed Statistical Metrics"):
+                                                detailed_stats = []
+                                                for col, analysis in stat_analysis_data.items():
+                                                    detailed_stats.append({
+                                                        "Feature": col,
+                                                        "Interpolated Mean": f"{analysis.get('real_mean', 'N/A'):.4f}",
+                                                        "Synthetic Mean": f"{analysis.get('synthetic_mean', 'N/A'):.4f}",
+                                                        "Mean Diff %": f"{analysis.get('mean_diff_pct', 'N/A'):.2f}%",
+                                                        "Interpolated Median": f"{analysis.get('real_median', 'N/A'):.4f}",
+                                                        "Synthetic Median": f"{analysis.get('synthetic_median', 'N/A'):.4f}",
+                                                        "Median Diff %": f"{analysis.get('median_diff_pct', 'N/A'):.2f}%",
+                                                        "Interpolated Min": f"{analysis.get('real_min', 'N/A'):.4f}",
+                                                        "Synthetic Min": f"{analysis.get('synthetic_min', 'N/A'):.4f}",
+                                                        "Interpolated Max": f"{analysis.get('real_max', 'N/A'):.4f}",
+                                                        "Synthetic Max": f"{analysis.get('synthetic_max', 'N/A'):.4f}",
+                                                        "Interpolated Range": f"{analysis.get('real_range', 'N/A'):.4f}",
+                                                        "Synthetic Range": f"{analysis.get('synthetic_range', 'N/A'):.4f}",
+                                                        "Range Diff %": f"{analysis.get('range_diff_pct', 'N/A'):.2f}%",
+                                                        "Interpolated IQR": f"{analysis.get('real_iqr', 'N/A'):.4f}",
+                                                        "Synthetic IQR": f"{analysis.get('synthetic_iqr', 'N/A'):.4f}",
+                                                        "IQR Diff %": f"{analysis.get('iqr_diff_pct', 'N/A'):.2f}%",
+                                                        "Preservation Quality": analysis.get('preservation_quality', 'N/A')
+                                                    })
+                                                
+                                                # Create and display detailed table
+                                                detailed_df = pd.DataFrame(detailed_stats)
+                                                st.dataframe(detailed_df.style.applymap(
+                                                    highlight_quality, subset=['Preservation Quality']
+                                                ))
+                                            
+                                            # Create and display table
+                                            summary_df = pd.DataFrame(summary_stats)
                                             
                                             # Update preservation quality to English if needed
                                             for i, row in summary_df.iterrows():

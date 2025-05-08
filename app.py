@@ -4342,7 +4342,7 @@ with main_container:
                                                 # Add Distribution Testing module
                                                 if 'distribution_testing_dataset' in st.session_state:
                                                     st.header("Distribution Testing Module")
-                                                    st.write("This module performs Kolmogorov-Smirnov (K-S) tests between the selected dataset and the original data.")
+                                                    st.write("This module performs statistical distribution tests between the selected dataset and the original data.")
                                                     
                                                     dataset = st.session_state.distribution_testing_dataset
                                                     
@@ -4352,6 +4352,13 @@ with main_container:
                                                         st.warning("Original data is required for distribution testing. Please upload or select original data first.")
                                                     else:
                                                         try:
+                                                            # Create test tabs
+                                                            test_tabs = st.tabs([
+                                                                "Kolmogorov-Smirnov Tests", 
+                                                                "Spearman Rank Correlation", 
+                                                                "Permutation Tests"
+                                                            ])
+                                                            
                                                             # Analyze all columns except index
                                                             test_data = dataset['data']
                                                             original_data = st.session_state.original_data
@@ -4361,128 +4368,473 @@ with main_container:
                                                             if not common_cols:
                                                                 st.error("No common columns found between the test dataset and original data.")
                                                             else:
-                                                                st.write(f"Performing K-S tests on {len(common_cols)} common columns.")
-                                                                
-                                                                # Perform K-S tests
-                                                                from scipy import stats
-                                                                ks_results = []
-                                                                
-                                                                for col in common_cols:
-                                                                    try:
-                                                                        stat, pval = stats.ks_2samp(
-                                                                            test_data[col].dropna(),
-                                                                            original_data[col].dropna()
-                                                                        )
-                                                                        significance = "Similar" if pval >= 0.05 else "Different"
-                                                                        ks_results.append({
-                                                                            "Feature": col,
-                                                                            "Statistic": stat,
-                                                                            "p-value": pval,
-                                                                            "Distribution": significance
-                                                                        })
-                                                                    except Exception as e:
-                                                                        st.warning(f"Could not test column {col}: {str(e)}")
-                                                                
-                                                                # Display results
-                                                                results_df = pd.DataFrame(ks_results)
-                                                                
-                                                                # Define style function
+                                                                # Common styling function
                                                                 def highlight_significance(val):
-                                                                    if val == "Similar":
+                                                                    if val == "Similar" or val == "High" or val == "Not Significant":
                                                                         return 'background-color: #90EE90'  # light green
+                                                                    elif val == "Moderate":
+                                                                        return 'background-color: #E0FFFF'  # light cyan
+                                                                    elif val == "Low":
+                                                                        return 'background-color: #FFE4B5'  # light yellow
                                                                     else:
                                                                         return 'background-color: #FFC0CB'  # light red
                                                                 
-                                                                # Apply style
-                                                                styled_df = results_df.style.applymap(
-                                                                    highlight_significance, subset=['Distribution']
-                                                                )
-                                                                
-                                                                st.dataframe(styled_df)
-                                                                
-                                                                # Display summary statistics
-                                                                similar_count = (results_df["Distribution"] == "Similar").sum()
-                                                                total_count = len(results_df)
-                                                                similar_percent = (similar_count / total_count) * 100 if total_count > 0 else 0
-                                                                
-                                                                st.write(f"**Summary:** {similar_count} out of {total_count} features ({similar_percent:.1f}%) have similar distributions.")
-                                                                
-                                                                if similar_percent >= 80:
-                                                                    st.success("The dataset distributions are highly similar to the original data.")
-                                                                elif similar_percent >= 50:
-                                                                    st.info("The dataset distributions are moderately similar to the original data.")
-                                                                else:
-                                                                    st.warning("The dataset distributions show significant differences from the original data.")
-                                                                
-                                                                # Create visualization
-                                                                st.write("#### K-S Test Results Visualization")
-                                                                
-                                                                fig, ax = plt.subplots(figsize=(10, 6))
-                                                                bars = ax.bar(results_df["Feature"], results_df["p-value"])
-                                                                
-                                                                # Add threshold line
-                                                                ax.axhline(y=0.05, color='red', linestyle='--', alpha=0.7)
-                                                                ax.text(0, 0.06, 'p=0.05 threshold', color='red')
-                                                                
-                                                                # Color bars based on significance
-                                                                for i, p in enumerate(results_df["p-value"]):
-                                                                    if p >= 0.05:
-                                                                        bars[i].set_color('green')
-                                                                    else:
-                                                                        bars[i].set_color('red')
-                                                                
-                                                                ax.set_title('Distribution Similarity Between Test and Original Data (K-S Test p-values)')
-                                                                ax.set_ylabel('p-value')
-                                                                ax.set_xlabel('Feature')
-                                                                plt.xticks(rotation=45, ha='right')
-                                                                plt.tight_layout()
-                                                                st.pyplot(fig)
-                                                                
-                                                                # Display distribution comparisons
-                                                                st.write("#### Feature Distribution Comparisons")
-                                                                st.write("Visual comparisons of distributions between test data and original data:")
-                                                                
-                                                                # Allow user to select columns
-                                                                select_all = st.checkbox("Select all columns for comparison", value=True)
-                                                                
-                                                                if select_all:
-                                                                    selected_cols = common_cols
-                                                                else:
-                                                                    selected_cols = st.multiselect(
-                                                                        "Select columns to compare:",
-                                                                        options=common_cols,
-                                                                        default=common_cols[:min(5, len(common_cols))]
-                                                                    )
-                                                                
-                                                                # Create comparison plots
-                                                                cols_per_row = 2
-                                                                for i in range(0, len(selected_cols), cols_per_row):
-                                                                    cols_chunk = selected_cols[i:i+cols_per_row]
-                                                                    cols = st.columns(len(cols_chunk))
+                                                                #################################
+                                                                # 1. K-S TEST TAB
+                                                                #################################
+                                                                with test_tabs[0]:
+                                                                    st.write("### Kolmogorov-Smirnov Tests")
+                                                                    st.write("K-S tests compare the distribution of two datasets to determine if they come from the same distribution.")
                                                                     
-                                                                    for j, col_name in enumerate(cols_chunk):
-                                                                        with cols[j]:
-                                                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                                                    st.write(f"Performing K-S tests on {len(common_cols)} common columns.")
+                                                                    
+                                                                    # Perform K-S tests
+                                                                    from scipy import stats
+                                                                    ks_results = []
+                                                                    
+                                                                    for col in common_cols:
+                                                                        try:
+                                                                            stat, pval = stats.ks_2samp(
+                                                                                test_data[col].dropna(),
+                                                                                original_data[col].dropna()
+                                                                            )
+                                                                            significance = "Similar" if pval >= 0.05 else "Different"
+                                                                            ks_results.append({
+                                                                                "Feature": col,
+                                                                                "Statistic": stat,
+                                                                                "p-value": pval,
+                                                                                "Distribution": significance
+                                                                            })
+                                                                        except Exception as e:
+                                                                            st.warning(f"Could not test column {col}: {str(e)}")
+                                                                    
+                                                                    # Display results
+                                                                    results_df = pd.DataFrame(ks_results)
+                                                                    
+                                                                    # Apply style
+                                                                    styled_df = results_df.style.applymap(
+                                                                        highlight_significance, subset=['Distribution']
+                                                                    )
+                                                                    
+                                                                    st.dataframe(styled_df)
+                                                                    
+                                                                    # Display summary statistics
+                                                                    similar_count = (results_df["Distribution"] == "Similar").sum()
+                                                                    total_count = len(results_df)
+                                                                    similar_percent = (similar_count / total_count) * 100 if total_count > 0 else 0
+                                                                    
+                                                                    st.write(f"**Summary:** {similar_count} out of {total_count} features ({similar_percent:.1f}%) have similar distributions.")
+                                                                    
+                                                                    if similar_percent >= 80:
+                                                                        st.success("The dataset distributions are highly similar to the original data.")
+                                                                    elif similar_percent >= 50:
+                                                                        st.info("The dataset distributions are moderately similar to the original data.")
+                                                                    else:
+                                                                        st.warning("The dataset distributions show significant differences from the original data.")
+                                                                    
+                                                                    # Create visualization
+                                                                    st.write("#### K-S Test Results Visualization")
+                                                                    
+                                                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                                                    bars = ax.bar(results_df["Feature"], results_df["p-value"])
+                                                                    
+                                                                    # Add threshold line
+                                                                    ax.axhline(y=0.05, color='red', linestyle='--', alpha=0.7)
+                                                                    ax.text(0, 0.06, 'p=0.05 threshold', color='red')
+                                                                    
+                                                                    # Color bars based on significance
+                                                                    for i, p in enumerate(results_df["p-value"]):
+                                                                        if p >= 0.05:
+                                                                            bars[i].set_color('green')
+                                                                        else:
+                                                                            bars[i].set_color('red')
+                                                                    
+                                                                    ax.set_title('Distribution Similarity Between Test and Original Data (K-S Test p-values)')
+                                                                    ax.set_ylabel('p-value')
+                                                                    ax.set_xlabel('Feature')
+                                                                    plt.xticks(rotation=45, ha='right')
+                                                                    plt.tight_layout()
+                                                                    st.pyplot(fig)
+                                                                    
+                                                                    # Display distribution comparisons
+                                                                    st.write("#### Feature Distribution Comparisons")
+                                                                    st.write("Visual comparisons of distributions between test data and original data:")
+                                                                    
+                                                                    # Allow user to select columns
+                                                                    select_all = st.checkbox("Select all columns for comparison", value=True)
+                                                                    
+                                                                    if select_all:
+                                                                        selected_cols = common_cols
+                                                                    else:
+                                                                        selected_cols = st.multiselect(
+                                                                            "Select columns to compare:",
+                                                                            options=common_cols,
+                                                                            default=common_cols[:min(5, len(common_cols))]
+                                                                        )
+                                                                    
+                                                                    # Create comparison plots
+                                                                    cols_per_row = 2
+                                                                    for i in range(0, len(selected_cols), cols_per_row):
+                                                                        cols_chunk = selected_cols[i:i+cols_per_row]
+                                                                        cols = st.columns(len(cols_chunk))
+                                                                        
+                                                                        for j, col_name in enumerate(cols_chunk):
+                                                                            with cols[j]:
+                                                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                                                
+                                                                                # Plot original data
+                                                                                ax.hist(original_data[col_name].dropna(), bins=20, alpha=0.5, 
+                                                                                    label='Original', color='blue')
+                                                                                
+                                                                                # Plot test data
+                                                                                ax.hist(test_data[col_name].dropna(), bins=20, alpha=0.5, 
+                                                                                    label='Test Data', color='orange')
+                                                                                
+                                                                                # Add K-S test result
+                                                                                result = results_df[results_df["Feature"] == col_name].iloc[0]
+                                                                                p_value = result["p-value"]
+                                                                                significance = "Similar" if p_value >= 0.05 else "Different"
+                                                                                
+                                                                                ax.set_title(f'{col_name}\np-value: {p_value:.4f} ({significance})')
+                                                                                ax.set_xlabel(col_name)
+                                                                                ax.set_ylabel('Frequency')
+                                                                                ax.legend()
+                                                                                
+                                                                                st.pyplot(fig)
+                                                                
+                                                                #################################
+                                                                # 2. SPEARMAN RANK CORRELATION TAB
+                                                                #################################
+                                                                with test_tabs[1]:
+                                                                    st.write("### Spearman Rank Correlation Analysis")
+                                                                    st.write("Spearman rank correlation measures the strength and direction of monotonic relationship between two datasets.")
+                                                                    
+                                                                    st.write(f"Performing Spearman correlation analysis on {len(common_cols)} common columns.")
+                                                                    
+                                                                    # Perform Spearman correlation analysis
+                                                                    spearman_results = []
+                                                                    
+                                                                    for col in common_cols:
+                                                                        try:
+                                                                            # Get non-null values from both datasets
+                                                                            test_values = test_data[col].dropna().values
+                                                                            original_values = original_data[col].dropna().values
                                                                             
-                                                                            # Plot original data
-                                                                            ax.hist(original_data[col_name].dropna(), bins=20, alpha=0.5, 
-                                                                                   label='Original', color='blue')
+                                                                            # Get the minimum length of both arrays
+                                                                            min_len = min(len(test_values), len(original_values))
                                                                             
-                                                                            # Plot test data
-                                                                            ax.hist(test_data[col_name].dropna(), bins=20, alpha=0.5, 
-                                                                                   label='Test Data', color='orange')
+                                                                            if min_len <= 1:
+                                                                                continue
+                                                                                
+                                                                            # Truncate arrays to have the same length
+                                                                            test_values = test_values[:min_len]
+                                                                            original_values = original_values[:min_len]
                                                                             
-                                                                            # Add K-S test result
-                                                                            result = results_df[results_df["Feature"] == col_name].iloc[0]
-                                                                            p_value = result["p-value"]
-                                                                            significance = "Similar" if p_value >= 0.05 else "Different"
+                                                                            # Calculate Spearman correlation
+                                                                            corr, pval = stats.spearmanr(test_values, original_values)
                                                                             
-                                                                            ax.set_title(f'{col_name}\np-value: {p_value:.4f} ({significance})')
-                                                                            ax.set_xlabel(col_name)
-                                                                            ax.set_ylabel('Frequency')
-                                                                            ax.legend()
+                                                                            # Determine correlation strength
+                                                                            if abs(corr) >= 0.7:
+                                                                                strength = "High"
+                                                                            elif abs(corr) >= 0.4:
+                                                                                strength = "Moderate"
+                                                                            else:
+                                                                                strength = "Low"
+                                                                                
+                                                                            # Determine significance
+                                                                            significance = "Not Significant" if pval >= 0.05 else "Significant"
                                                                             
-                                                                            st.pyplot(fig)
+                                                                            spearman_results.append({
+                                                                                "Feature": col,
+                                                                                "Correlation": corr,
+                                                                                "p-value": pval,
+                                                                                "Strength": strength,
+                                                                                "Significance": significance
+                                                                            })
+                                                                        except Exception as e:
+                                                                            st.warning(f"Could not analyze Spearman correlation for column {col}: {str(e)}")
+                                                                    
+                                                                    # Display results
+                                                                    if spearman_results:
+                                                                        spearman_df = pd.DataFrame(spearman_results)
+                                                                        
+                                                                        # Apply style
+                                                                        styled_spearman_df = spearman_df.style.applymap(
+                                                                            highlight_significance, subset=['Strength']
+                                                                        ).applymap(
+                                                                            highlight_significance, subset=['Significance']
+                                                                        )
+                                                                        
+                                                                        st.dataframe(styled_spearman_df)
+                                                                        
+                                                                        # Display summary statistics
+                                                                        high_corr_count = (spearman_df["Strength"] == "High").sum()
+                                                                        significant_count = (spearman_df["Significance"] == "Not Significant").sum()
+                                                                        total_count = len(spearman_df)
+                                                                        
+                                                                        high_percent = (high_corr_count / total_count) * 100 if total_count > 0 else 0
+                                                                        not_sig_percent = (significant_count / total_count) * 100 if total_count > 0 else 0
+                                                                        
+                                                                        st.write(f"**Summary:**")
+                                                                        st.write(f"- {high_corr_count} out of {total_count} features ({high_percent:.1f}%) have high correlation.")
+                                                                        st.write(f"- {significant_count} out of {total_count} features ({not_sig_percent:.1f}%) show no significant difference.")
+                                                                        
+                                                                        # Create visualization for correlation strengths
+                                                                        st.write("#### Spearman Correlation Visualization")
+                                                                        
+                                                                        fig, ax = plt.subplots(figsize=(10, 6))
+                                                                        bars = ax.bar(spearman_df["Feature"], spearman_df["Correlation"])
+                                                                        
+                                                                        # Add threshold lines
+                                                                        ax.axhline(y=0.7, color='green', linestyle='--', alpha=0.7)
+                                                                        ax.axhline(y=-0.7, color='green', linestyle='--', alpha=0.7)
+                                                                        ax.axhline(y=0.4, color='blue', linestyle='--', alpha=0.7)
+                                                                        ax.axhline(y=-0.4, color='blue', linestyle='--', alpha=0.7)
+                                                                        ax.axhline(y=0, color='gray', linestyle='-', alpha=0.5)
+                                                                        
+                                                                        # Add threshold labels
+                                                                        ax.text(0, 0.72, 'High correlation (0.7)', color='green')
+                                                                        ax.text(0, 0.42, 'Moderate correlation (0.4)', color='blue')
+                                                                        
+                                                                        # Color bars based on correlation strength
+                                                                        for i, (corr, strength) in enumerate(zip(spearman_df["Correlation"], spearman_df["Strength"])):
+                                                                            if strength == "High":
+                                                                                bars[i].set_color('green')
+                                                                            elif strength == "Moderate":
+                                                                                bars[i].set_color('blue')
+                                                                            else:
+                                                                                bars[i].set_color('orange')
+                                                                        
+                                                                        ax.set_title('Spearman Rank Correlation Between Test and Original Data')
+                                                                        ax.set_ylabel('Correlation Coefficient')
+                                                                        ax.set_xlabel('Feature')
+                                                                        ax.set_ylim(-1.1, 1.1)
+                                                                        plt.xticks(rotation=45, ha='right')
+                                                                        plt.tight_layout()
+                                                                        st.pyplot(fig)
+                                                                        
+                                                                        # Display scatter plots for each feature
+                                                                        st.write("#### Feature Correlation Scatter Plots")
+                                                                        st.write("Scatter plots showing the relationship between test data and original data:")
+                                                                        
+                                                                        # Allow user to select which features to plot
+                                                                        selected_features = st.multiselect(
+                                                                            "Select features to plot:", 
+                                                                            options=spearman_df["Feature"].tolist(),
+                                                                            default=spearman_df["Feature"].tolist()[:min(4, len(spearman_df))]
+                                                                        )
+                                                                        
+                                                                        if selected_features:
+                                                                            cols_per_row = 2
+                                                                            for i in range(0, len(selected_features), cols_per_row):
+                                                                                features_chunk = selected_features[i:i+cols_per_row]
+                                                                                cols = st.columns(len(features_chunk))
+                                                                                
+                                                                                for j, feature in enumerate(features_chunk):
+                                                                                    with cols[j]:
+                                                                                        # Get feature data
+                                                                                        feature_result = spearman_df[spearman_df["Feature"] == feature].iloc[0]
+                                                                                        corr = feature_result["Correlation"]
+                                                                                        pval = feature_result["p-value"]
+                                                                                        strength = feature_result["Strength"]
+                                                                                        
+                                                                                        # Get non-null values for both datasets
+                                                                                        test_values = test_data[feature].dropna()
+                                                                                        original_values = original_data[feature].dropna()
+                                                                                        
+                                                                                        # Get common indices
+                                                                                        common_indices = test_values.index.intersection(original_values.index)
+                                                                                        
+                                                                                        # Create scatter plot
+                                                                                        fig, ax = plt.subplots(figsize=(8, 8))
+                                                                                        ax.scatter(test_values.loc[common_indices], original_values.loc[common_indices], alpha=0.7)
+                                                                                        
+                                                                                        # Add perfect correlation line
+                                                                                        min_val = min(test_values.min(), original_values.min())
+                                                                                        max_val = max(test_values.max(), original_values.max())
+                                                                                        ax.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.5)
+                                                                                        
+                                                                                        ax.set_title(f'{feature}\nCorrelation: {corr:.4f} ({strength}, p={pval:.4f})')
+                                                                                        ax.set_xlabel('Test Data')
+                                                                                        ax.set_ylabel('Original Data')
+                                                                                        plt.tight_layout()
+                                                                                        st.pyplot(fig)
+                                                                    else:
+                                                                        st.warning("No Spearman correlation results were calculated. Check if your data has sufficient non-null values.")
+                                                                
+                                                                #################################
+                                                                # 3. PERMUTATION TESTS TAB
+                                                                #################################
+                                                                with test_tabs[2]:
+                                                                    st.write("### Permutation Tests")
+                                                                    st.write("Permutation tests assess if two samples come from the same distribution by randomly permuting the combined data.")
+                                                                    
+                                                                    # Allow user to select features for permutation testing
+                                                                    perm_features = st.multiselect(
+                                                                        "Select features for permutation testing:", 
+                                                                        options=common_cols,
+                                                                        default=common_cols[:min(3, len(common_cols))]
+                                                                    )
+                                                                    
+                                                                    # Set number of permutations
+                                                                    num_permutations = st.slider(
+                                                                        "Number of permutations:", 
+                                                                        min_value=100,
+                                                                        max_value=10000,
+                                                                        value=1000,
+                                                                        step=100
+                                                                    )
+                                                                    
+                                                                    # Select test statistic
+                                                                    test_statistic = st.selectbox(
+                                                                        "Select test statistic:",
+                                                                        options=["Mean Difference", "Median Difference", "KS Statistic"],
+                                                                        index=0
+                                                                    )
+                                                                    
+                                                                    # Run permutation tests if features were selected
+                                                                    if perm_features and st.button("Run Permutation Tests"):
+                                                                        # Initialize results
+                                                                        permutation_results = []
+                                                                        
+                                                                        # Run tests for each selected feature
+                                                                        with st.spinner(f"Running {num_permutations} permutation tests for each feature..."):
+                                                                            import numpy as np
+                                                                            
+                                                                            for feature in perm_features:
+                                                                                try:
+                                                                                    # Get non-null values for both datasets
+                                                                                    test_values = test_data[feature].dropna().values
+                                                                                    original_values = original_data[feature].dropna().values
+                                                                                    
+                                                                                    # Skip if either dataset is empty
+                                                                                    if len(test_values) == 0 or len(original_values) == 0:
+                                                                                        st.warning(f"Skipping feature {feature} - insufficient data")
+                                                                                        continue
+                                                                                    
+                                                                                    # Calculate observed test statistic
+                                                                                    if test_statistic == "Mean Difference":
+                                                                                        obs_stat = np.abs(np.mean(test_values) - np.mean(original_values))
+                                                                                    elif test_statistic == "Median Difference":
+                                                                                        obs_stat = np.abs(np.median(test_values) - np.median(original_values))
+                                                                                    else:  # KS Statistic
+                                                                                        obs_stat, _ = stats.ks_2samp(test_values, original_values)
+                                                                                    
+                                                                                    # Combine data for permutation
+                                                                                    pooled = np.concatenate([test_values, original_values])
+                                                                                    n1 = len(test_values)
+                                                                                    n2 = len(original_values)
+                                                                                    n = n1 + n2
+                                                                                    
+                                                                                    # Run permutation test
+                                                                                    perm_stats = []
+                                                                                    for _ in range(num_permutations):
+                                                                                        # Shuffle the pooled data
+                                                                                        np.random.shuffle(pooled)
+                                                                                        
+                                                                                        # Split into two groups
+                                                                                        perm_group1 = pooled[:n1]
+                                                                                        perm_group2 = pooled[n1:]
+                                                                                        
+                                                                                        # Calculate test statistic
+                                                                                        if test_statistic == "Mean Difference":
+                                                                                            perm_stat = np.abs(np.mean(perm_group1) - np.mean(perm_group2))
+                                                                                        elif test_statistic == "Median Difference":
+                                                                                            perm_stat = np.abs(np.median(perm_group1) - np.median(perm_group2))
+                                                                                        else:  # KS Statistic
+                                                                                            perm_stat, _ = stats.ks_2samp(perm_group1, perm_group2)
+                                                                                        
+                                                                                        perm_stats.append(perm_stat)
+                                                                                    
+                                                                                    # Calculate p-value
+                                                                                    perm_stats = np.array(perm_stats)
+                                                                                    p_value = np.mean(perm_stats >= obs_stat)
+                                                                                    
+                                                                                    # Determine significance
+                                                                                    significance = "Not Significant" if p_value >= 0.05 else "Significant"
+                                                                                    
+                                                                                    # Add to results
+                                                                                    permutation_results.append({
+                                                                                        "Feature": feature,
+                                                                                        "Observed Statistic": obs_stat,
+                                                                                        "p-value": p_value,
+                                                                                        "Significance": significance,
+                                                                                        "Permutation Stats": perm_stats
+                                                                                    })
+                                                                                    
+                                                                                except Exception as e:
+                                                                                    st.error(f"Error running permutation test for {feature}: {str(e)}")
+                                                                        
+                                                                        # Display results
+                                                                        if permutation_results:
+                                                                            # Create dataframe (excluding the permutation stats column)
+                                                                            results_for_display = [{k: v for k, v in result.items() if k != "Permutation Stats"} 
+                                                                                                 for result in permutation_results]
+                                                                            perm_df = pd.DataFrame(results_for_display)
+                                                                            
+                                                                            # Apply styling
+                                                                            styled_perm_df = perm_df.style.applymap(
+                                                                                highlight_significance, subset=['Significance']
+                                                                            )
+                                                                            
+                                                                            st.dataframe(styled_perm_df)
+                                                                            
+                                                                            # Display summary
+                                                                            not_sig_count = (perm_df["Significance"] == "Not Significant").sum()
+                                                                            total_count = len(perm_df)
+                                                                            not_sig_percent = (not_sig_count / total_count) * 100 if total_count > 0 else 0
+                                                                            
+                                                                            st.write(f"**Summary:** {not_sig_count} out of {total_count} features ({not_sig_percent:.1f}%) show no significant difference.")
+                                                                            
+                                                                            if not_sig_percent >= 80:
+                                                                                st.success("The permutation tests strongly suggest that the datasets come from the same distribution.")
+                                                                            elif not_sig_percent >= 50:
+                                                                                st.info("The permutation tests suggest moderate similarity between the datasets.")
+                                                                            else:
+                                                                                st.warning("The permutation tests indicate significant differences between the datasets.")
+                                                                            
+                                                                            # Create histograms of permutation distributions
+                                                                            st.write("#### Permutation Test Distributions")
+                                                                            
+                                                                            for result in permutation_results:
+                                                                                feature = result["Feature"]
+                                                                                obs_stat = result["Observed Statistic"]
+                                                                                p_value = result["p-value"]
+                                                                                perm_stats = result["Permutation Stats"]
+                                                                                significance = result["Significance"]
+                                                                                
+                                                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                                                
+                                                                                # Plot histogram of permutation statistics
+                                                                                ax.hist(perm_stats, bins=30, alpha=0.7, color='blue')
+                                                                                
+                                                                                # Add vertical line for observed statistic
+                                                                                ax.axvline(x=obs_stat, color='red', linestyle='--', linewidth=2)
+                                                                                
+                                                                                # Add text annotation
+                                                                                ax.text(
+                                                                                    0.98, 0.95, 
+                                                                                    f"Observed: {obs_stat:.4f}\np-value: {p_value:.4f}\n{significance}", 
+                                                                                    transform=ax.transAxes, 
+                                                                                    horizontalalignment='right',
+                                                                                    verticalalignment='top',
+                                                                                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8)
+                                                                                )
+                                                                                
+                                                                                ax.set_title(f'Permutation Test for {feature} using {test_statistic}')
+                                                                                ax.set_xlabel(test_statistic)
+                                                                                ax.set_ylabel('Frequency')
+                                                                                plt.tight_layout()
+                                                                                st.pyplot(fig)
+                                                                        else:
+                                                                            st.warning("No permutation test results were generated. Please check if your data is suitable for this test.")
+                                                                    elif not perm_features:
+                                                                        st.info("Select at least one feature for permutation testing.")
+                                                                    else:
+                                                                        st.info("Click 'Run Permutation Tests' to start the analysis.")
+                                                        except Exception as e:
+                                                            st.error(f"Error performing distribution tests: {str(e)}")
+                                                            st.code(traceback.format_exc())
                                                         except Exception as e:
                                                             st.error(f"Error performing distribution tests: {str(e)}")
                                                             st.code(traceback.format_exc())

@@ -3836,7 +3836,7 @@ with main_container:
                             with st.spinner("Analyzing data with the trained CGAN model..."):
                                 # Set up for analysis
                                 noise_samples = st.slider("Number of synthetic samples per condition:", 
-                                                        min_value=50, max_value=1000, value=200, step=50)
+                                                        min_value=100, max_value=1000, value=200, step=50)
                                 
                                 # Use custom condition values if selected earlier
                                 custom_conditions = None
@@ -4154,6 +4154,17 @@ with main_container:
                                                             st.write("##### Quality Assessment & Recommendations")
                                                             st.info(f"**Quality Assessment:** {score_quality}")
                                                             st.info(f"**Recommendation:** {recommendation}")
+                                                            
+                                                            # Check if quality is Good or Excellent to pass to Distribution Testing
+                                                            if score_quality in ['Good', 'Excellent']:
+                                                                st.success(f"Dataset quality is {score_quality}. This dataset will be passed to Distribution Testing.")
+                                                                # Save this dataset for Distribution Testing
+                                                                st.session_state.distribution_testing_dataset = {
+                                                                    'data': cgan_analysis_data,
+                                                                    'name': data_source_label,
+                                                                    'quality': score_quality,
+                                                                    'discriminator_score': discriminator_results['interpolated_mean_score']
+                                                                }
                                                         
                                                         # Save discriminator results to session state
                                                         if 'cgan_results' in st.session_state and isinstance(st.session_state.cgan_results, dict):
@@ -4294,6 +4305,154 @@ with main_container:
                                                     # Calculate correlation matrices
                                                     cols_to_compare = st.session_state.cgan_results['target_cols'] + st.session_state.cgan_results['condition_cols']
                                                     cols_to_compare = list(set(cols_to_compare))  # Remove duplicates
+                                                    
+                                                # Add Distribution Testing module
+                                                if 'distribution_testing_dataset' in st.session_state:
+                                                    st.header("Distribution Testing Module")
+                                                    st.write("This module performs Kolmogorov-Smirnov (K-S) tests between the selected dataset and the original data.")
+                                                    
+                                                    dataset = st.session_state.distribution_testing_dataset
+                                                    
+                                                    st.info(f"Using dataset: {dataset['name']} (Quality: {dataset['quality']}, Discriminator Score: {dataset['discriminator_score']:.4f})")
+                                                    
+                                                    if 'original_data' not in st.session_state or st.session_state.original_data is None:
+                                                        st.warning("Original data is required for distribution testing. Please upload or select original data first.")
+                                                    else:
+                                                        try:
+                                                            # Analyze all columns except index
+                                                            test_data = dataset['data']
+                                                            original_data = st.session_state.original_data
+                                                            
+                                                            # Get common columns
+                                                            common_cols = [col for col in test_data.columns if col in original_data.columns]
+                                                            if not common_cols:
+                                                                st.error("No common columns found between the test dataset and original data.")
+                                                            else:
+                                                                st.write(f"Performing K-S tests on {len(common_cols)} common columns.")
+                                                                
+                                                                # Perform K-S tests
+                                                                from scipy import stats
+                                                                ks_results = []
+                                                                
+                                                                for col in common_cols:
+                                                                    try:
+                                                                        stat, pval = stats.ks_2samp(
+                                                                            test_data[col].dropna(),
+                                                                            original_data[col].dropna()
+                                                                        )
+                                                                        significance = "Similar" if pval >= 0.05 else "Different"
+                                                                        ks_results.append({
+                                                                            "Feature": col,
+                                                                            "Statistic": stat,
+                                                                            "p-value": pval,
+                                                                            "Distribution": significance
+                                                                        })
+                                                                    except Exception as e:
+                                                                        st.warning(f"Could not test column {col}: {str(e)}")
+                                                                
+                                                                # Display results
+                                                                results_df = pd.DataFrame(ks_results)
+                                                                
+                                                                # Define style function
+                                                                def highlight_significance(val):
+                                                                    if val == "Similar":
+                                                                        return 'background-color: #90EE90'  # light green
+                                                                    else:
+                                                                        return 'background-color: #FFC0CB'  # light red
+                                                                
+                                                                # Apply style
+                                                                styled_df = results_df.style.applymap(
+                                                                    highlight_significance, subset=['Distribution']
+                                                                )
+                                                                
+                                                                st.dataframe(styled_df)
+                                                                
+                                                                # Display summary statistics
+                                                                similar_count = (results_df["Distribution"] == "Similar").sum()
+                                                                total_count = len(results_df)
+                                                                similar_percent = (similar_count / total_count) * 100 if total_count > 0 else 0
+                                                                
+                                                                st.write(f"**Summary:** {similar_count} out of {total_count} features ({similar_percent:.1f}%) have similar distributions.")
+                                                                
+                                                                if similar_percent >= 80:
+                                                                    st.success("The dataset distributions are highly similar to the original data.")
+                                                                elif similar_percent >= 50:
+                                                                    st.info("The dataset distributions are moderately similar to the original data.")
+                                                                else:
+                                                                    st.warning("The dataset distributions show significant differences from the original data.")
+                                                                
+                                                                # Create visualization
+                                                                st.write("#### K-S Test Results Visualization")
+                                                                
+                                                                fig, ax = plt.subplots(figsize=(10, 6))
+                                                                bars = ax.bar(results_df["Feature"], results_df["p-value"])
+                                                                
+                                                                # Add threshold line
+                                                                ax.axhline(y=0.05, color='red', linestyle='--', alpha=0.7)
+                                                                ax.text(0, 0.06, 'p=0.05 threshold', color='red')
+                                                                
+                                                                # Color bars based on significance
+                                                                for i, p in enumerate(results_df["p-value"]):
+                                                                    if p >= 0.05:
+                                                                        bars[i].set_color('green')
+                                                                    else:
+                                                                        bars[i].set_color('red')
+                                                                
+                                                                ax.set_title('Distribution Similarity Between Test and Original Data (K-S Test p-values)')
+                                                                ax.set_ylabel('p-value')
+                                                                ax.set_xlabel('Feature')
+                                                                plt.xticks(rotation=45, ha='right')
+                                                                plt.tight_layout()
+                                                                st.pyplot(fig)
+                                                                
+                                                                # Display distribution comparisons
+                                                                st.write("#### Feature Distribution Comparisons")
+                                                                st.write("Visual comparisons of distributions between test data and original data:")
+                                                                
+                                                                # Allow user to select columns
+                                                                select_all = st.checkbox("Select all columns for comparison", value=True)
+                                                                
+                                                                if select_all:
+                                                                    selected_cols = common_cols
+                                                                else:
+                                                                    selected_cols = st.multiselect(
+                                                                        "Select columns to compare:",
+                                                                        options=common_cols,
+                                                                        default=common_cols[:min(5, len(common_cols))]
+                                                                    )
+                                                                
+                                                                # Create comparison plots
+                                                                cols_per_row = 2
+                                                                for i in range(0, len(selected_cols), cols_per_row):
+                                                                    cols_chunk = selected_cols[i:i+cols_per_row]
+                                                                    cols = st.columns(len(cols_chunk))
+                                                                    
+                                                                    for j, col_name in enumerate(cols_chunk):
+                                                                        with cols[j]:
+                                                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                                                            
+                                                                            # Plot original data
+                                                                            ax.hist(original_data[col_name].dropna(), bins=20, alpha=0.5, 
+                                                                                   label='Original', color='blue')
+                                                                            
+                                                                            # Plot test data
+                                                                            ax.hist(test_data[col_name].dropna(), bins=20, alpha=0.5, 
+                                                                                   label='Test Data', color='orange')
+                                                                            
+                                                                            # Add K-S test result
+                                                                            result = results_df[results_df["Feature"] == col_name].iloc[0]
+                                                                            p_value = result["p-value"]
+                                                                            significance = "Similar" if p_value >= 0.05 else "Different"
+                                                                            
+                                                                            ax.set_title(f'{col_name}\np-value: {p_value:.4f} ({significance})')
+                                                                            ax.set_xlabel(col_name)
+                                                                            ax.set_ylabel('Frequency')
+                                                                            ax.legend()
+                                                                            
+                                                                            st.pyplot(fig)
+                                                        except Exception as e:
+                                                            st.error(f"Error performing distribution tests: {str(e)}")
+                                                            st.code(traceback.format_exc())
                                                     
                                                     # Ensure all columns are available in both datasets
                                                     cols_to_compare = [col for col in cols_to_compare if col in eval_data.columns and col in cgan_results.columns]

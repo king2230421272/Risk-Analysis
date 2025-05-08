@@ -5650,37 +5650,69 @@ with main_container:
                                     # Check the test results to determine if data is suitable for prediction
                                     # For simplicity, we'll use a threshold of 50% similar for all tests
                                     ks_good = similar_percent >= 50 if 'similar_percent' in locals() else False
-                                    spearman_good = good_percent >= 50 if 'good_percent' in locals() else False 
-                                    perm_good = not_sig_percent >= 50 if 'not_sig_percent' in locals() else False
+                                    # Calculate test quality metrics - we'll use consistent names
+                                    spearman_good = similar_corr_percent >= 50 if 'similar_corr_percent' in locals() else False
+                                    perm_good = not_significant_percent >= 50 if 'not_significant_percent' in locals() else False
                                     
-                                    all_tests_good = ks_good and spearman_good and perm_good
+                                    # Overall assessment
+                                    overall_good = (ks_good and spearman_good and perm_good)
                                     
-                                    if all_tests_good:
-                                        st.success("All distribution tests show good results. Data can be forwarded to the Prediction module.")
+                                    # Display assessment
+                                    st.write("### Distribution Similarity Assessment")
+                                    
+                                    metrics_col1, metrics_col2, metrics_col3 = st.columns(3)
+                                    
+                                    with metrics_col1:
+                                        st.metric(
+                                            "K-S Test", 
+                                            f"{similar_percent:.1f}% Similar" if 'similar_percent' in locals() else "Not Run",
+                                            delta="Good" if ks_good else "Poor",
+                                            delta_color="normal" if ks_good else "inverse"
+                                        )
+                                    
+                                    with metrics_col2:
+                                        st.metric(
+                                            "Spearman Correlation", 
+                                            f"{similar_corr_percent:.1f}% High/Moderate" if 'similar_corr_percent' in locals() else "Not Run",
+                                            delta="Good" if spearman_good else "Poor",
+                                            delta_color="normal" if spearman_good else "inverse"
+                                        )
+                                    
+                                    with metrics_col3:
+                                        st.metric(
+                                            "Permutation Test", 
+                                            f"{not_significant_percent:.1f}% Not Significant" if 'not_significant_percent' in locals() else "Not Run",
+                                            delta="Good" if perm_good else "Poor",
+                                            delta_color="normal" if perm_good else "inverse"
+                                        )
+                                    
+                                    if overall_good:
+                                        st.success("✅ The test dataset shows high similarity to the original dataset and is suitable for prediction modeling!")
                                     else:
-                                        st.warning("Some distribution tests show poor results. Consider improving data quality before prediction.")
+                                        st.warning("⚠️ The test dataset shows some differences from the original dataset. Prediction results may be less reliable.")
                                     
-                                    # Add forward button with conditional color
-                                    forward_col1, forward_col2 = st.columns([3, 1])
-                                    with forward_col1:
-                                        st.write("Click the button to forward the current test dataset to the Prediction module.")
-                                    
-                                    with forward_col2:
-                                        forward_to_prediction = st.button("Forward to Prediction")
+                                    # Forward button
+                                    forward_to_prediction = st.button("Forward to Prediction Module", key="forward_to_prediction")
                                     
                                     if forward_to_prediction:
-                                        # Save the test dataset to session state for use in prediction
-                                        st.session_state.prediction_data = test_data.copy()
-                                        # Save the original dataset as reference data
-                                        st.session_state.prediction_reference = original_data.copy()
-                                        # Set a flag to indicate data is available for prediction
+                                        # Set session state variables for the prediction module
                                         st.session_state.prediction_data_available = True
+                                        st.session_state.prediction_data = test_data.copy()
+                                        st.session_state.prediction_reference = original_data.copy()
                                         
-                                        # Show confirmation
-                                        st.success("Data successfully forwarded to the Prediction module.")
+                                        st.success("✅ Data has been forwarded to the Prediction module! You can now go to the Prediction tab to build predictive models.")
                                         
-                                        # Suggest next steps
-                                        st.info("Go to the 'Prediction' tab to train models and generate forecasts.")
+                                        # Add guidance on what to do next
+                                        st.info("""
+                                        ### Next Steps:
+                                        1. Go to the **Prediction** tab (tab 3)
+                                        2. Review the data that's been forwarded
+                                        3. Select a target column to predict
+                                        4. Choose a machine learning model 
+                                        5. Configure model parameters and train your model
+                                        """)
+                                    
+
                     
                     # 5. OUTLIER DETECTION TAB
                     with advanced_options[4]:

@@ -1431,36 +1431,50 @@ with main_container:
                                         
                                         # Add option to save interpolated result to database
                                         st.write("#### Save Interpolated Result to Database")
-                                        if st.checkbox("Save this MCMC interpolation result to database", value=False, key="save_mcmc_to_db_checkbox"):
-                                            save_name = st.text_input(
-                                                "Dataset name:",
-                                                value=f"MCMC_Interpolated_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
-                                                key="mcmc_save_name"
-                                            )
+                                        save_to_db = st.checkbox("Save this MCMC interpolation result to database", value=False, key="save_mcmc_to_db_checkbox")
+                                        
+                                        if save_to_db:
+                                            save_col1, save_col2 = st.columns(2)
                                             
-                                            save_desc = st.text_area(
-                                                "Description (optional):",
-                                                value=f"MCMC interpolated dataset generated with {num_samples} samples and {chains} chains.",
-                                                key="mcmc_save_desc"
-                                            )
+                                            with save_col1:
+                                                save_name = st.text_input(
+                                                    "Dataset name:",
+                                                    value=f"MCMC_Interpolated_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
+                                                    key="mcmc_save_name"
+                                                )
+                                            
+                                            with save_col2:
+                                                save_desc = st.text_input(
+                                                    "Description:",
+                                                    value=f"MCMC interpolated dataset with {num_samples} samples, {chains} chains",
+                                                    key="mcmc_save_desc"
+                                                )
                                             
                                             if st.button("Save to Database", key="save_mcmc_to_db_btn"):
-                                                try:
-                                                    # Save to database
-                                                    result = db_handler.save_dataset(
-                                                        st.session_state.interpolated_data,
-                                                        name=save_name,
-                                                        description=save_desc,
-                                                        data_type="mcmc_interpolated"
-                                                    )
+                                                if 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None:
+                                                    try:
+                                                        # Import database handler if not already imported
+                                                        from utils.database import DatabaseHandler
+                                                        db_handler = DatabaseHandler()
+                                                        
+                                                        # Save to database
+                                                        result = db_handler.save_dataset(
+                                                            st.session_state.interpolated_data,
+                                                            name=save_name,
+                                                            description=save_desc,
+                                                            data_type="mcmc_interpolated"
+                                                        )
+                                                        
+                                                        if result:
+                                                            st.success(f"Successfully saved '{save_name}' to database with ID: {result}")
+                                                        else:
+                                                            st.error("Failed to save dataset to database")
                                                     
-                                                    if result:
-                                                        st.success(f"Successfully saved '{save_name}' to database with ID: {result}")
-                                                    else:
-                                                        st.error("Failed to save dataset to database")
-                                                
-                                                except Exception as e:
-                                                    st.error(f"Error saving to database: {e}")
+                                                    except Exception as e:
+                                                        st.error(f"Error saving to database: {e}")
+                                                        st.exception(e)
+                                                else:
+                                                    st.error("No interpolated data available to save")
                                         
                                         # Add download button for interpolated data
                                         try:
@@ -1557,6 +1571,10 @@ with main_container:
                             # If loading from database
                             if data_source == "Load From Database":
                                 try:
+                                    # Import database handler if not already imported
+                                    from utils.database import DatabaseHandler
+                                    db_handler = DatabaseHandler()
+                                    
                                     # Get datasets with mcmc_interpolated type
                                     mcmc_datasets = db_handler.list_datasets(data_type="mcmc_interpolated")
                                     
@@ -1594,9 +1612,11 @@ with main_container:
                                                 
                                             except Exception as e:
                                                 st.error(f"Error loading dataset: {e}")
+                                                st.exception(e)
                                 
                                 except Exception as e:
                                     st.error(f"Error accessing database: {e}")
+                                    st.exception(e)
                             
                             # Add multiple interpolation analysis section
                             st.subheader("Multiple Interpolation Analysis")

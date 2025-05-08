@@ -1429,14 +1429,14 @@ with main_container:
                                         # The user will need to select it manually from the dataset selection dropdown
                                         st.success("Interpolated data updated successfully.")
                                         
-                                        # Add option to save interpolated result to database
-                                        st.write("#### Save Interpolated Result to Database")
+                                        # Add option to save interpolated results to database
+                                        st.write("#### Save Interpolated Results to Database")
                                         
                                         save_col1, save_col2 = st.columns(2)
                                         
                                         with save_col1:
-                                            save_name = st.text_input(
-                                                "Dataset name:",
+                                            save_name_base = st.text_input(
+                                                "Dataset name base:",
                                                 value=f"MCMC_Interpolated_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
                                                 key="mcmc_save_name"
                                             )
@@ -1448,31 +1448,62 @@ with main_container:
                                                 key="mcmc_save_desc"
                                             )
                                         
-                                        if st.button("Save Interpolated Result to Database", key="save_mcmc_to_db_btn"):
+                                        # Determine which datasets to save
+                                        if generate_multiple and 'convergence_datasets' in st.session_state and len(st.session_state.convergence_datasets) > 0:
+                                            datasets_to_save = st.radio(
+                                                "Select datasets to save:",
+                                                ["Save current dataset only", "Save all generated datasets"],
+                                                index=1,  # Default to saving all
+                                                key="mcmc_save_option"
+                                            )
+                                        else:
+                                            datasets_to_save = "Save current dataset only"
+                                        
+                                        if st.button("Save to Database", key="save_mcmc_to_db_btn"):
+                                            try:
+                                                # Import database handler if not already imported
+                                                from utils.database import DatabaseHandler
+                                                db_handler = DatabaseHandler()
+                                                saved_ids = []
+                                                
+                                                # Save current dataset
                                                 if 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None:
-                                                    try:
-                                                        # Import database handler if not already imported
-                                                        from utils.database import DatabaseHandler
-                                                        db_handler = DatabaseHandler()
-                                                        
-                                                        # Save to database
-                                                        result = db_handler.save_dataset(
-                                                            st.session_state.interpolated_data,
-                                                            name=save_name,
-                                                            description=save_desc,
-                                                            data_type="mcmc_interpolated"
-                                                        )
-                                                        
-                                                        if result:
-                                                            st.success(f"Successfully saved '{save_name}' to database with ID: {result}")
-                                                        else:
-                                                            st.error("Failed to save dataset to database")
+                                                    # Save current dataset
+                                                    current_result = db_handler.save_dataset(
+                                                        st.session_state.interpolated_data,
+                                                        name=save_name_base if datasets_to_save == "Save current dataset only" else f"{save_name_base}_main",
+                                                        description=save_desc,
+                                                        data_type="mcmc_interpolated"
+                                                    )
+                                                    if current_result:
+                                                        saved_ids.append(current_result)
                                                     
-                                                    except Exception as e:
-                                                        st.error(f"Error saving to database: {e}")
-                                                        st.exception(e)
+                                                    # Save all generated datasets if requested
+                                                    if datasets_to_save == "Save all generated datasets" and 'convergence_datasets' in st.session_state:
+                                                        for i, dataset_info in enumerate(st.session_state.convergence_datasets):
+                                                            dataset_name = f"{save_name_base}_{i+1}"
+                                                            result = db_handler.save_dataset(
+                                                                dataset_info['data'],
+                                                                name=dataset_name,
+                                                                description=f"{save_desc} (dataset {i+1})",
+                                                                data_type="mcmc_interpolated"
+                                                            )
+                                                            if result:
+                                                                saved_ids.append(result)
+                                                    
+                                                    if saved_ids:
+                                                        if len(saved_ids) == 1:
+                                                            st.success(f"Successfully saved dataset to database with ID: {saved_ids[0]}")
+                                                        else:
+                                                            st.success(f"Successfully saved {len(saved_ids)} datasets to database with IDs: {', '.join(map(str, saved_ids))}")
+                                                    else:
+                                                        st.error("Failed to save datasets to database")
                                                 else:
                                                     st.error("No interpolated data available to save")
+                                                    
+                                            except Exception as e:
+                                                st.error(f"Error saving to database: {e}")
+                                                st.exception(e)
                                         
                                         # Add download button for interpolated data
                                         try:
@@ -3485,40 +3516,117 @@ with main_container:
                         with col2:
                             st.write("**Evaluation Data Source**")
                             
-                            # Set default evaluation data based on available sources, prioritizing data from Convergence Diagnostics
-                            eval_data_options = []
-                            if 'cgan_analysis_data' in st.session_state and st.session_state.cgan_analysis_data is not None:
-                                eval_data_options.append("Convergence Diagnostics Data")
-                            if 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None:
-                                eval_data_options.append("Interpolated Data")
-                            if 'original_data' in st.session_state and st.session_state.original_data is not None:
-                                eval_data_options.append("Original Data")
+                            # Data source types
+                            data_source_type = st.radio(
+                                "Choose data source type:",
+                                ["Session Data", "Database Data"],
+                                key="cgan_eval_data_source_type"
+                            )
                             
-                            # Default to Convergence Diagnostics data if available
-                            default_option = eval_data_options[0] if eval_data_options else None
+                            if data_source_type == "Session Data":
+                                # Set default evaluation data based on available sources, prioritizing data from Convergence Diagnostics
+                                eval_data_options = []
+                                if 'cgan_analysis_data' in st.session_state and st.session_state.cgan_analysis_data is not None:
+                                    eval_data_options.append("Convergence Diagnostics Data")
+                                if 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None:
+                                    eval_data_options.append("Interpolated Data")
+                                if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                                    eval_data_options.append("Original Data")
+                                
+                                # Default to Convergence Diagnostics data if available
+                                default_option = eval_data_options[0] if eval_data_options else None
+                                
+                                if eval_data_options:
+                                    eval_data_source = st.radio(
+                                        "Select data for evaluating the trained model:",
+                                        options=eval_data_options,
+                                        index=0
+                                    )
+                                    
+                                    # Get the selected evaluation data
+                                    if eval_data_source == "Convergence Diagnostics Data":
+                                        eval_data = st.session_state.cgan_analysis_data
+                                        st.success("✓ Using Convergence Diagnostics Data for evaluation")
+                                    elif eval_data_source == "Interpolated Data":
+                                        eval_data = st.session_state.interpolated_data
+                                        st.success("✓ Using Interpolated Data for evaluation")
+                                    else:  # Original Data
+                                        eval_data = st.session_state.original_data
+                                        st.success("✓ Using Original Data for evaluation")
+                                else:
+                                    st.warning("No data available in the current session. Please import or generate data first, or select 'Database Data'.")
+                                    eval_data = None
+                            else:  # Database Data
+                                try:
+                                    # Import database handler
+                                    from utils.database import DatabaseHandler
+                                    db_handler = DatabaseHandler()
+                                    
+                                    # Get all available datasets from database
+                                    all_datasets = db_handler.list_datasets()
+                                    
+                                    if not all_datasets:
+                                        st.warning("No datasets found in the database.")
+                                        eval_data = None
+                                    else:
+                                        # Create options for dataset selection
+                                        dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']} rows, created {ds['created_at'].strftime('%Y-%m-%d %H:%M')}") for ds in all_datasets]
+                                        
+                                        # Create columns for database dataset selection
+                                        db_col1, db_col2 = st.columns(2)
+                                        
+                                        with db_col1:
+                                            data_type_filter = st.multiselect(
+                                                "Filter by data type:",
+                                                options=list(set(ds['data_type'] for ds in all_datasets)),
+                                                default=["mcmc_interpolated"]
+                                            )
+                                        
+                                        # Filter datasets by selected data types
+                                        if data_type_filter:
+                                            filtered_datasets = [ds for ds in all_datasets if ds['data_type'] in data_type_filter]
+                                            dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']} rows, created {ds['created_at'].strftime('%Y-%m-%d %H:%M')}") for ds in filtered_datasets]
+                                        
+                                        # Select dataset
+                                        selected_dataset = st.selectbox(
+                                            "Select dataset from database:",
+                                            options=dataset_options,
+                                            format_func=lambda x: x[1],
+                                            key="cgan_db_dataset_select"
+                                        )
+                                        
+                                        # Load button
+                                        if st.button("Load Selected Dataset for Evaluation", key="cgan_load_db_btn"):
+                                            try:
+                                                # Load dataset
+                                                loaded_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
+                                                
+                                                # Use as evaluation data
+                                                eval_data = loaded_df
+                                                st.success(f"Successfully loaded dataset from database for evaluation!")
+                                                
+                                                # Show preview
+                                                st.write("Preview of loaded dataset:")
+                                                st.dataframe(loaded_df.head())
+                                                
+                                            except Exception as e:
+                                                st.error(f"Error loading dataset: {e}")
+                                                st.exception(e)
+                                                eval_data = None
+                                        else:
+                                            st.info("Click 'Load Selected Dataset for Evaluation' to use this dataset.")
+                                            eval_data = None
+                                            
+                                except Exception as e:
+                                    st.error(f"Error accessing database: {e}")
+                                    st.exception(e)
+                                    eval_data = None
                             
-                            if eval_data_options:
-                                eval_data_source = st.radio(
-                                    "Select data for evaluating the trained model:",
-                                    options=eval_data_options,
-                                    index=0
-                                )
-                                
-                                # Get the selected evaluation data
-                                if eval_data_source == "Convergence Diagnostics Data":
-                                    eval_data = st.session_state.cgan_analysis_data
-                                    st.success("✓ Using Convergence Diagnostics Data for evaluation")
-                                elif eval_data_source == "Interpolated Data":
-                                    eval_data = st.session_state.interpolated_data
-                                    st.success("✓ Using Interpolated Data for evaluation")
-                                else:  # Original Data
-                                    eval_data = st.session_state.original_data
-                                    st.success("✓ Using Original Data for evaluation")
-                                
+                            # Display data shape if available
+                            if eval_data is not None:
                                 st.write(f"Data shape: {eval_data.shape[0]} rows, {eval_data.shape[1]} columns")
                             else:
                                 st.error("❌ No data available for evaluation. Please import or generate data.")
-                                eval_data = None
                         
                         # DATA PREVIEW SECTION
                         if training_data is not None and eval_data is not None:
@@ -6054,7 +6162,7 @@ with main_container:
                 # Model type selection
                 model_type = st.selectbox(
                     "Select prediction model:",
-                    options=["Linear Regression", "Decision Tree", "Random Forest", "Gradient Boosting"],
+                    options=["Linear Regression", "Decision Tree", "Random Forest", "Gradient Boosting", "Neural Network", "LSTM Network"],
                     index=0,
                     key="prediction_model_type"
                 )
@@ -6101,6 +6209,56 @@ with main_container:
                     model_params["learning_rate"] = learning_rate
                     model_params["max_depth"] = max_depth
                 
+                elif model_type == "Neural Network":
+                    st.write("Neural Network Configuration")
+                    
+                    # Architecture parameters
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        hidden_layer_1 = st.slider("First hidden layer size:", min_value=16, max_value=256, value=64, step=16, key="nn_hidden_1")
+                        hidden_layer_2 = st.slider("Second hidden layer size:", min_value=8, max_value=128, value=32, step=8, key="nn_hidden_2")
+                        dropout_rate = st.slider("Dropout rate:", min_value=0.0, max_value=0.5, value=0.2, step=0.05, key="nn_dropout")
+                    
+                    with col2:
+                        learning_rate = st.slider("Learning rate:", min_value=0.0001, max_value=0.01, value=0.001, step=0.0001, format="%.4f", key="nn_learning_rate")
+                        batch_size = st.slider("Batch size:", min_value=8, max_value=128, value=32, step=8, key="nn_batch_size")
+                        epochs = st.slider("Training epochs:", min_value=50, max_value=500, value=100, step=50, key="nn_epochs")
+                        patience = st.slider("Early stopping patience:", min_value=5, max_value=30, value=10, step=5, key="nn_patience")
+                    
+                    # Add parameters to model_params
+                    model_params["hidden_dims"] = [hidden_layer_1, hidden_layer_2]
+                    model_params["learning_rate"] = learning_rate
+                    model_params["batch_size"] = batch_size
+                    model_params["epochs"] = epochs
+                    model_params["dropout_rate"] = dropout_rate
+                    model_params["patience"] = patience
+                
+                elif model_type == "LSTM Network":
+                    st.write("LSTM Network Configuration")
+                    
+                    # Architecture parameters
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        hidden_dim = st.slider("Hidden dimension:", min_value=32, max_value=256, value=64, step=32, key="lstm_hidden_dim")
+                        num_layers = st.slider("Number of LSTM layers:", min_value=1, max_value=4, value=2, step=1, key="lstm_num_layers")
+                        sequence_length = st.slider("Sequence length:", min_value=2, max_value=20, value=5, step=1, key="lstm_seq_length")
+                        dropout_rate = st.slider("Dropout rate:", min_value=0.0, max_value=0.5, value=0.2, step=0.05, key="lstm_dropout")
+                    
+                    with col2:
+                        learning_rate = st.slider("Learning rate:", min_value=0.0001, max_value=0.01, value=0.001, step=0.0001, format="%.4f", key="lstm_learning_rate")
+                        batch_size = st.slider("Batch size:", min_value=8, max_value=128, value=32, step=8, key="lstm_batch_size")
+                        epochs = st.slider("Training epochs:", min_value=50, max_value=500, value=100, step=50, key="lstm_epochs")
+                        patience = st.slider("Early stopping patience:", min_value=5, max_value=30, value=10, step=5, key="lstm_patience")
+                    
+                    # Add parameters to model_params
+                    model_params["hidden_dims"] = [hidden_dim] * num_layers
+                    model_params["learning_rate"] = learning_rate
+                    model_params["batch_size"] = batch_size
+                    model_params["epochs"] = epochs
+                    model_params["dropout_rate"] = dropout_rate
+                    model_params["sequence_length"] = sequence_length
+                    model_params["patience"] = patience
+                
                 # Train model button
                 train_model = st.button("Train Model", key="train_prediction_model")
                 
@@ -6144,8 +6302,45 @@ with main_container:
                                 st.metric("RMSE", f"{metrics['Test RMSE']:.4f}")
                                 st.metric("MAE", f"{metrics['Test MAE']:.4f}")
                             
+                            # Display neural network training history if available
+                            if model_type in ['Neural Network', 'LSTM Network'] and 'neural_network_config' in model_details:
+                                st.subheader("Neural Network Training Details")
+                                
+                                if 'training_history' in model_details:
+                                    history = model_details['training_history']
+                                    
+                                    # Display training metrics
+                                    col1, col2, col3 = st.columns(3)
+                                    col1.metric("Total Epochs", f"{history['total_epochs']}")
+                                    col2.metric("Best Epoch", f"{history['best_epoch'] + 1}")
+                                    col3.metric("Training Time", f"{history['training_time']:.2f} s")
+                                    
+                                    # Plot training history
+                                    st.write("#### Training History")
+                                    fig, ax = plt.subplots(figsize=(10, 6))
+                                    ax.plot(history['train_loss'], label='Training Loss')
+                                    ax.plot(history['val_loss'], label='Validation Loss')
+                                    ax.axvline(x=history['best_epoch'], color='r', linestyle='--', label=f'Best Epoch ({history["best_epoch"]+1})')
+                                    
+                                    ax.set_title(f"Training History - {model_details['neural_network_config']['type']}")
+                                    ax.set_xlabel('Epochs')
+                                    ax.set_ylabel('Loss (MSE)')
+                                    ax.legend()
+                                    ax.grid(True, alpha=0.3)
+                                    
+                                    st.pyplot(fig)
+                                
+                                # Display neural network configuration
+                                st.write("#### Model Architecture")
+                                nn_config = model_details['neural_network_config']
+                                config_df = pd.DataFrame({
+                                    'Parameter': list(nn_config.keys()),
+                                    'Value': [str(v) for v in nn_config.values()]
+                                })
+                                st.dataframe(config_df)
+                            
                             # Display feature importance if available
-                            if 'feature_importance' in model_details:
+                            elif 'feature_importance' in model_details:
                                 st.subheader("Feature Importance")
                                 
                                 # Create DataFrame for feature importance

@@ -1429,6 +1429,39 @@ with main_container:
                                         # The user will need to select it manually from the dataset selection dropdown
                                         st.success("Interpolated data updated successfully.")
                                         
+                                        # Add option to save interpolated result to database
+                                        st.write("#### Save Interpolated Result to Database")
+                                        if st.checkbox("Save this MCMC interpolation result to database", value=False, key="save_mcmc_to_db_checkbox"):
+                                            save_name = st.text_input(
+                                                "Dataset name:",
+                                                value=f"MCMC_Interpolated_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
+                                                key="mcmc_save_name"
+                                            )
+                                            
+                                            save_desc = st.text_area(
+                                                "Description (optional):",
+                                                value=f"MCMC interpolated dataset generated with {num_samples} samples and {chains} chains.",
+                                                key="mcmc_save_desc"
+                                            )
+                                            
+                                            if st.button("Save to Database", key="save_mcmc_to_db_btn"):
+                                                try:
+                                                    # Save to database
+                                                    result = db_handler.save_dataset(
+                                                        st.session_state.interpolated_data,
+                                                        name=save_name,
+                                                        description=save_desc,
+                                                        data_type="mcmc_interpolated"
+                                                    )
+                                                    
+                                                    if result:
+                                                        st.success(f"Successfully saved '{save_name}' to database with ID: {result}")
+                                                    else:
+                                                        st.error("Failed to save dataset to database")
+                                                
+                                                except Exception as e:
+                                                    st.error(f"Error saving to database: {e}")
+                                        
                                         # Add download button for interpolated data
                                         try:
                                             data_bytes = data_handler.export_data(st.session_state.interpolated_data, format='csv')
@@ -1510,6 +1543,60 @@ with main_container:
                                             st.write(f"Created between: {earliest.strftime('%Y-%m-%d %H:%M')} and {latest.strftime('%Y-%m-%d %H:%M')}")
                                 else:
                                     st.write("Single imputed dataset available")
+                            
+                            # Add option to load dataset from database
+                            st.subheader("Data Source for Analysis")
+                            
+                            # Add a selector for data source
+                            data_source = st.radio(
+                                "Choose data source for imputation analysis:",
+                                ["Use Current MCMC Results", "Load From Database"],
+                                key="mia_data_source"
+                            )
+                            
+                            # If loading from database
+                            if data_source == "Load From Database":
+                                try:
+                                    # Get datasets with mcmc_interpolated type
+                                    mcmc_datasets = db_handler.list_datasets(data_type="mcmc_interpolated")
+                                    
+                                    if not mcmc_datasets:
+                                        st.info("No MCMC interpolated datasets found in the database. Please save some first using the MCMC Interpolation tab.")
+                                    else:
+                                        # Create options for dataset selection
+                                        dataset_options = [(ds['id'], f"{ds['name']} (Created: {ds['created_at'].strftime('%Y-%m-%d %H:%M')})") 
+                                                        for ds in mcmc_datasets]
+                                        
+                                        # Select dataset
+                                        selected_dataset = st.selectbox(
+                                            "Select MCMC interpolated dataset to load:",
+                                            options=dataset_options,
+                                            format_func=lambda x: x[1],
+                                            key="mia_db_dataset_select"
+                                        )
+                                        
+                                        # Load button
+                                        if st.button("Load Selected Dataset", key="mia_load_db_btn"):
+                                            try:
+                                                # Load dataset
+                                                loaded_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
+                                                
+                                                # Store in session state
+                                                st.session_state.interpolated_data = loaded_df
+                                                st.session_state.mcmc_generated = True
+                                                
+                                                # Success message
+                                                st.success(f"Successfully loaded dataset from database!")
+                                                
+                                                # Show preview
+                                                st.write("Preview of loaded dataset:")
+                                                st.dataframe(loaded_df.head())
+                                                
+                                            except Exception as e:
+                                                st.error(f"Error loading dataset: {e}")
+                                
+                                except Exception as e:
+                                    st.error(f"Error accessing database: {e}")
                             
                             # Add multiple interpolation analysis section
                             st.subheader("Multiple Interpolation Analysis")

@@ -4333,7 +4333,7 @@ with main_container:
                                                             
                                                             # Check if quality is Good or Excellent to pass to Distribution Testing
                                                             if score_quality in ['Good', 'Excellent']:
-                                                                st.success(f"Dataset quality is {score_quality}. This dataset will be passed to Distribution Testing.")
+                                                                st.success(f"Dataset quality is {score_quality}. This dataset can be forwarded to Distribution Testing.")
                                                                 # Save this dataset for Distribution Testing
                                                                 st.session_state.distribution_testing_dataset = {
                                                                     'data': cgan_analysis_data,
@@ -4342,37 +4342,43 @@ with main_container:
                                                                     'discriminator_score': discriminator_results['interpolated_mean_score']
                                                                 }
                                                                 
+                                                                # Add button to forward to Distribution Testing module
+                                                                if st.button("Forward to Distribution Testing Module", key="forward_to_dist_testing_btn"):
+                                                                    # Set the session state to indicate this dataset should be used in Distribution Testing
+                                                                    st.session_state.use_validated_dataset_in_testing = True
+                                                                    st.success(f"Dataset with {score_quality} quality has been forwarded to Distribution Testing. Please navigate to the 'Step 4: Distribution Testing' tab.")
+                                                                
                                                                 # Add option to save to database
-                                                                if st.checkbox("Save this dataset to database", value=False, key="save_cgan_good_dataset"):
-                                                                    save_name = st.text_input(
-                                                                        "Dataset name:",
-                                                                        value=f"CGAN_Quality_{score_quality}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
-                                                                        key="cgan_save_name"
-                                                                    )
-                                                                    
-                                                                    save_desc = st.text_area(
-                                                                        "Description (optional):",
-                                                                        value=f"Dataset with {score_quality} quality rating from CGAN Discriminator Score Analysis. Score: {discriminator_results['interpolated_mean_score']:.4f}",
-                                                                        key="cgan_save_desc"
-                                                                    )
-                                                                    
-                                                                    if st.button("Save to Database", key="save_cgan_to_db_btn"):
-                                                                        try:
-                                                                            # Save to database
-                                                                            result = db_handler.save_dataset(
-                                                                                cgan_analysis_data,
-                                                                                name=save_name,
-                                                                                description=save_desc,
-                                                                                data_type="cgan_good_quality"
-                                                                            )
-                                                                            
-                                                                            if result:
-                                                                                st.success(f"Successfully saved '{save_name}' to database with ID: {result}")
-                                                                            else:
-                                                                                st.error("Failed to save dataset to database")
+                                                                st.write("#### Save Dataset to Database")
+                                                                save_name = st.text_input(
+                                                                    "Dataset name:",
+                                                                    value=f"CGAN_Quality_{score_quality}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}",
+                                                                    key="cgan_save_name"
+                                                                )
+                                                                
+                                                                save_desc = st.text_area(
+                                                                    "Description (optional):",
+                                                                    value=f"Dataset with {score_quality} quality rating from CGAN Discriminator Score Analysis. Score: {discriminator_results['interpolated_mean_score']:.4f}",
+                                                                    key="cgan_save_desc"
+                                                                )
+                                                                
+                                                                if st.button("Save to Database", key="save_cgan_to_db_btn"):
+                                                                    try:
+                                                                        # Save to database
+                                                                        result = db_handler.save_dataset(
+                                                                            cgan_analysis_data,
+                                                                            name=save_name,
+                                                                            description=save_desc,
+                                                                            data_type="cgan_good_quality"
+                                                                        )
                                                                         
-                                                                        except Exception as e:
-                                                                            st.error(f"Error saving to database: {e}")
+                                                                        if result:
+                                                                            st.success(f"Successfully saved '{save_name}' to database with ID: {result}")
+                                                                        else:
+                                                                            st.error("Failed to save dataset to database")
+                                                                    
+                                                                    except Exception as e:
+                                                                        st.error(f"Error saving to database: {e}")
                                                         
                                                         # Save discriminator results to session state
                                                         if 'cgan_results' in st.session_state and isinstance(st.session_state.cgan_results, dict):
@@ -5210,13 +5216,61 @@ with main_container:
                         3. Permutation Test: Non-parametric test for statistical significance
                         """)
                         
+                        # Check if there's a validated dataset forwarded from CGAN Analysis
+                        use_validated_dataset = False
+                        if 'use_validated_dataset_in_testing' in st.session_state and st.session_state.use_validated_dataset_in_testing:
+                            if 'distribution_testing_dataset' in st.session_state and st.session_state.distribution_testing_dataset:
+                                use_validated_dataset = True
+                                st.success(f"✅ Using validated dataset from CGAN Analysis: {st.session_state.distribution_testing_dataset['name']} " + 
+                                           f"with quality rating of {st.session_state.distribution_testing_dataset['quality']}")
+                        
                         # Check if we have both original and interpolated data
-                        if 'original_data' not in st.session_state or st.session_state.original_data is None:
-                            st.error("Original data is not available. Please import data in the Data Import tab.")
-                        elif 'interpolated_data' not in st.session_state or st.session_state.interpolated_data is None:
-                            st.error("Interpolated data is not available. Please run MCMC interpolation first.")
-                        else:
-                            st.success("Both original and interpolated datasets are available for testing.")
+                        if not use_validated_dataset:
+                            if 'original_data' not in st.session_state or st.session_state.original_data is None:
+                                st.error("Original data is not available. Please import data in the Data Import tab.")
+                            elif 'interpolated_data' not in st.session_state or st.session_state.interpolated_data is None:
+                                st.error("Interpolated data is not available. Please run MCMC interpolation first.")
+                            else:
+                                st.success("Both original and interpolated datasets are available for testing.")
+                        
+                        # Setup data for testing
+                        data_available = False
+                        
+                        if use_validated_dataset:
+                            if 'original_data' not in st.session_state or st.session_state.original_data is None:
+                                st.error("Original data is required for comparison but is not available. Please import data first.")
+                            else:
+                                test_data = st.session_state.distribution_testing_dataset['data']
+                                original_data = st.session_state.original_data
+                                data_available = True
+                        elif 'original_data' in st.session_state and st.session_state.original_data is not None and 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None:
+                            original_data = st.session_state.original_data
+                            test_data = st.session_state.interpolated_data
+                            data_available = True
+                        
+                        # Only proceed if data is available
+                        if data_available:
+                            
+                            # Add "Run All Tests" and "Reset Tests" buttons in a row
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                run_all_tests = st.button("Run All Tests", key="run_all_tests_button")
+                                
+                                if run_all_tests:
+                                    st.info("Running all distribution tests. Please wait...")
+                                    st.session_state.run_ks_test = True
+                                    st.session_state.run_spearman = True
+                                    st.session_state.run_permutation = True
+                            
+                            with col2:
+                                reset_tests = st.button("Reset Tests", key="reset_tests_button")
+                                
+                                if reset_tests:
+                                    st.session_state.run_ks_test = False
+                                    st.session_state.run_spearman = False
+                                    st.session_state.run_permutation = False
+                                    st.success("All test flags have been reset. You can run the tests again.")
                             
                             # Create tabs for different tests
                             test_tabs = st.tabs([
@@ -5226,8 +5280,7 @@ with main_container:
                             ])
                             
                             # Get numeric columns common to both datasets
-                            original_data = st.session_state.original_data
-                            test_data = st.session_state.interpolated_data
+                            # Note: original_data and test_data were already set up above
                             
                             # Get common columns
                             common_cols = [col for col in test_data.columns if col in original_data.columns]
@@ -5259,10 +5312,17 @@ with main_container:
                                     st.write(f"Ready to perform K-S tests on {len(common_cols)} common columns.")
                                     
                                     # Add button to run the tests
-                                    run_ks_test = st.button("Run K-S Test", key="run_ks_test_button")
+                                    run_ks_test_btn = st.button("Run K-S Test", key="run_ks_test_button")
                                     
+                                    # Check if we should run the test (button clicked or Run All Tests)
+                                    if 'run_ks_test' not in st.session_state:
+                                        st.session_state.run_ks_test = False
+                                        
+                                    if run_ks_test_btn:
+                                        st.session_state.run_ks_test = True
+                                        
                                     # Run K-S test using the advanced processor
-                                    if run_ks_test:
+                                    if st.session_state.run_ks_test:
                                         try:
                                             results_df = advanced_processor.ks_distribution_test(
                                                 test_data, 
@@ -5339,10 +5399,17 @@ with main_container:
                                     st.write(f"Ready to calculate Spearman correlations for {len(common_cols)} common columns.")
                                     
                                     # Add button to run the correlations
-                                    run_spearman = st.button("Run Spearman Correlation", key="run_spearman_button")
+                                    run_spearman_btn = st.button("Run Spearman Correlation", key="run_spearman_button")
                                     
+                                    # Check if we should run the test (button clicked or Run All Tests)
+                                    if 'run_spearman' not in st.session_state:
+                                        st.session_state.run_spearman = False
+                                        
+                                    if run_spearman_btn:
+                                        st.session_state.run_spearman = True
+                                        
                                     # Run Spearman correlation using the advanced processor
-                                    if run_spearman:
+                                    if st.session_state.run_spearman:
                                         try:
                                             results_df = advanced_processor.spearman_correlation(
                                                 test_data, 
@@ -5462,9 +5529,16 @@ with main_container:
                                     
                                     st.write(f"Ready to run permutation tests with {num_permutations} permutations.")
                                     
-                                    run_permutation_test = st.button("Run Permutation Test", key="run_permutation_test_button")
+                                    run_permutation_btn = st.button("Run Permutation Test", key="run_permutation_test_button")
                                     
-                                    if run_permutation_test:
+                                    # Check if we should run the test (button clicked or Run All Tests)
+                                    if 'run_permutation' not in st.session_state:
+                                        st.session_state.run_permutation = False
+                                        
+                                    if run_permutation_btn:
+                                        st.session_state.run_permutation = True
+                                        
+                                    if st.session_state.run_permutation:
                                         # Run permutation test using the advanced processor
                                         try:
                                             results_df = advanced_processor.permutation_test(

@@ -223,18 +223,30 @@ class Predictor:
         for col in X.columns:
             if not np.issubdtype(X[col].dtype, np.number):
                 try:
-                    # Try to convert strings like "10.5" to float
+                    # Try to clean string values by removing any non-numeric characters except decimal points
+                    if X[col].dtype == 'object' or X[col].dtype.name == 'category':
+                        # For string values like "ET 18.90", extract just the numeric part
+                        # This regex extracts numbers with decimal points
+                        X[col] = X[col].astype(str).str.extract(r'(\d+\.?\d*)').astype(float)
+                    
+                    # Try to convert strings to float
                     X[col] = pd.to_numeric(X[col], errors='coerce')
+                    
                     # Fill any resulting NaN values with the mean of the column
                     if X[col].isna().any():
-                        mean_val = X[col].mean()
-                        X[col] = X[col].fillna(mean_val)
-                        print(f"Column {col} had some values that couldn't be converted to numeric. "
-                              f"These were replaced with the mean value: {mean_val}")
-                except:
+                        if X[col].notna().any():  # Only compute mean if there are some non-NA values
+                            mean_val = X[col].mean()
+                            X[col] = X[col].fillna(mean_val)
+                            print(f"Column {col} had some values that couldn't be converted to numeric. "
+                                  f"These were replaced with the mean value: {mean_val}")
+                        else:
+                            # If all values became NaN, mark for removal
+                            non_numeric_columns.append(col)
+                            print(f"Column {col} contains non-numeric data that cannot be converted.")
+                except Exception as e:
                     # If conversion fails entirely, remember this column for potential removal
                     non_numeric_columns.append(col)
-                    print(f"Column {col} contains non-numeric data that cannot be converted.")
+                    print(f"Column {col} contains non-numeric data that cannot be converted: {e}")
         
         # If we found non-numeric columns that couldn't be converted, remove them
         if non_numeric_columns:
@@ -258,19 +270,92 @@ class Predictor:
         )
         
         if model_type in ['Neural Network', 'LSTM Network']:
+            # Double-check for any remaining non-numeric values
+            # Sometimes pandas allows mixed types in numeric columns
+            for col in self.X_train.columns:
+                try:
+                    # Convert to numpy array and check for non-numeric values
+                    col_array = self.X_train[col].values
+                    if not np.issubdtype(col_array.dtype, np.number):
+                        print(f"Warning: Column {col} contains non-numeric values. Attempting final conversion.")
+                        # Try one more conversion with more aggressive error handling
+                        try:
+                            # Extract numeric parts from strings like "ET 18.90"
+                            numeric_vals = self.X_train[col].astype(str).str.extract(r'(\d+\.?\d*)')[0]
+                            self.X_train[col] = pd.to_numeric(numeric_vals, errors='coerce')
+                            numeric_vals = self.X_test[col].astype(str).str.extract(r'(\d+\.?\d*)')[0]
+                            self.X_test[col] = pd.to_numeric(numeric_vals, errors='coerce')
+                        except Exception as e:
+                            print(f"Error in final conversion of column {col}: {e}")
+                            # If conversion still fails, replace with column mean or zero
+                            if len(self.X_train[col].dropna()) > 0:
+                                col_mean = self.X_train[col].dropna().mean()
+                                self.X_train[col] = self.X_train[col].fillna(col_mean)
+                                self.X_test[col] = self.X_test[col].fillna(col_mean)
+                            else:
+                                print(f"Column {col} has no valid numeric values, filling with zeros")
+                                self.X_train[col] = 0
+                                self.X_test[col] = 0
+                except Exception as e:
+                    print(f"Error processing column {col}: {e}")
+                    # Last resort: fill with zeros
+                    self.X_train[col] = 0
+                    self.X_test[col] = 0
+                    
+            # Convert DataFrames to numpy for scaling
+            X_train_np = self.X_train.to_numpy()
+            X_test_np = self.X_test.to_numpy()
+            
             # Neural network models require normalized data
             self.scaler_X = StandardScaler()
-            X_train_scaled = self.scaler_X.fit_transform(self.X_train)
-            X_test_scaled = self.scaler_X.transform(self.X_test)
+            try:
+                X_train_scaled = self.scaler_X.fit_transform(X_train_np)
+                X_test_scaled = self.scaler_X.transform(X_test_np)
+            except Exception as e:
+                print(f"Error during feature scaling: {e}")
+                print("Attempting to scale each feature individually...")
+                # Fallback: Scale each feature individually
+                X_train_scaled = np.zeros_like(X_train_np, dtype=float)
+                X_test_scaled = np.zeros_like(X_test_np, dtype=float)
+                
+                for i in range(X_train_np.shape[1]):
+                    try:
+                        scaler = StandardScaler()
+                        X_train_scaled[:, i] = scaler.fit_transform(X_train_np[:, i].reshape(-1, 1)).ravel()
+                        X_test_scaled[:, i] = scaler.transform(X_test_np[:, i].reshape(-1, 1)).ravel()
+                    except Exception as e:
+                        print(f"Error scaling feature {i}: {e}")
+                        # If scaling fails, use the original values normalized by their max
+                        col_max = max(np.max(np.abs(X_train_np[:, i])), 1e-10)
+                        X_train_scaled[:, i] = X_train_np[:, i] / col_max
+                        X_test_scaled[:, i] = X_test_np[:, i] / col_max
             
             # Also scale the target variable
             if len(self.y_train.shape) == 1:
                 self.y_train = self.y_train.values.reshape(-1, 1)
                 self.y_test = self.y_test.values.reshape(-1, 1)
             
+            # Check for non-numeric values in target
+            if not np.issubdtype(self.y_train.dtype, np.number):
+                print("Warning: Target contains non-numeric values. Converting to numeric.")
+                try:
+                    self.y_train = np.array([float(str(y).replace(',', '')) for y in self.y_train.ravel()]).reshape(-1, 1)
+                    self.y_test = np.array([float(str(y).replace(',', '')) for y in self.y_test.ravel()]).reshape(-1, 1)
+                except:
+                    print("Error converting target to numeric. Using zeros.")
+                    self.y_train = np.zeros_like(self.y_train, dtype=float)
+                    self.y_test = np.zeros_like(self.y_test, dtype=float)
+            
             self.scaler_y = StandardScaler()
-            y_train_scaled = self.scaler_y.fit_transform(self.y_train)
-            y_test_scaled = self.scaler_y.transform(self.y_test)
+            try:
+                y_train_scaled = self.scaler_y.fit_transform(self.y_train)
+                y_test_scaled = self.scaler_y.transform(self.y_test)
+            except Exception as e:
+                print(f"Error during target scaling: {e}")
+                # Fallback: Simple normalization
+                y_max = max(np.max(np.abs(self.y_train)), 1e-10)
+                y_train_scaled = self.y_train / y_max
+                y_test_scaled = self.y_test / y_max
             
             # Extract neural network parameters
             hidden_dims = model_params.pop('hidden_dims', [64, 32])

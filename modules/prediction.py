@@ -149,13 +149,14 @@ class Predictor:
         self.y_train = None
         self.y_test = None
         self.feature_names = None
+        self.target_names = None
         self.scaler_X = None
         self.scaler_y = None
         self.model_type = None
         self.nn_config = None  # For neural network configurations
         self.training_history = None  # For neural network training history
     
-    def train_and_predict(self, data, target_column, model_type, test_size=0.2, **model_params):
+    def train_and_predict(self, data, target_column, model_type, test_size=0.2, feature_columns=None, **model_params):
         """
         Train a prediction model and generate forecasts.
         
@@ -163,13 +164,15 @@ class Predictor:
         -----------
         data : pandas.DataFrame
             Processed input data
-        target_column : str
-            Name of the target column
+        target_column : str or list[str]
+            Name(s) of the target column(s)
         model_type : str
             Type of model to train ('Linear Regression', 'Decision Tree', 
             'Random Forest', 'Gradient Boosting', 'Neural Network', 'LSTM Network')
         test_size : float
             Proportion of data to use for testing (default: 0.2)
+        feature_columns : str or list[str]
+            Name(s) of the feature column(s)
         **model_params : dict
             Additional parameters for the model
             
@@ -185,15 +188,19 @@ class Predictor:
         self.model_type = model_type
         
         # Ensure target column exists in the data
-        if target_column not in data.columns:
-            raise ValueError(f"Target column '{target_column}' not found in the data.")
+        if isinstance(target_column, str):
+            target_column = [target_column]
+        if feature_columns is None:
+            feature_columns = [col for col in data.columns if col not in target_column]
+        elif isinstance(feature_columns, str):
+            feature_columns = [feature_columns]
         
-        # Split data into features and target
-        X = data.drop(columns=[target_column])
+        X = data[feature_columns]
         y = data[target_column]
         
         # Save feature names
-        self.feature_names = X.columns.tolist()
+        self.feature_names = feature_columns
+        self.target_names = target_column
         
         # Split data into training and testing sets
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
@@ -225,121 +232,56 @@ class Predictor:
             sequence_length = model_params.pop('sequence_length', 5)  # For LSTM
             
             # Initialize the neural network model
-            if model_type == 'Neural Network':
-                self.model = NeuralNetworkRegressor(
-                    input_dim=X_train_scaled.shape[1],
-                    hidden_dims=hidden_dims,
-                    output_dim=1,
-                    dropout_rate=dropout_rate
-                )
-                
-                # Store model configuration
-                self.nn_config = {
-                    'type': 'Neural Network',
-                    'input_dim': X_train_scaled.shape[1],
-                    'hidden_dims': hidden_dims,
-                    'output_dim': 1,
-                    'dropout_rate': dropout_rate,
-                    'learning_rate': learning_rate,
-                    'batch_size': batch_size,
-                    'epochs': epochs
-                }
-                
-                # Convert data to PyTorch tensors
-                X_train_tensor = torch.FloatTensor(X_train_scaled)
-                y_train_tensor = torch.FloatTensor(y_train_scaled)
-                X_test_tensor = torch.FloatTensor(X_test_scaled)
-                y_test_tensor = torch.FloatTensor(y_test_scaled)
-                
-                # Create DataLoader for batch training
-                train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-                train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-                
-                # Loss function and optimizer
-                criterion = nn.MSELoss()
-                optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-                
-                # Train the model with early stopping
-                self.training_history = self._train_neural_network(
-                    train_loader, criterion, optimizer, epochs, patience,
-                    X_test_tensor, y_test_tensor
-                )
-                
-                # Make predictions
-                self.model.eval()
-                with torch.no_grad():
-                    train_pred_scaled = self.model(X_train_tensor).numpy()
-                    test_pred_scaled = self.model(X_test_tensor).numpy()
-                
-                # Rescale predictions
-                train_pred = self.scaler_y.inverse_transform(train_pred_scaled)
-                test_pred = self.scaler_y.inverse_transform(test_pred_scaled)
-                
-            elif model_type == 'LSTM Network':
-                # Reshape data for LSTM [batch, sequence_length, features]
-                X_train_lstm = self._prepare_sequences(X_train_scaled, sequence_length)
-                y_train_lstm = y_train_scaled[sequence_length-1:]
-                
-                X_test_lstm = self._prepare_sequences(X_test_scaled, sequence_length)
-                y_test_lstm = y_test_scaled[sequence_length-1:]
-                
-                # Initialize LSTM model
-                self.model = LSTMRegressor(
-                    input_dim=X_train_scaled.shape[1],
-                    hidden_dim=hidden_dims[0],
-                    num_layers=len(hidden_dims),
-                    output_dim=1,
-                    dropout_rate=dropout_rate
-                )
-                
-                # Store model configuration
-                self.nn_config = {
-                    'type': 'LSTM Network',
-                    'input_dim': X_train_scaled.shape[1],
-                    'hidden_dim': hidden_dims[0],
-                    'num_layers': len(hidden_dims),
-                    'output_dim': 1,
-                    'dropout_rate': dropout_rate,
-                    'sequence_length': sequence_length,
-                    'learning_rate': learning_rate,
-                    'batch_size': batch_size,
-                    'epochs': epochs
-                }
-                
-                # Convert data to PyTorch tensors
-                X_train_tensor = torch.FloatTensor(X_train_lstm)
-                y_train_tensor = torch.FloatTensor(y_train_lstm)
-                X_test_tensor = torch.FloatTensor(X_test_lstm)
-                y_test_tensor = torch.FloatTensor(y_test_lstm)
-                
-                # Create DataLoader for batch training
-                train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-                train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-                
-                # Loss function and optimizer
-                criterion = nn.MSELoss()
-                optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-                
-                # Train the model
-                self.training_history = self._train_neural_network(
-                    train_loader, criterion, optimizer, epochs, patience,
-                    X_test_tensor, y_test_tensor
-                )
-                
-                # Make predictions
-                self.model.eval()
-                with torch.no_grad():
-                    train_pred_scaled = self.model(X_train_tensor).numpy()
-                    test_pred_scaled = self.model(X_test_tensor).numpy()
-                
-                # Rescale predictions
-                train_pred = self.scaler_y.inverse_transform(train_pred_scaled)
-                test_pred = self.scaler_y.inverse_transform(test_pred_scaled)
-                
-                # Adjust the sizes of targets to match predictions
-                self.y_train = self.y_train[sequence_length-1:]
-                self.y_test = self.y_test[sequence_length-1:]
-                
+            output_dim = len(target_column)
+            self.model = NeuralNetworkRegressor(
+                input_dim=X_train_scaled.shape[1],
+                hidden_dims=hidden_dims,
+                output_dim=output_dim,
+                dropout_rate=dropout_rate
+            )
+            
+            # Store model configuration
+            self.nn_config = {
+                'type': 'Neural Network',
+                'input_dim': X_train_scaled.shape[1],
+                'hidden_dims': hidden_dims,
+                'output_dim': output_dim,
+                'dropout_rate': dropout_rate,
+                'learning_rate': learning_rate,
+                'batch_size': batch_size,
+                'epochs': epochs
+            }
+            
+            # Convert data to PyTorch tensors
+            X_train_tensor = torch.FloatTensor(X_train_scaled)
+            y_train_tensor = torch.FloatTensor(y_train_scaled)
+            X_test_tensor = torch.FloatTensor(X_test_scaled)
+            y_test_tensor = torch.FloatTensor(y_test_scaled)
+            
+            # Create DataLoader for batch training
+            train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+            
+            # Loss function and optimizer
+            criterion = nn.MSELoss()
+            optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+            
+            # Train the model with early stopping
+            self.training_history = self._train_neural_network(
+                train_loader, criterion, optimizer, epochs, patience,
+                X_test_tensor, y_test_tensor
+            )
+            
+            # Make predictions
+            self.model.eval()
+            with torch.no_grad():
+                train_pred_scaled = self.model(X_train_tensor).numpy()
+                test_pred_scaled = self.model(X_test_tensor).numpy()
+            
+            # Rescale predictions
+            train_pred = self.scaler_y.inverse_transform(train_pred_scaled)
+            test_pred = self.scaler_y.inverse_transform(test_pred_scaled)
+            
         else:
             # Traditional ML models
             # Initialize the model based on the specified type
@@ -583,7 +525,8 @@ class Predictor:
         """
         model_details = {
             'model_type': model_type,
-            'feature_names': self.feature_names
+            'feature_names': self.feature_names,
+            'target_names': self.target_names
         }
         
         # Get feature importance if available
@@ -660,6 +603,7 @@ class Predictor:
                     'model_type': self.model_type,
                     'nn_config': self.nn_config,
                     'feature_names': self.feature_names,
+                    'target_names': self.target_names,
                     'scaler_X': self.scaler_X,
                     'scaler_y': self.scaler_y
                 }
@@ -673,7 +617,8 @@ class Predictor:
                 model_info = {
                     'model': self.model,
                     'model_type': self.model_type,
-                    'feature_names': self.feature_names
+                    'feature_names': self.feature_names,
+                    'target_names': self.target_names
                 }
                 joblib.dump(model_info, filepath)
             
@@ -706,6 +651,7 @@ class Predictor:
                 self.model_type = model_info['model_type']
                 self.nn_config = model_info['nn_config']
                 self.feature_names = model_info['feature_names']
+                self.target_names = model_info['target_names']
                 self.scaler_X = model_info['scaler_X']
                 self.scaler_y = model_info['scaler_y']
                 
@@ -735,6 +681,7 @@ class Predictor:
                 self.model = model_info['model']
                 self.model_type = model_info['model_type']
                 self.feature_names = model_info['feature_names']
+                self.target_names = model_info['target_names']
             
             return True
         except Exception as e:

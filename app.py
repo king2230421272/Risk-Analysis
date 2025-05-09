@@ -87,6 +87,9 @@ st.markdown("""
     All steps are available in one interface for easier access and navigation.
 """)
 
+# 初始化数据库处理程序
+db_handler = DatabaseHandler()
+
 # Main container
 main_container = st.container()
 
@@ -2387,7 +2390,7 @@ with main_container:
                                         # Clear session state
                                         st.session_state.convergence_datasets = []
                                         st.success("All analysis results have been cleared. You can now run new analyses.")
-                                        st.experimental_rerun()
+                                        st.rerun()
                                 with col2:
                                     # Add a more granular clearing option if there are results available
                                     if analysis_results:
@@ -7237,6 +7240,317 @@ with main_container:
                                 except Exception as e:
                                     st.error(f"Error detecting outliers: {str(e)}")
                                     st.exception(e)
+    
+    # 6. DATABASE TAB
+    with tab6:
+        st.header("Database Management")
+        
+        # Check if database is available
+        if not hasattr(db_handler, 'db_available') or not db_handler.db_available:
+            st.error("⚠️ Database connection is not available.")
+            st.info("Please check your database connection settings.")
+        else:
+            st.success("✅ Connected to database successfully")
+            
+            # Create tabs for different database operations
+            db_tabs = st.tabs(["Stored Datasets", "Analysis Results", "Database Statistics"])
+            
+            # Tab: Stored Datasets
+            with db_tabs[0]:
+                st.subheader("Manage Stored Datasets")
+                
+                try:
+                    # Get list of datasets from database
+                    all_datasets = db_handler.list_datasets()
+                    
+                    if not all_datasets:
+                        st.info("No datasets found in the database. Please save some datasets first.")
+                    else:
+                        # Display datasets in a table with additional information
+                        datasets_df = pd.DataFrame([
+                            {
+                                "ID": ds['id'],
+                                "Name": ds['name'],
+                                "Type": ds['data_type'],
+                                "Rows": ds['row_count'],
+                                "Columns": ds['column_count'],
+                                "Created": ds['created_at'] if 'created_at' in ds else "Unknown",
+                                "Description": ds.get('description', "")
+                            } 
+                            for ds in all_datasets
+                        ])
+                        
+                        # Add custom styling
+                        def highlight_data_type(val):
+                            if 'original' in val.lower():
+                                return 'background-color: #e6f3ff'
+                            elif 'interpolated' in val.lower() or 'mcmc' in val.lower():
+                                return 'background-color: #e6ffe6'
+                            elif 'cgan' in val.lower():
+                                return 'background-color: #fff0e6'
+                            return ''
+                        
+                        # Apply styling and display
+                        st.dataframe(
+                            datasets_df.style.applymap(highlight_data_type, subset=['Type']),
+                            height=min(35 * (len(datasets_df) + 1), 500),
+                            use_container_width=True
+                        )
+                        
+                        # Dataset operations
+                        st.subheader("Dataset Operations")
+                        
+                        # Select a dataset to operate on
+                        selected_dataset_id = st.selectbox(
+                            "Select a dataset:",
+                            options=datasets_df["ID"].tolist(),
+                            format_func=lambda x: f"{datasets_df[datasets_df['ID']==x]['Name'].values[0]} (ID: {x})"
+                        )
+                        
+                        if selected_dataset_id:
+                            # Operations on selected dataset
+                            op_col1, op_col2, op_col3 = st.columns(3)
+                            
+                            with op_col1:
+                                if st.button("View Dataset", key="view_dataset_btn"):
+                                    try:
+                                        dataset = db_handler.load_dataset(dataset_id=selected_dataset_id)
+                                        st.write(f"Dataset Preview (showing first 100 rows):")
+                                        st.dataframe(dataset.head(100))
+                                        
+                                        # Dataset statistics
+                                        with st.expander("Dataset Statistics"):
+                                            st.write(dataset.describe())
+                                            
+                                            # Column information
+                                            st.write("**Column Information:**")
+                                            col_info = pd.DataFrame({
+                                                'Type': dataset.dtypes,
+                                                'Non-Null Count': dataset.count(),
+                                                'Null Count': dataset.isna().sum(),
+                                                'Unique Values': [dataset[col].nunique() for col in dataset.columns]
+                                            })
+                                            st.dataframe(col_info)
+                                            
+                                    except Exception as e:
+                                        st.error(f"Error loading dataset: {e}")
+                            
+                            with op_col2:
+                                if st.button("Load into Analysis", key="load_for_analysis_btn"):
+                                    try:
+                                        # Get dataset info
+                                        dataset_info = datasets_df[datasets_df['ID']==selected_dataset_id].iloc[0]
+                                        dataset_type = dataset_info['Type'].lower()
+                                        
+                                        # Load the dataset
+                                        dataset = db_handler.load_dataset(dataset_id=selected_dataset_id)
+                                        
+                                        # Determine where to load it based on type
+                                        if 'original' in dataset_type:
+                                            st.session_state.original_data = dataset
+                                            st.success(f"Dataset '{dataset_info['Name']}' loaded as Original Data")
+                                        elif 'interpolated' in dataset_type or 'mcmc' in dataset_type:
+                                            st.session_state.interpolated_data = dataset
+                                            st.success(f"Dataset '{dataset_info['Name']}' loaded as Interpolated Data")
+                                        else:
+                                            # Ask user where to load it
+                                            load_as = st.radio(
+                                                f"Load '{dataset_info['Name']}' as:",
+                                                ["Original Data", "Interpolated Data"]
+                                            )
+                                            
+                                            if load_as == "Original Data":
+                                                st.session_state.original_data = dataset
+                                                st.success(f"Dataset loaded as Original Data")
+                                            else:
+                                                st.session_state.interpolated_data = dataset
+                                                st.success(f"Dataset loaded as Interpolated Data")
+                                                
+                                    except Exception as e:
+                                        st.error(f"Error loading dataset: {e}")
+                            
+                            with op_col3:
+                                if st.button("Delete Dataset", key="delete_dataset_btn"):
+                                    # Confirm deletion
+                                    st.warning(f"Are you sure you want to delete this dataset? This action cannot be undone.")
+                                    confirm = st.checkbox("Yes, I want to delete this dataset", key="confirm_delete")
+                                    
+                                    if confirm:
+                                        try:
+                                            db_handler.delete_dataset(dataset_id=selected_dataset_id)
+                                            st.success("Dataset deleted successfully")
+                                            # Refresh the page to update the list
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Error deleting dataset: {e}")
+                
+                except Exception as e:
+                    st.error(f"Error accessing database: {e}")
+            
+            # Tab: Analysis Results
+            with db_tabs[1]:
+                st.subheader("Stored Analysis Results")
+                
+                try:
+                    # Get list of analysis results from database
+                    analysis_results = db_handler.list_analysis_results()
+                    
+                    if not analysis_results:
+                        st.info("No analysis results found in the database.")
+                    else:
+                        # Display analysis results in a table
+                        results_df = pd.DataFrame([
+                            {
+                                "ID": ar['id'],
+                                "Name": ar['name'],
+                                "Type": ar['analysis_type'],
+                                "Created": ar['created_at'] if 'created_at' in ar else "Unknown",
+                                "Description": ar.get('description', "")
+                            } 
+                            for ar in analysis_results
+                        ])
+                        
+                        # Display results
+                        st.dataframe(
+                            results_df,
+                            height=min(35 * (len(results_df) + 1), 500),
+                            use_container_width=True
+                        )
+                        
+                        # Select a result to view
+                        if len(results_df) > 0:
+                            selected_result_id = st.selectbox(
+                                "Select an analysis result to view:",
+                                options=results_df["ID"].tolist(),
+                                format_func=lambda x: f"{results_df[results_df['ID']==x]['Name'].values[0]} (ID: {x})"
+                            )
+                            
+                            if selected_result_id:
+                                if st.button("View Analysis Result", key="view_result_btn"):
+                                    try:
+                                        result = db_handler.load_analysis_result(result_id=selected_result_id)
+                                        
+                                        # Display result information
+                                        st.write("**Analysis Result Details:**")
+                                        
+                                        # Analysis type determines how to display
+                                        result_type = results_df[results_df['ID']==selected_result_id]['Type'].iloc[0]
+                                        
+                                        if 'prediction' in result_type.lower():
+                                            # Display prediction result
+                                            st.write("**Prediction Performance Metrics:**")
+                                            metrics = result.get('metrics', {})
+                                            metrics_df = pd.DataFrame([metrics])
+                                            st.dataframe(metrics_df)
+                                            
+                                            # Display model parameters
+                                            if 'parameters' in result:
+                                                st.write("**Model Parameters:**")
+                                                st.json(result['parameters'])
+                                            
+                                            # Display prediction data if available
+                                            if 'predictions' in result:
+                                                st.write("**Predictions:**")
+                                                preds_df = pd.DataFrame(result['predictions'])
+                                                st.dataframe(preds_df.head(100))
+                                                
+                                        elif 'mcmc' in result_type.lower() or 'interpolation' in result_type.lower():
+                                            # Display MCMC result
+                                            st.write("**Interpolation Parameters:**")
+                                            if 'parameters' in result:
+                                                st.json(result['parameters'])
+                                            
+                                            # Display diagnostics if available
+                                            if 'diagnostics' in result:
+                                                st.write("**Convergence Diagnostics:**")
+                                                diag_df = pd.DataFrame(result['diagnostics'])
+                                                st.dataframe(diag_df)
+                                                
+                                        else:
+                                            # Generic display for other types
+                                            for key, value in result.items():
+                                                if key not in ['id', 'name', 'analysis_type', 'created_at', 'description']:
+                                                    st.write(f"**{key}:**")
+                                                    if isinstance(value, dict) or isinstance(value, list):
+                                                        st.json(value)
+                                                    elif isinstance(value, pd.DataFrame):
+                                                        st.dataframe(value)
+                                                    else:
+                                                        st.write(value)
+                                        
+                                    except Exception as e:
+                                        st.error(f"Error loading analysis result: {e}")
+                
+                except Exception as e:
+                    st.error(f"Error accessing database: {e}")
+            
+            # Tab: Database Statistics
+            with db_tabs[2]:
+                st.subheader("Database Statistics")
+                
+                try:
+                    # Get database statistics
+                    stats = db_handler.get_database_stats()
+                    
+                    if stats:
+                        # Create two columns
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.write("**Database Usage Summary:**")
+                            
+                            # Create metrics display
+                            st.metric("Total Datasets", stats.get('total_datasets', 0))
+                            st.metric("Total Analysis Results", stats.get('total_analysis_results', 0))
+                            
+                            # Show table sizes
+                            if 'table_sizes' in stats:
+                                st.write("**Table Sizes:**")
+                                sizes_df = pd.DataFrame(stats['table_sizes'])
+                                st.dataframe(sizes_df)
+                        
+                        with col2:
+                            # Show dataset types distribution
+                            if 'dataset_types' in stats:
+                                st.write("**Dataset Types Distribution:**")
+                                
+                                # Create pie chart
+                                types_data = stats['dataset_types']
+                                fig, ax = plt.subplots(figsize=(8, 8))
+                                ax.pie(
+                                    [t['count'] for t in types_data], 
+                                    labels=[t['type'] for t in types_data], 
+                                    autopct='%1.1f%%',
+                                    startangle=90
+                                )
+                                ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+                                st.pyplot(fig)
+                    else:
+                        st.info("No database statistics available.")
+                
+                except Exception as e:
+                    st.error(f"Error retrieving database statistics: {e}")
+                
+                # Database maintenance
+                with st.expander("Database Maintenance", expanded=False):
+                    st.write("**Database Maintenance Operations:**")
+                    st.warning("⚠️ These operations can affect database performance. Use with caution.")
+                    
+                    # Vacuum database
+                    if st.button("Optimize Database", key="vacuum_db"):
+                        try:
+                            db_handler.optimize_database()
+                            st.success("Database optimization completed successfully")
+                        except Exception as e:
+                            st.error(f"Error optimizing database: {e}")
+                    
+                    # Backup database
+                    if st.button("Backup Database", key="backup_db"):
+                        try:
+                            backup_path = db_handler.backup_database()
+                            st.success(f"Database backup created at: {backup_path}")
+                        except Exception as e:
+                            st.error(f"Error creating database backup: {e}")
 
 if __name__ == "__main__":
     st.sidebar.info("Data Analysis Platform")

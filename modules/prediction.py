@@ -482,16 +482,18 @@ class Predictor:
         if non_numeric_columns:
             print(f"Removing non-numeric columns: {non_numeric_columns}")
             X = X.drop(columns=non_numeric_columns)
-            # Update feature names list to reflect removed columns
-            self.feature_names = [col for col in self.feature_names if col not in non_numeric_columns]
-            
-            # Warn if we removed all columns
+                # Warn if we removed all columns
             if len(X.columns) == 0:
                 raise ValueError("All feature columns contained non-numeric data and had to be removed. "
                                 "Please check your data and ensure at least some columns contain numeric values.")
         
-        # Save feature names (moved after non-numeric column removal check)
-        self.feature_names = feature_columns if not non_numeric_columns else [col for col in feature_columns if col not in non_numeric_columns]
+        # Initialize feature_names before trying to use it
+        self.feature_names = feature_columns.copy()
+        
+        # Update feature names if we have non-numeric columns that were removed
+        if non_numeric_columns:
+            self.feature_names = [col for col in feature_columns if col not in non_numeric_columns]
+            
         self.target_names = target_column
         
         # Split data into training and testing sets

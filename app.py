@@ -6322,24 +6322,30 @@ with main_container:
                     # Load button
                     if st.button("Load Selected Dataset(s)", key="pred_load_db_btn"):
                         try:
-                            # Check if we're using combined datasets for training
-                            if use_combined_datasets:
-                                # Check if we can load both breach and non-breach datasets
+                            # Check which dataset option we're using from the radio button selection
+                            if dataset_choice == "Combined Datasets (Breach + Non-Breach)":
+                                # We're using combined datasets approach
                                 breach_id = None
                                 non_breach_id = None
                                 
                                 # Get breach dataset ID if available
-                                if "pred_db_dataset_select_breach" in st.session_state and breach_dataset_options:
+                                if "pred_db_dataset_select_breach" in st.session_state:
                                     breach_id = st.session_state.pred_db_dataset_select_breach[0]
                                 
                                 # Get non-breach dataset ID if available
-                                if "pred_db_dataset_select_non_breach" in st.session_state and non_breach_dataset_options:
+                                if "pred_db_dataset_select_non_breach" in st.session_state:
                                     non_breach_id = st.session_state.pred_db_dataset_select_non_breach[0]
                                 
                                 # If we have both types of datasets, load them
                                 if breach_id and non_breach_id:
                                     breach_df = db_handler.load_dataset(dataset_id=breach_id)
                                     non_breach_df = db_handler.load_dataset(dataset_id=non_breach_id)
+                                    
+                                    # Add dataset type column if it doesn't exist
+                                    if 'dataset_type' not in breach_df.columns:
+                                        breach_df['dataset_type'] = 'breach'
+                                    if 'dataset_type' not in non_breach_df.columns:
+                                        non_breach_df['dataset_type'] = 'non_breach'
                                     
                                     # Store both datasets in session state
                                     st.session_state.breach_data = breach_df
@@ -6353,27 +6359,25 @@ with main_container:
                                     # Success message for combined datasets
                                     st.success(f"✅ Successfully loaded combined datasets with {breach_df.shape[0]} breach rows and {non_breach_df.shape[0]} non-breach rows!")
                                 else:
-                                    # If we don't have both, load the selected one
-                                    st.warning("Combined dataset training is enabled but not all required datasets are available. Loading selected dataset only.")
-                                    st.session_state.using_combined_datasets = False
-                                    
-                                    if selected_dataset_id:
-                                        main_df = db_handler.load_dataset(dataset_id=selected_dataset_id)
-                                        st.session_state.prediction_data = main_df
-                                    else:
-                                        st.error("No dataset selected. Please select a dataset from one of the tabs.")
-                                        prediction_data_loaded = False
+                                    # If we don't have both, show error
+                                    st.error("Combined dataset mode requires both datasets to be selected.")
+                                    prediction_data_loaded = False
                             else:
-                                # Standard single dataset loading
-                                if selected_dataset_id:
+                                # We're using single dataset approach
+                                if "pred_db_dataset_select_all" in st.session_state:
+                                    selected_dataset_id = st.session_state.pred_db_dataset_select_all[0]
+                                    
                                     # Load main dataset
                                     main_df = db_handler.load_dataset(dataset_id=selected_dataset_id)
                                     
                                     # Store in session state
                                     st.session_state.prediction_data = main_df
                                     st.session_state.using_combined_datasets = False
+                                    
+                                    # Success message
+                                    st.success(f"✅ Successfully loaded dataset with {main_df.shape[0]} rows and {main_df.shape[1]} columns!")
                                 else:
-                                    st.error("No dataset selected. Please select a dataset from one of the tabs.")
+                                    st.error("No dataset selected. Please select a dataset.")
                                     prediction_data_loaded = False
                             
                             # Handle reference dataset if needed

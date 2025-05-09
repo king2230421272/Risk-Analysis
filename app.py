@@ -8433,6 +8433,243 @@ with main_container:
                         except Exception as e:
                             st.error(f"Error evaluating risk level: {str(e)}")
                             st.exception(e)
+            
+            # 7. RISK ASSESSMENT METHODS TAB
+            with risk_tabs[6]:
+                st.write("### 高级风险评估方法")
+                st.write("使用三种先进的风险评估方法对数据进行全面风险分析")
+                
+                # 数据选择部分
+                st.write("#### 选择数据集")
+                
+                if st.session_state.data is None:
+                    st.warning("请先在数据导入选项卡中导入或选择数据集")
+                else:
+                    # 选择风险评估方法
+                    assessment_method = st.radio(
+                        "选择风险评估方法:",
+                        ["概率损失法 (Probability-Loss)", 
+                         "IAHP-CRITIC-GT法", 
+                         "动态贝叶斯网络法 (Dynamic Bayesian Network)"],
+                        key="risk_assessment_method"
+                    )
+                    
+                    # 转换选择为方法代码
+                    method_code = {
+                        "概率损失法 (Probability-Loss)": "prob_loss",
+                        "IAHP-CRITIC-GT法": "iahp_critic_gt",
+                        "动态贝叶斯网络法 (Dynamic Bayesian Network)": "dynamic_bayes"
+                    }[assessment_method]
+                    
+                    # 不同方法的参数设置
+                    with st.expander("方法参数设置", expanded=True):
+                        if method_code == "prob_loss":
+                            st.write("#### 概率损失法参数")
+                            prob_col = st.selectbox(
+                                "概率列:", 
+                                options=st.session_state.data.select_dtypes(include=np.number).columns.tolist(),
+                                index=0
+                            )
+                            loss_col = st.selectbox(
+                                "损失列:", 
+                                options=st.session_state.data.select_dtypes(include=np.number).columns.tolist(),
+                                index=min(1, len(st.session_state.data.select_dtypes(include=np.number).columns.tolist())-1)
+                            )
+                            method_params = {"prob_col": prob_col, "loss_col": loss_col}
+                            
+                        elif method_code == "iahp_critic_gt":
+                            st.write("#### IAHP-CRITIC-GT法参数")
+                            indicator_cols = st.multiselect(
+                                "指标列:", 
+                                options=st.session_state.data.select_dtypes(include=np.number).columns.tolist(),
+                                default=st.session_state.data.select_dtypes(include=np.number).columns.tolist()[:min(3, len(st.session_state.data.select_dtypes(include=np.number).columns.tolist()))]
+                            )
+                            alpha = st.slider("α权重:", min_value=0.0, max_value=1.0, value=0.5, step=0.05,
+                                            help="IAHP和CRITIC结果的权重平衡参数")
+                            llm_service = st.selectbox(
+                                "LLM服务:", 
+                                options=["auto", "openai", "anthropic", "deepseek", "none"],
+                                index=0,
+                                help="用于专家建议的大型语言模型服务"
+                            )
+                            method_params = {
+                                "indicator_cols": indicator_cols, 
+                                "alpha": alpha,
+                                "llm_service": llm_service
+                            }
+                            
+                        else:  # dynamic_bayes
+                            st.write("#### 动态贝叶斯网络法参数")
+                            sequence_cols = st.multiselect(
+                                "序列列:", 
+                                options=st.session_state.data.columns.tolist(),
+                                default=st.session_state.data.columns.tolist()[:min(3, len(st.session_state.data.columns.tolist()))]
+                            )
+                            n_states = st.slider("状态数量:", min_value=2, max_value=10, value=3, step=1,
+                                                help="每个变量的离散状态数")
+                            predict_col = st.selectbox(
+                                "预测列:",
+                                options=["None"] + st.session_state.data.columns.tolist(),
+                                index=0
+                            )
+                            predict_index = st.number_input("预测索引:", value=-1, 
+                                                          help="用于预测的时间步索引，-1表示最后一个时间步")
+                            batch_mode = st.checkbox("批处理模式", value=False,
+                                                   help="启用批处理模式进行多个预测")
+                            
+                            method_params = {
+                                "sequence_cols": sequence_cols if sequence_cols else None,
+                                "n_states": n_states,
+                                "predict_col": predict_col if predict_col != "None" else None,
+                                "predict_index": int(predict_index),
+                                "batch": batch_mode
+                            }
+                    
+                    # 执行风险评估按钮
+                    assess_button = st.button("执行风险评估", key="risk_assessment_btn")
+                    
+                    if assess_button:
+                        if method_code == "iahp_critic_gt" and not method_params.get("indicator_cols"):
+                            st.error("请至少选择一个指标列")
+                        elif method_code == "dynamic_bayes" and not method_params.get("sequence_cols"):
+                            st.error("请至少选择一个序列列")
+                        else:
+                            with st.spinner(f"正在使用{assessment_method}进行风险评估..."):
+                                try:
+                                    # 执行风险评估
+                                    risk_result = risk_assessor.assess_risk(
+                                        st.session_state.data,
+                                        method=method_code,
+                                        **method_params
+                                    )
+                                    
+                                    # 保存结果到会话状态
+                                    st.session_state.risk_assessment_result = risk_result
+                                    
+                                    # 显示风险评估结果
+                                    st.success(f"风险评估完成")
+                                    
+                                    # 根据不同方法显示结果
+                                    st.write("#### 风险评估结果")
+                                    
+                                    if method_code == "prob_loss":
+                                        # 概率损失法结果展示
+                                        st.write("##### 概率损失法结果")
+                                        
+                                        # 结果摘要
+                                        result_summary = risk_assessor.generate_risk_summary(risk_result, "prob_loss")
+                                        
+                                        # 显示风险等级
+                                        risk_level = result_summary["risk_level"]
+                                        risk_value = result_summary["risk_value"]
+                                        
+                                        # 风险等级颜色
+                                        risk_colors = {
+                                            "低风险": "green",
+                                            "中风险": "orange",
+                                            "高风险": "red",
+                                            "极高风险": "darkred"
+                                        }
+                                        
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            st.markdown(f"**风险等级**: <span style='color:{risk_colors.get(risk_level, 'blue')}'>{risk_level}</span>", unsafe_allow_html=True)
+                                        with col2:
+                                            st.markdown(f"**风险值**: {risk_value:.4f}", unsafe_allow_html=True)
+                                        
+                                        # 显示详细结果表格
+                                        if isinstance(risk_result, pd.DataFrame):
+                                            st.write("详细风险计算结果:")
+                                            st.dataframe(risk_result)
+                                            
+                                            # 绘制风险分布图
+                                            st.write("风险分布图")
+                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                            risk_result["risk"] = risk_result[prob_col] * risk_result[loss_col]
+                                            sns.histplot(risk_result["risk"], kde=True, ax=ax)
+                                            ax.set_title("风险分布")
+                                            ax.set_xlabel("风险值")
+                                            ax.set_ylabel("频率")
+                                            st.pyplot(fig)
+                                        else:
+                                            st.write(f"单一风险计算结果: {risk_result}")
+                                        
+                                    elif method_code == "iahp_critic_gt":
+                                        # IAHP-CRITIC-GT法结果展示
+                                        st.write("##### IAHP-CRITIC-GT法结果")
+                                        
+                                        if "weights" in risk_result:
+                                            st.write("指标权重:")
+                                            weights_df = pd.DataFrame({
+                                                "指标": risk_result["weights"].keys(),
+                                                "权重": risk_result["weights"].values()
+                                            })
+                                            st.dataframe(weights_df)
+                                        
+                                        if "risk_scores" in risk_result:
+                                            st.write("风险评分:")
+                                            # 创建风险评分条形图
+                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                            scores_df = pd.DataFrame({
+                                                "对象": range(len(risk_result["risk_scores"])),
+                                                "风险评分": risk_result["risk_scores"]
+                                            })
+                                            sns.barplot(x="对象", y="风险评分", data=scores_df, ax=ax)
+                                            ax.set_title("风险评分分布")
+                                            st.pyplot(fig)
+                                        
+                                        if "risk_categories" in risk_result:
+                                            st.write("风险类别分布:")
+                                            # 创建风险类别饼图
+                                            category_counts = pd.Series(risk_result["risk_categories"]).value_counts()
+                                            fig, ax = plt.subplots(figsize=(8, 8))
+                                            plt.pie(category_counts, labels=category_counts.index, autopct='%1.1f%%')
+                                            plt.title("风险类别分布")
+                                            st.pyplot(fig)
+                                            
+                                        # 如果有专家建议，显示出来
+                                        if "expert_suggestions" in risk_result:
+                                            st.write("##### 专家建议")
+                                            for i, suggestion in enumerate(risk_result["expert_suggestions"]):
+                                                st.markdown(f"**建议 {i+1}**: {suggestion}")
+                                    
+                                    else:  # dynamic_bayes
+                                        # 动态贝叶斯网络法结果展示
+                                        st.write("##### 动态贝叶斯网络法结果")
+                                        
+                                        if "network_structure" in risk_result:
+                                            st.write("网络结构:")
+                                            # 显示网络结构图（如果有）
+                                            if "network_image" in risk_result:
+                                                st.image(risk_result["network_image"], caption="贝叶斯网络结构")
+                                            else:
+                                                st.write(risk_result["network_structure"])
+                                        
+                                        if "predictions" in risk_result:
+                                            st.write("预测结果:")
+                                            if isinstance(risk_result["predictions"], pd.DataFrame):
+                                                st.dataframe(risk_result["predictions"])
+                                            else:
+                                                st.write(risk_result["predictions"])
+                                        
+                                        if "risk_probabilities" in risk_result:
+                                            st.write("风险概率分布:")
+                                            # 创建风险概率条形图
+                                            fig, ax = plt.subplots(figsize=(10, 6))
+                                            if isinstance(risk_result["risk_probabilities"], dict):
+                                                probs_df = pd.DataFrame({
+                                                    "状态": list(risk_result["risk_probabilities"].keys()),
+                                                    "概率": list(risk_result["risk_probabilities"].values())
+                                                })
+                                                sns.barplot(x="状态", y="概率", data=probs_df, ax=ax)
+                                            else:
+                                                sns.barplot(y=risk_result["risk_probabilities"], ax=ax)
+                                            ax.set_title("风险概率分布")
+                                            st.pyplot(fig)
+                                                
+                                except Exception as e:
+                                    st.error(f"风险评估过程中出错: {str(e)}")
+                                    st.exception(e)
     
     # 5. DATABASE TAB
     with tab5:

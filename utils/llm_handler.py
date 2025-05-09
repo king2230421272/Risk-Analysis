@@ -10,7 +10,8 @@ import json
 import openai
 from anthropic import Anthropic
 import traceback
-from deepseek import Deepseek
+from deepseek_ai import DeepSeekAI
+from deepseek_ai.chat import DeepSeekChat
 
 class LlmHandler:
     """
@@ -33,6 +34,7 @@ class LlmHandler:
         self.openai_client = None
         self.anthropic_client = None
         self.deepseek_client = None
+        self.deepseek_chat = None
         
         if self.openai_available:
             try:
@@ -52,7 +54,8 @@ class LlmHandler:
                 
         if self.deepseek_available:
             try:
-                self.deepseek_client = Deepseek(api_key=self.deepseek_api_key)
+                self.deepseek_client = DeepSeekAI(api_key=self.deepseek_api_key)
+                self.deepseek_chat = DeepSeekChat(api_key=self.deepseek_api_key)
                 print("Deepseek client successfully initialized")
             except Exception as e:
                 print(f"Error initializing Deepseek client: {e}")

@@ -220,6 +220,69 @@ class LlmHandler:
                 "traceback": traceback.format_exc()
             }
     
+    def parse_condition_text_with_deepseek(self, natural_language_text, column_info, example_data=None):
+        """
+        Parse natural language text into structured condition data using Deepseek Chat model.
+        
+        Parameters:
+        -----------
+        natural_language_text : str
+            The natural language description of condition values
+        column_info : dict
+            Dictionary with column statistics information (name, min, max, mean, etc.)
+        example_data : pandas.DataFrame, optional
+            Example data to provide context
+            
+        Returns:
+        --------
+        dict
+            Structured condition data as a dictionary
+        """
+        if not self.deepseek_available:
+            return {"error": "Deepseek API key is not available or invalid. Please add your API key in the settings."}
+        
+        try:
+            # Prepare system message with context about the columns
+            system_message = f"""You are a data analysis assistant helping convert natural language descriptions into 
+            structured data for a CGAN (Conditional Generative Adversarial Network) model.
+            
+            Given the following columns with their statistics:
+            {json.dumps(column_info, indent=2)}
+            
+            Convert the user's natural language description into a JSON object where:
+            1. Keys are the column names listed above
+            2. Values are numeric values derived from the description that are within the min/max range for each column
+            
+            Return ONLY a valid JSON object with no explanation or markdown formatting."""
+            
+            # Add example data context if provided
+            if example_data is not None:
+                example_desc = f"""
+                Here are a few example rows from the dataset to help you understand the data:
+                {example_data.head(3).to_string()}
+                """
+                system_message += example_desc
+            
+            # Send request to Deepseek
+            response = self.deepseek_chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": natural_language_text}
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            # Parse the response
+            result = json.loads(response.choices[0].message.content)
+            return result
+            
+        except Exception as e:
+            return {
+                "error": f"Error processing with Deepseek: {str(e)}",
+                "traceback": traceback.format_exc()
+            }
+    
     def parse_condition_text(self, natural_language_text, column_info, service="auto", example_data=None):
         """
         Parse natural language text into structured condition data using the specified service.
@@ -231,7 +294,7 @@ class LlmHandler:
         column_info : dict
             Dictionary with column statistics information
         service : str
-            Which service to use ('auto', 'openai', or 'anthropic')
+            Which service to use ('auto', 'openai', 'anthropic', or 'deepseek')
         example_data : pandas.DataFrame, optional
             Example data to provide context
             
@@ -246,14 +309,18 @@ class LlmHandler:
                 service = "anthropic"
             elif self.openai_available:
                 service = "openai"
+            elif self.deepseek_available:
+                service = "deepseek"
             else:
-                return {"error": "No LLM service available. Please add either OpenAI or Anthropic API key in the settings."}
+                return {"error": "No LLM service available. Please add either OpenAI, Anthropic, or Deepseek API key in the settings."}
         
         # Use the specified service
         if service == "openai" and self.openai_available:
             return self.parse_condition_text_with_openai(natural_language_text, column_info, example_data)
         elif service == "anthropic" and self.anthropic_available:
             return self.parse_condition_text_with_anthropic(natural_language_text, column_info, example_data)
+        elif service == "deepseek" and self.deepseek_available:
+            return self.parse_condition_text_with_deepseek(natural_language_text, column_info, example_data)
         else:
             return {"error": f"Selected service '{service}' is not available. Please check your API key settings."}
     
@@ -335,7 +402,7 @@ class LlmHandler:
         feature_columns : list, optional
             Specific feature columns to focus on (if None, all columns except the target are used)
         service : str
-            Which service to use ('auto', 'openai', or 'anthropic')
+            Which service to use ('auto', 'openai', 'anthropic', or 'deepseek')
             
         Returns:
         --------
@@ -365,8 +432,17 @@ class LlmHandler:
                     }
                     column_info.append(col_stats)
             
+            # Automatically select service if set to auto
+            if service == "auto":
+                if self.anthropic_available:
+                    service = "anthropic"
+                elif self.openai_available:
+                    service = "openai"
+                elif self.deepseek_available:
+                    service = "deepseek"
+            
             # Prepare the system prompt differently for prediction vs other tasks
-            if self.openai_available and (service == "auto" or service == "openai"):
+            if self.openai_available and (service == "openai"):
                 system_message = f"""
                 You are an AI assistant helping with machine learning prediction models. 
                 Your task is to convert a natural language description into structured condition data
@@ -403,7 +479,7 @@ class LlmHandler:
                 result = json.loads(response.choices[0].message.content)
                 return result
                 
-            elif self.anthropic_available and (service == "auto" or service == "anthropic"):
+            elif self.anthropic_available and (service == "anthropic"):
                 prompt = f"""
                 Human: You are an AI assistant helping with machine learning prediction models. 
                 Your task is to convert a natural language description into structured condition data
@@ -447,6 +523,41 @@ class LlmHandler:
                     content = content.split("```")[1].split("```")[0].strip()
                 
                 result = json.loads(content)
+                return result
+                
+            elif self.deepseek_available and (service == "deepseek"):
+                system_message = f"""
+                You are an AI assistant helping with machine learning prediction models. 
+                Your task is to convert a natural language description into structured condition data
+                that can be used for training prediction models.
+                
+                Based on the dataset with these column statistics:
+                {json.dumps(column_info, indent=2)}
+                
+                Convert the user's description into a JSON object where:
+                1. Keys are the feature column names that are relevant to the described conditions
+                2. Values are appropriate numeric values that represent the condition described
+                
+                For example, if the user says "predict results when temperature is high and pressure is low", 
+                you would return something like {{"temperature": 85, "pressure": 0.2}} (with actual values
+                that make sense for the given column ranges).
+                
+                Only include columns that are explicitly mentioned or strongly implied in the description.
+                Return ONLY a valid JSON object with no explanation or markdown formatting.
+                """
+                
+                # Send request to Deepseek
+                response = self.deepseek_chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": natural_language_text}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+                
+                # Parse the response
+                result = json.loads(response.choices[0].message.content)
                 return result
             else:
                 # Use code-based fallback method

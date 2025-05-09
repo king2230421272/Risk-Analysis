@@ -16,6 +16,7 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "pymc>=5.22.0",
     "rasterio>=1.4.3",
+    "salib>=1.5.1",
     "scikit-learn>=1.6.1",
     "scipy>=1.15.2",
     "seaborn>=0.13.2",

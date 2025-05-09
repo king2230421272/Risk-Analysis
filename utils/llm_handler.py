@@ -20,9 +20,11 @@ except ImportError:
     print("Warning: Anthropic library not available")
 
 try:
-    from deepseek import Deepseek
+    import deepseek
+    from deepseek import DeepseekAI
 except ImportError:
-    Deepseek = None
+    deepseek = None
+    DeepseekAI = None
     print("Warning: Deepseek AI library not available")
 
 class LlmHandler:
@@ -105,10 +107,10 @@ class LlmHandler:
                 
         if self.deepseek_available:
             try:
-                if Deepseek is not None:
+                if deepseek is not None:
                     # Set the environment variable for Deepseek
                     os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
-                    self.deepseek_client = Deepseek(api_key=self.deepseek_api_key)
+                    self.deepseek_client = deepseek.Client(api_key=self.deepseek_api_key)
                     print("Deepseek client successfully initialized")
                 else:
                     print("Deepseek libraries not available")
@@ -351,7 +353,7 @@ class LlmHandler:
                 system_message += example_desc
             
             # Send request to Deepseek
-            response = self.deepseek_chat.completions.create(
+            response = self.deepseek_client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
                     {"role": "system", "content": system_message},

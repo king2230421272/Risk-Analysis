@@ -218,8 +218,38 @@ class Predictor:
             
         y = data[target_column]
         
-        # Save feature names
-        self.feature_names = feature_columns
+        # Check for non-numeric data and convert or remove as necessary
+        non_numeric_columns = []
+        for col in X.columns:
+            if not np.issubdtype(X[col].dtype, np.number):
+                try:
+                    # Try to convert strings like "10.5" to float
+                    X[col] = pd.to_numeric(X[col], errors='coerce')
+                    # Fill any resulting NaN values with the mean of the column
+                    if X[col].isna().any():
+                        mean_val = X[col].mean()
+                        X[col] = X[col].fillna(mean_val)
+                        print(f"Column {col} had some values that couldn't be converted to numeric. "
+                              f"These were replaced with the mean value: {mean_val}")
+                except:
+                    # If conversion fails entirely, remember this column for potential removal
+                    non_numeric_columns.append(col)
+                    print(f"Column {col} contains non-numeric data that cannot be converted.")
+        
+        # If we found non-numeric columns that couldn't be converted, remove them
+        if non_numeric_columns:
+            print(f"Removing non-numeric columns: {non_numeric_columns}")
+            X = X.drop(columns=non_numeric_columns)
+            # Update feature names list to reflect removed columns
+            self.feature_names = [col for col in self.feature_names if col not in non_numeric_columns]
+            
+            # Warn if we removed all columns
+            if len(X.columns) == 0:
+                raise ValueError("All feature columns contained non-numeric data and had to be removed. "
+                                "Please check your data and ensure at least some columns contain numeric values.")
+        
+        # Save feature names (moved after non-numeric column removal check)
+        self.feature_names = feature_columns if not non_numeric_columns else [col for col in feature_columns if col not in non_numeric_columns]
         self.target_names = target_column
         
         # Split data into training and testing sets

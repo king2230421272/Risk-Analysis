@@ -10,25 +10,29 @@ import json
 import openai
 from anthropic import Anthropic
 import traceback
+from deepseek import Deepseek
 
 class LlmHandler:
     """
     Handler for large language model interactions.
-    Supports both OpenAI and Anthropic models for natural language processing tasks.
+    Supports OpenAI, Anthropic, and Deepseek models for natural language processing tasks.
     """
     
     def __init__(self):
         """Initialize the LLM handler with available API keys."""
         self.openai_api_key = os.environ.get('OPENAI_API_KEY')
         self.anthropic_api_key = os.environ.get('ANTHROPIC_API_KEY')
+        self.deepseek_api_key = os.environ.get('DEEPSEEK_API_KEY')
         
         # Check available services
         self.openai_available = self.openai_api_key is not None and len(self.openai_api_key) > 0
         self.anthropic_available = self.anthropic_api_key is not None and len(self.anthropic_api_key) > 0
+        self.deepseek_available = self.deepseek_api_key is not None and len(self.deepseek_api_key) > 0
         
         # Initialize clients if keys are available
         self.openai_client = None
         self.anthropic_client = None
+        self.deepseek_client = None
         
         if self.openai_available:
             try:
@@ -45,10 +49,18 @@ class LlmHandler:
             except Exception as e:
                 print(f"Error initializing Anthropic client: {e}")
                 self.anthropic_available = False
+                
+        if self.deepseek_available:
+            try:
+                self.deepseek_client = Deepseek(api_key=self.deepseek_api_key)
+                print("Deepseek client successfully initialized")
+            except Exception as e:
+                print(f"Error initializing Deepseek client: {e}")
+                self.deepseek_available = False
     
     def is_any_service_available(self):
         """Check if any LLM service is available."""
-        return self.openai_available or self.anthropic_available
+        return self.openai_available or self.anthropic_available or self.deepseek_available
     
     def get_available_services(self):
         """Get a list of available LLM services."""
@@ -57,6 +69,8 @@ class LlmHandler:
             services.append("OpenAI (GPT-4o)")
         if self.anthropic_available:
             services.append("Anthropic (Claude-3.5-Sonnet)")
+        if self.deepseek_available:
+            services.append("Deepseek (Deepseek-Chat)")
         return services
     
     def parse_condition_text_with_openai(self, natural_language_text, column_info, example_data=None):

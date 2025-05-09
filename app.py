@@ -6237,8 +6237,9 @@ with main_container:
                         selected_dataset_id = st.session_state.pred_db_dataset_select_non_breach[0]
                     
                     # Reference dataset selection (optional)
-                    st.write("#### Reference Dataset (Optional)")
-                    use_reference = st.checkbox("Use a reference dataset", value=False, key="pred_use_reference")
+                    st.write("#### Dataset Options")
+                    use_combined_datasets = st.checkbox("Train model with both breach and non-breach datasets", value=True, key="pred_use_combined")
+                    use_reference = st.checkbox("Use a separate reference dataset", value=False, key="pred_use_reference")
                     
                     if use_reference:
                         reference_dataset = st.selectbox(
@@ -6251,34 +6252,81 @@ with main_container:
                     # Load button
                     if st.button("Load Selected Dataset(s)", key="pred_load_db_btn"):
                         try:
-                            if selected_dataset_id:
-                                # Load main dataset
-                                main_df = db_handler.load_dataset(dataset_id=selected_dataset_id)
+                            # Check if we're using combined datasets for training
+                            if use_combined_datasets:
+                                # Check if we can load both breach and non-breach datasets
+                                breach_id = None
+                                non_breach_id = None
                                 
-                                # Store in session state
-                                st.session_state.prediction_data = main_df
+                                # Get breach dataset ID if available
+                                if "pred_db_dataset_select_breach" in st.session_state and breach_dataset_options:
+                                    breach_id = st.session_state.pred_db_dataset_select_breach[0]
+                                
+                                # Get non-breach dataset ID if available
+                                if "pred_db_dataset_select_non_breach" in st.session_state and non_breach_dataset_options:
+                                    non_breach_id = st.session_state.pred_db_dataset_select_non_breach[0]
+                                
+                                # If we have both types of datasets, load them
+                                if breach_id and non_breach_id:
+                                    breach_df = db_handler.load_dataset(dataset_id=breach_id)
+                                    non_breach_df = db_handler.load_dataset(dataset_id=non_breach_id)
+                                    
+                                    # Store both datasets in session state
+                                    st.session_state.breach_data = breach_df
+                                    st.session_state.non_breach_data = non_breach_df
+                                    st.session_state.using_combined_datasets = True
+                                    
+                                    # Create combined dataset for display
+                                    main_df = pd.concat([breach_df, non_breach_df], ignore_index=True)
+                                    st.session_state.prediction_data = main_df
+                                    
+                                    # Success message for combined datasets
+                                    st.success(f"✅ Successfully loaded combined datasets with {breach_df.shape[0]} breach rows and {non_breach_df.shape[0]} non-breach rows!")
+                                else:
+                                    # If we don't have both, load the selected one
+                                    st.warning("Combined dataset training is enabled but not all required datasets are available. Loading selected dataset only.")
+                                    st.session_state.using_combined_datasets = False
+                                    
+                                    if selected_dataset_id:
+                                        main_df = db_handler.load_dataset(dataset_id=selected_dataset_id)
+                                        st.session_state.prediction_data = main_df
+                                    else:
+                                        st.error("No dataset selected. Please select a dataset from one of the tabs.")
+                                        prediction_data_loaded = False
                             else:
-                                st.error("No dataset selected. Please select a dataset from one of the tabs.")
-                                prediction_data_loaded = False
+                                # Standard single dataset loading
+                                if selected_dataset_id:
+                                    # Load main dataset
+                                    main_df = db_handler.load_dataset(dataset_id=selected_dataset_id)
+                                    
+                                    # Store in session state
+                                    st.session_state.prediction_data = main_df
+                                    st.session_state.using_combined_datasets = False
+                                else:
+                                    st.error("No dataset selected. Please select a dataset from one of the tabs.")
+                                    prediction_data_loaded = False
                             
+                            # Handle reference dataset if needed
                             if use_reference and 'reference_dataset' in locals():
                                 # Load reference dataset
                                 ref_df = db_handler.load_dataset(dataset_id=reference_dataset[0])
                                 st.session_state.prediction_reference = ref_df
-                            else:
+                            elif 'main_df' in locals():
                                 # Use main dataset as reference as well
                                 st.session_state.prediction_reference = main_df.copy()
                             
                             # Set flag to indicate data is available
-                            st.session_state.prediction_data_available = True
-                            prediction_data_loaded = True
-                            
-                            # Show success message
-                            st.success("✅ Successfully loaded dataset(s) from database!")
-                            
-                            # Show preview
-                            st.write("#### Preview of loaded dataset:")
-                            st.dataframe(main_df.head())
+                            if 'main_df' in locals():
+                                st.session_state.prediction_data_available = True
+                                prediction_data_loaded = True
+                                
+                                # Show success message if not already shown for combined datasets
+                                if not st.session_state.get('using_combined_datasets', False):
+                                    st.success("✅ Successfully loaded dataset(s) from database!")
+                                
+                                # Show preview
+                                st.write("#### Preview of loaded dataset:")
+                                st.dataframe(main_df.head())
                             
                         except Exception as e:
                             st.error(f"Error loading dataset: {e}")

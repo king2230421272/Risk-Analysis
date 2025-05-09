@@ -156,6 +156,83 @@ class Predictor:
         self.nn_config = None  # For neural network configurations
         self.training_history = None  # For neural network training history
     
+    def train_with_multiple_datasets(self, breach_data, non_breach_data, target_column, model_type, test_size=0.2, feature_columns=None, **model_params):
+        """
+        Train a prediction model using both breach and non-breach datasets simultaneously.
+        
+        Parameters:
+        -----------
+        breach_data : pandas.DataFrame
+            Processed breach data (dam failure data)
+        non_breach_data : pandas.DataFrame
+            Processed non-breach data (intact dam data)
+        target_column : str or list[str]
+            Name(s) of the target column(s)
+        model_type : str
+            Type of model to train ('Linear Regression', 'Decision Tree', 
+            'Random Forest', 'Gradient Boosting', 'Neural Network', 'LSTM Network')
+        test_size : float
+            Proportion of data to use for testing (default: 0.2)
+        feature_columns : str or list[str]
+            Name(s) of the feature column(s)
+        **model_params : dict
+            Additional parameters for the model
+            
+        Returns:
+        --------
+        tuple
+            (predictions_df, model_details, metrics)
+            - predictions_df: DataFrame with predictions
+            - model_details: Dictionary with model details
+            - metrics: Dictionary with performance metrics
+        """
+        # Ensure both datasets have the same columns
+        common_columns = set(breach_data.columns).intersection(set(non_breach_data.columns))
+        
+        # Filter feature columns to only include common columns
+        if feature_columns is None:
+            feature_columns = [col for col in common_columns if col != target_column]
+        else:
+            if isinstance(feature_columns, str):
+                feature_columns = [feature_columns]
+            feature_columns = [col for col in feature_columns if col in common_columns]
+        
+        # Ensure target column is in both datasets
+        if isinstance(target_column, str):
+            if target_column not in common_columns:
+                raise ValueError(f"Target column '{target_column}' not found in both datasets")
+        else:  # it's a list
+            for col in target_column:
+                if col not in common_columns:
+                    raise ValueError(f"Target column '{col}' not found in both datasets")
+        
+        # Add a dataset identifier column
+        breach_data = breach_data.copy()
+        non_breach_data = non_breach_data.copy()
+        breach_data['dataset_type'] = 1  # 1 for breach data
+        non_breach_data['dataset_type'] = 0  # 0 for non-breach data
+        
+        # Add dataset_type to feature columns if needed for prediction
+        use_dataset_type = model_params.pop('use_dataset_type', True)
+        if use_dataset_type:
+            feature_columns = feature_columns + ['dataset_type']
+        
+        # Combine the datasets
+        combined_data = pd.concat([breach_data, non_breach_data], ignore_index=True)
+        
+        print(f"Combined dataset size: {combined_data.shape[0]} rows, {combined_data.shape[1]} columns")
+        print(f"Breach data: {breach_data.shape[0]} rows, Non-breach data: {non_breach_data.shape[0]} rows")
+        
+        # Use the standard train_and_predict method with the combined dataset
+        return self.train_and_predict(
+            data=combined_data,
+            target_column=target_column,
+            model_type=model_type,
+            test_size=test_size,
+            feature_columns=feature_columns,
+            **model_params
+        )
+    
     def train_and_predict(self, data, target_column, model_type, test_size=0.2, feature_columns=None, **model_params):
         """
         Train a prediction model and generate forecasts.

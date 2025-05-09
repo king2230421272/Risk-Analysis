@@ -331,6 +331,17 @@ wheels = [
 ]
 
 [[package]]
+name = "deepseek"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/7b/bede06edf1a25a6ab06553b15f6abf8e912848dfa5f68514720d3e388550/deepseek-1.0.0-py3-none-any.whl", hash = "sha256:ee4175bfcb7ac1154369dbd86a4d8bc1809f6fa20e3e7baa362544567197cb3f", size = 4542 },
+]
+
+[[package]]
 name = "deepseek-ai"
 version = "0.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1645,6 +1656,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "deepseek" },
     { name = "deepseek-ai" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -1669,6 +1681,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.50.0" },
+    { name = "deepseek", specifier = ">=1.0.0" },
     { name = "deepseek-ai", specifier = ">=0.0.1" },
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "numpy", specifier = ">=2.2.5" },

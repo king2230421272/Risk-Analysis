@@ -136,8 +136,21 @@ class LlmHandler:
             )
             
             # Parse the response
-            result = json.loads(response.choices[0].message.content)
-            return result
+            content = response.choices[0].message.content
+            if not content:
+                return {"error": "Empty content received from OpenAI API"}
+                
+            try:
+                result = json.loads(content)
+                return result
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error: {e}")
+                print(f"Raw content from OpenAI: {content}")
+                # Fall back to regex-based extraction
+                extracted = self._extract_json_from_text(content)
+                if extracted:
+                    return extracted
+                return {"error": f"Failed to parse JSON response from OpenAI: {str(e)}"}
             
         except Exception as e:
             return {
@@ -206,15 +219,30 @@ class LlmHandler:
             )
             
             # Extract and parse the JSON response
-            content = response.content[0].text
-            # Strip any potential markdown code blocks
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-            
-            result = json.loads(content)
-            return result
+            if hasattr(response, 'content') and response.content and len(response.content) > 0:
+                content = response.content[0].text
+                if not content:
+                    return {"error": "Empty content received from Anthropic API"}
+                    
+                # Strip any potential markdown code blocks
+                if "```json" in content:
+                    content = content.split("```json")[1].split("```")[0].strip()
+                elif "```" in content:
+                    content = content.split("```")[1].split("```")[0].strip()
+                
+                try:
+                    result = json.loads(content)
+                    return result
+                except json.JSONDecodeError as e:
+                    print(f"JSON decode error: {e}")
+                    print(f"Raw content from Anthropic: {content}")
+                    # Fall back to regex-based extraction
+                    extracted = self._extract_json_from_text(content)
+                    if extracted:
+                        return extracted
+                    return {"error": f"Failed to parse JSON response from Anthropic: {str(e)}"}
+            else:
+                return {"error": "Invalid response format from Anthropic API"}
             
         except Exception as e:
             return {
@@ -276,8 +304,24 @@ class LlmHandler:
             )
             
             # Parse the response
-            result = json.loads(response.choices[0].message.content)
-            return result
+            if hasattr(response, 'choices') and response.choices and len(response.choices) > 0:
+                content = response.choices[0].message.content
+                if not content:
+                    return {"error": "Empty content received from Deepseek API"}
+                    
+                try:
+                    result = json.loads(content)
+                    return result
+                except json.JSONDecodeError as e:
+                    print(f"JSON decode error: {e}")
+                    print(f"Raw content from Deepseek: {content}")
+                    # Fall back to regex-based extraction
+                    extracted = self._extract_json_from_text(content)
+                    if extracted:
+                        return extracted
+                    return {"error": f"Failed to parse JSON response from Deepseek: {str(e)}"}
+            else:
+                return {"error": "Invalid response format from Deepseek API"}
             
         except Exception as e:
             return {

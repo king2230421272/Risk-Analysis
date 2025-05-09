@@ -6357,8 +6357,13 @@ with main_container:
                     use_condition_inputs = True
                     st.write("#### Additional Condition Inputs")
                     
-                    # Create expandable section for condition inputs
-                    with st.expander("Add custom condition inputs", expanded=True):
+                    # Create tabs for different types of condition inputs
+                    condition_tabs = st.tabs(["Manual Conditions", "Natural Language Input"])
+                    
+                    custom_conditions = {}
+                    
+                    # Tab 1: Manual Conditions
+                    with condition_tabs[0]:
                         st.write("""
                         Use this section to add custom condition inputs that aren't directly available in your dataset. 
                         These values will be applied uniformly to all samples in the dataset during training.
@@ -6372,8 +6377,6 @@ with main_container:
                             value=1,
                             key="num_custom_conditions"
                         )
-                        
-                        custom_conditions = {}
                         
                         # Create input fields for each condition
                         for i in range(int(num_conditions)):
@@ -6396,15 +6399,89 @@ with main_container:
                             
                             if cond_name:
                                 custom_conditions[cond_name] = cond_value
+                    
+                    # Tab 2: Natural Language Input
+                    with condition_tabs[1]:
+                        st.write("""
+                        Describe the conditions in natural language. The system will automatically convert your description 
+                        into appropriate numeric values based on the dataset's statistics.
                         
-                        # Show custom conditions summary
-                        if custom_conditions:
-                            st.write("##### Custom Conditions Summary:")
-                            cond_df = pd.DataFrame({
-                                'Condition': list(custom_conditions.keys()),
-                                'Value': list(custom_conditions.values())
-                            })
-                            st.dataframe(cond_df)
+                        Examples:
+                        - "Predict results when temperature is high and humidity is low"
+                        - "I want to analyze scenarios where pressure is above average but temperature is below normal"
+                        """)
+                        
+                        # Check if LLM services are available
+                        from utils.llm_handler import LlmHandler
+                        llm_handler = LlmHandler()
+                        
+                        if llm_handler.is_any_service_available():
+                            available_services = llm_handler.get_available_services()
+                            
+                            # LLM service selection
+                            llm_service = st.radio(
+                                "Select language model service:",
+                                options=available_services + ["No AI - use rule-based parsing"],
+                                index=0,
+                                key="nl_condition_service"
+                            )
+                            
+                            # Service mapping
+                            service_mapping = {
+                                "OpenAI (GPT-4o)": "openai",
+                                "Anthropic (Claude-3.5-Sonnet)": "anthropic",
+                                "No AI - use rule-based parsing": "code"
+                            }
+                            
+                            selected_service = service_mapping.get(llm_service, "auto")
+                            
+                            # Natural language input
+                            nl_condition = st.text_area(
+                                "Describe your conditions in natural language:",
+                                value="",
+                                height=100,
+                                key="nl_condition_input",
+                                placeholder="Example: Predict results when temperature is high (around 90°F) and humidity is low (around 30%)."
+                            )
+                            
+                            # Process button
+                            if st.button("Process Natural Language Conditions", key="process_nl_conditions"):
+                                if nl_condition.strip():
+                                    with st.spinner("Processing natural language input..."):
+                                        try:
+                                            # Process the natural language into structured conditions
+                                            nl_conditions = llm_handler.process_prediction_conditions(
+                                                nl_condition, 
+                                                st.session_state.prediction_data,
+                                                selected_features if selected_features else None,
+                                                selected_service
+                                            )
+                                            
+                                            # Check for error
+                                            if "error" in nl_conditions:
+                                                st.error(f"Error processing natural language: {nl_conditions['error']}")
+                                            else:
+                                                # Update custom_conditions
+                                                custom_conditions.update(nl_conditions)
+                                                st.success("Natural language processed successfully!")
+                                        except Exception as e:
+                                            st.error(f"Error: {str(e)}")
+                                else:
+                                    st.warning("Please enter a description before processing.")
+                        else:
+                            st.warning("""
+                            No language model services available. To use natural language processing, please add 
+                            either OpenAI or Anthropic API keys in your environment variables.
+                            """)
+                    
+                    # Show custom conditions summary (outside of tabs)
+                    if custom_conditions:
+                        st.write("##### Custom Conditions Summary:")
+                        cond_df = pd.DataFrame({
+                            'Condition': list(custom_conditions.keys()),
+                            'Value': list(custom_conditions.values())
+                        })
+                        st.dataframe(cond_df)
                 
                 # Model type selection
                 model_type = st.selectbox(

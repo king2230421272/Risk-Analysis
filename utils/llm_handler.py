@@ -304,3 +304,138 @@ class LlmHandler:
                     result[col["Column"]] = col["Mean"]
         
         return result
+        
+    def process_prediction_conditions(self, natural_language_text, data, feature_columns=None, service="auto"):
+        """
+        Process natural language text into structured condition parameters for prediction models.
+        
+        Parameters:
+        -----------
+        natural_language_text : str
+            The natural language description of condition values and scenarios
+        data : pandas.DataFrame
+            Training data to provide statistical context
+        feature_columns : list, optional
+            Specific feature columns to focus on (if None, all columns except the target are used)
+        service : str
+            Which service to use ('auto', 'openai', or 'anthropic')
+            
+        Returns:
+        --------
+        dict
+            Structured condition data as a dictionary for model training
+        """
+        if not natural_language_text or natural_language_text.strip() == "":
+            return {}
+            
+        try:
+            # Prepare column information
+            column_info = []
+            
+            # Use specified columns or all columns
+            cols_to_process = feature_columns if feature_columns is not None else data.columns
+            
+            for col in cols_to_process:
+                if col in data.columns and data[col].dtype in ['int64', 'float64', 'int32', 'float32']:
+                    col_stats = {
+                        "Column": col,
+                        "Min": float(data[col].min()),
+                        "Max": float(data[col].max()),
+                        "Mean": float(data[col].mean()),
+                        "Median": float(data[col].median()),
+                        "Std": float(data[col].std()),
+                        "Type": str(data[col].dtype)
+                    }
+                    column_info.append(col_stats)
+            
+            # Prepare the system prompt differently for prediction vs other tasks
+            if self.openai_available and (service == "auto" or service == "openai"):
+                system_message = f"""
+                You are an AI assistant helping with machine learning prediction models. 
+                Your task is to convert a natural language description into structured condition data
+                that can be used for training prediction models.
+                
+                Based on the dataset with these column statistics:
+                {json.dumps(column_info, indent=2)}
+                
+                Convert the user's description into a JSON object where:
+                1. Keys are the feature column names that are relevant to the described conditions
+                2. Values are appropriate numeric values that represent the condition described
+                
+                For example, if the user says "predict results when temperature is high and pressure is low", 
+                you would return something like {{"temperature": 85, "pressure": 0.2}} (with actual values
+                that make sense for the given column ranges).
+                
+                Only include columns that are explicitly mentioned or strongly implied in the description.
+                Return ONLY a valid JSON object with no explanation or markdown formatting.
+                """
+                
+                # Send request to OpenAI
+                # Note that the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
+                # do not change this unless explicitly requested by the user
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": natural_language_text}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+                
+                # Parse the response
+                result = json.loads(response.choices[0].message.content)
+                return result
+                
+            elif self.anthropic_available and (service == "auto" or service == "anthropic"):
+                prompt = f"""
+                Human: You are an AI assistant helping with machine learning prediction models. 
+                Your task is to convert a natural language description into structured condition data
+                that can be used for training prediction models.
+                
+                Based on the dataset with these column statistics:
+                {json.dumps(column_info, indent=2)}
+                
+                Convert my description into a JSON object where:
+                1. Keys are the feature column names that are relevant to the described conditions
+                2. Values are appropriate numeric values that represent the condition described
+                
+                For example, if I say "predict results when temperature is high and pressure is low", 
+                you would return something like {{"temperature": 85, "pressure": 0.2}} (with actual values
+                that make sense for the given column ranges).
+                
+                Only include columns that are explicitly mentioned or strongly implied in the description.
+                Return ONLY a valid JSON object with no explanation or markdown formatting.
+
+                Here's my description: {natural_language_text}
+                
+                Assistant:
+                """
+                
+                # Send request to Anthropic
+                # the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
+                response = self.anthropic_client.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=1000,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                
+                # Extract and parse the JSON response
+                content = response.content[0].text
+                # Strip any potential markdown code blocks
+                if "```json" in content:
+                    content = content.split("```json")[1].split("```")[0].strip()
+                elif "```" in content:
+                    content = content.split("```")[1].split("```")[0].strip()
+                
+                result = json.loads(content)
+                return result
+            else:
+                # Use code-based fallback method
+                return self.parse_condition_text_with_code(natural_language_text, column_info)
+                
+        except Exception as e:
+            print(f"Error processing prediction conditions: {str(e)}")
+            traceback.print_exc()
+            return {"error": str(e)}

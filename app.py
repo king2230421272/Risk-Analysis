@@ -95,12 +95,11 @@ main_container = st.container()
 
 with main_container:
     # Create tabs for each section of the workflow
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "1️⃣ Data Import", 
         "2️⃣ Data Processing", 
         "3️⃣ Prediction", 
-        "4️⃣ Risk Assessment", 
-        "5️⃣ Database"
+        "4️⃣ Database"
     ])
     
     # 1. DATA IMPORT TAB
@@ -7172,7 +7171,8 @@ with main_container:
                     risk_assessor = RiskAssessor()
                     
                     # Create tabs for different risk assessment methods
-                    risk_tabs = st.tabs(["Prediction Intervals", "Error Distribution", "Outlier Detection"])
+                    risk_tabs = st.tabs(["Prediction Intervals", "Error Distribution", "Outlier Detection", 
+                                        "Parameter Prediction", "Land Use Analysis", "Risk Evaluation"])
                     
                     # Results dataframe
                     results_df = st.session_state.prediction_results
@@ -7476,8 +7476,8 @@ with main_container:
                                     st.error(f"Error detecting outliers: {str(e)}")
                                     st.exception(e)
     
-    # 5. DATABASE TAB
-    with tab5:
+    # 4. DATABASE TAB
+    with tab4:
         st.header("Database Management")
         
         # Check if database is available

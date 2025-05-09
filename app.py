@@ -6780,8 +6780,60 @@ with main_container:
                                 st.session_state.prediction_model_details = model_details
                                 st.session_state.prediction_metrics = metrics
                                 
-                                # Show success message
-                                st.success(f"{model_type} model trained successfully!")
+                                # Save model to database
+                                try:
+                                    # Prepare model information for database
+                                    model_name = f"{model_type} - {target_column}"
+                                    model_description = f"Prediction model for {target_column} using {model_type}. Features: {', '.join(selected_features)}."
+                                    
+                                    # Add timestamp to make model name unique
+                                    import datetime
+                                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    model_name = f"{model_name} ({timestamp})"
+                                    
+                                    # Create model data package for database
+                                    model_data = {
+                                        'model_details': model_details,
+                                        'metrics': metrics,
+                                        'feature_columns': selected_features,
+                                        'target_column': target_column,
+                                        'model_params': model_params,
+                                        'model_type': model_type,
+                                        'test_size': test_size
+                                    }
+                                    
+                                    # Save model to database
+                                    from utils.database import DatabaseHandler
+                                    db_handler = DatabaseHandler()
+                                    model_id = db_handler.save_analysis_result(
+                                        result_data=model_data,
+                                        name=model_name,
+                                        analysis_type="Prediction Model",
+                                        description=model_description
+                                    )
+                                    
+                                    # Add model ID to session state for reference
+                                    if 'trained_models' not in st.session_state:
+                                        st.session_state.trained_models = []
+                                    
+                                    # Add the model to the session state list
+                                    st.session_state.trained_models.append({
+                                        'id': model_id,
+                                        'name': model_name,
+                                        'type': model_type,
+                                        'target': target_column,
+                                        'features': selected_features,
+                                        'metrics': metrics,
+                                        'details': model_details
+                                    })
+                                    
+                                    # Show success message with saved info
+                                    st.success(f"{model_type} model trained successfully and saved to database with ID: {model_id}")
+                                    
+                                except Exception as e:
+                                    st.warning(f"Model trained successfully but could not be saved to database: {e}")
+                                    # Still show success for the training itself
+                                    st.success(f"{model_type} model trained successfully!")
                                 
                                 # Display model metrics
                                 st.subheader("Model Performance Metrics")
@@ -6869,6 +6921,150 @@ with main_container:
             # 2. PREDICTION RESULTS TAB
             with prediction_tabs[1]:
                 st.subheader("Prediction Results")
+                
+                # Add UI for using trained models from database
+                st.write("### Apply Trained Model")
+                
+                # Display options based on available models 
+                # This will always be shown regardless of whether a model was just trained
+                if 'trained_models' in st.session_state and st.session_state.trained_models:
+                    # Show the available models from both session and database
+                    # First, try to get models from database to add any that might not be in session
+                    try:
+                        from utils.database import DatabaseHandler
+                        db_handler = DatabaseHandler()
+                        
+                        # Get models from database
+                        db_models = db_handler.list_analysis_results(analysis_type="Prediction Model")
+                        
+                        # Combine with models we already know about from session state
+                        # Make sure not to duplicate models by checking IDs
+                        existing_ids = [m['id'] for m in st.session_state.trained_models]
+                        
+                        # Add any models from database that aren't already in session state
+                        for model in db_models:
+                            if model['id'] not in existing_ids:
+                                st.session_state.trained_models.append({
+                                    'id': model['id'],
+                                    'name': model['name'],
+                                    'type': "Unknown",  # Will be populated when model is loaded
+                                    'target': "Unknown",
+                                    'features': [],
+                                    'metrics': {},
+                                    'details': {}
+                                })
+                                
+                    except Exception as e:
+                        st.warning(f"Could not load additional models from database: {e}")
+                    
+                    # Create model selection dropdown
+                    model_options = [f"{m['name']} (ID: {m['id']})" for m in st.session_state.trained_models]
+                    selected_model = st.selectbox("Select a trained model:", model_options, key="apply_model_selection")
+                    
+                    # Extract model ID from selection
+                    selected_model_id = int(selected_model.split("ID: ")[1].rstrip(")"))
+                    
+                    # Find the selected model in session state
+                    selected_model_data = next((m for m in st.session_state.trained_models if m['id'] == selected_model_id), None)
+                    
+                    if selected_model_data:
+                        # Load full model from database if needed
+                        if not selected_model_data.get('details') or not selected_model_data.get('features'):
+                            try:
+                                # Load the model from database
+                                db_handler = DatabaseHandler()
+                                model_result = db_handler.load_analysis_result(selected_model_id)
+                                
+                                if model_result:
+                                    # Update model data with full details
+                                    model_data = model_result.get('result_data', {})
+                                    selected_model_data.update({
+                                        'type': model_data.get('model_type', "Unknown"),
+                                        'target': model_data.get('target_column', "Unknown"),
+                                        'features': model_data.get('feature_columns', []),
+                                        'metrics': model_data.get('metrics', {}),
+                                        'details': model_data.get('model_details', {})
+                                    })
+                            except Exception as e:
+                                st.error(f"Error loading model details: {e}")
+                        
+                        # Show model information
+                        st.write(f"**Model Type:** {selected_model_data['type']}")
+                        st.write(f"**Target Variable:** {selected_model_data['target']}")
+                        
+                        # Show feature inputs
+                        st.write("#### Enter Feature Values")
+                        
+                        # Create inputs for each feature
+                        feature_values = {}
+                        if selected_model_data.get('features'):
+                            # Create a form for input
+                            with st.form(key="model_prediction_form"):
+                                # Create 3 columns for feature inputs to save space
+                                cols = st.columns(3)
+                                
+                                # Distribute features across columns
+                                for i, feature in enumerate(selected_model_data['features']):
+                                    col_idx = i % 3
+                                    with cols[col_idx]:
+                                        # Try to use numeric input for features
+                                        try:
+                                            feature_values[feature] = st.number_input(
+                                                f"{feature}:", 
+                                                value=0.0,
+                                                format="%.4f",
+                                                key=f"feature_{feature}"
+                                            )
+                                        except:
+                                            # Fall back to text input if numeric fails
+                                            feature_values[feature] = st.text_input(
+                                                f"{feature}:", 
+                                                key=f"feature_{feature}"
+                                            )
+                                
+                                # Add predict button to form
+                                predict_btn = st.form_submit_button("Get Prediction")
+                                
+                            # Make prediction when button is clicked
+                            if predict_btn:
+                                try:
+                                    # Get the model details
+                                    model_type = selected_model_data['type']
+                                    model_details = selected_model_data['details']
+                                    target = selected_model_data['target']
+                                    
+                                    # Create predictor instance
+                                    from modules.prediction import Predictor
+                                    predictor = Predictor()
+                                    
+                                    # Prepare input data as DataFrame
+                                    import pandas as pd
+                                    input_df = pd.DataFrame([feature_values])
+                                    
+                                    # Make prediction
+                                    prediction = predictor.predict_with_model(
+                                        model_type=model_type,
+                                        model_details=model_details,
+                                        input_data=input_df
+                                    )
+                                    
+                                    # Display the prediction
+                                    st.success(f"### Prediction for {target}: {prediction[0]:.4f}")
+                                    
+                                    # If risk assessment is available
+                                    if 'prediction_metrics' in st.session_state and 'Test RMSE' in st.session_state.prediction_metrics:
+                                        rmse = st.session_state.prediction_metrics['Test RMSE']
+                                        st.info(f"Based on model performance, this prediction has an estimated error of ±{rmse:.4f} (RMSE)")
+                                    
+                                except Exception as e:
+                                    st.error(f"Error making prediction: {e}")
+                    
+                else:
+                    st.info("No trained models available. Please train a model first in the 'Model Training' tab.")
+                
+                # Add a divider before showing the prediction results from the last trained model
+                st.markdown("---")
+                st.write("### Recent Model Evaluation Results")
                 
                 if 'prediction_results' not in st.session_state:
                     st.info("No prediction results available. Please train a model first.")
@@ -7258,6 +7454,53 @@ with main_container:
             # Tab: Stored Datasets
             with db_tabs[0]:
                 st.subheader("Manage Stored Datasets")
+                
+                # Add direct upload function at the top
+                with st.expander("Upload New Dataset to Database", expanded=False):
+                    st.write("Upload a dataset directly to the database without processing")
+                    
+                    # File uploader
+                    upload_file = st.file_uploader("Select file to upload (CSV/Excel)", type=["csv", "xlsx", "xls"], key="db_file_uploader")
+                    
+                    # Dataset name and type
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        dataset_name = st.text_input("Dataset Name", placeholder="Enter a name for this dataset", key="db_dataset_name")
+                    with col2:
+                        dataset_type = st.selectbox(
+                            "Dataset Type", 
+                            options=["Original Data", "Interpolated Data", "Processed Data", "Generated Data", "Other"],
+                            key="db_dataset_type"
+                        )
+                    
+                    # Optional description
+                    dataset_description = st.text_area("Description (Optional)", placeholder="Add a description for this dataset", key="db_dataset_desc")
+                    
+                    # Upload button
+                    if st.button("Upload to Database", key="upload_to_db_btn"):
+                        if upload_file is not None and dataset_name:
+                            try:
+                                # Import the data
+                                data = data_handler.import_data(upload_file)
+                                
+                                # Save to database
+                                dataset_id = db_handler.save_dataset(
+                                    data,
+                                    name=dataset_name,
+                                    data_type=dataset_type,
+                                    description=dataset_description if dataset_description else None
+                                )
+                                
+                                st.success(f"Dataset '{dataset_name}' uploaded successfully with ID: {dataset_id}")
+                                st.info("Refresh the page to see the newly uploaded dataset in the list.")
+                                
+                                # Add a button to refresh the page
+                                if st.button("Refresh Page", key="refresh_after_upload"):
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"Error uploading dataset: {e}")
+                        else:
+                            st.warning("Please select a file and provide a dataset name")
                 
                 try:
                     # Get list of datasets from database

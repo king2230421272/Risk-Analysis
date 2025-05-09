@@ -6474,7 +6474,7 @@ with main_container:
                 st.dataframe(st.session_state.prediction_reference.head(5))
             
             # Create tabs for different steps in the prediction process
-            prediction_tabs = st.tabs(["Model Training", "Prediction Results", "Risk Assessment"])
+            prediction_tabs = st.tabs(["Model Training", "Prediction Results", "Prediction Quality Analysis"])
             
             # 1. MODEL TRAINING TAB
             with prediction_tabs[0]:
@@ -6520,7 +6520,19 @@ with main_container:
                     
                 elif feature_selection_method == "Manually select features":
                     # Allow manual selection of feature columns
-                    available_features = [col for col in all_columns if col != target_column]
+                    # 修复：使用原始数据集的列作为特征选择，避免不相关的特征如FM_O
+                    if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                        # 使用原始数据的列作为基础特征列表
+                        original_columns = st.session_state.original_data.columns.tolist()
+                        # 过滤当前数据集中不存在的列
+                        available_features = [col for col in all_columns if col != target_column and col in original_columns]
+                        # 如果没有共同特征，则使用当前数据集的所有特征
+                        if not available_features:
+                            available_features = [col for col in all_columns if col != target_column]
+                            st.warning("当前数据集与原始数据集没有共同特征，显示所有可用特征")
+                    else:
+                        # 如果原始数据集不可用，使用当前数据集的所有特征
+                        available_features = [col for col in all_columns if col != target_column]
                     
                     # Use multiselect for feature selection with a default of all features
                     selected_features = st.multiselect(
@@ -6535,7 +6547,19 @@ with main_container:
                         
                 elif feature_selection_method == "Advanced condition inputs":
                     # First, select base features as usual
-                    available_features = [col for col in all_columns if col != target_column]
+                    # 修复：使用原始数据集的列作为特征选择，避免不相关的特征如FM_O
+                    if 'original_data' in st.session_state and st.session_state.original_data is not None:
+                        # 使用原始数据的列作为基础特征列表
+                        original_columns = st.session_state.original_data.columns.tolist()
+                        # 过滤当前数据集中不存在的列
+                        available_features = [col for col in all_columns if col != target_column and col in original_columns]
+                        # 如果没有共同特征，则使用当前数据集的所有特征
+                        if not available_features:
+                            available_features = [col for col in all_columns if col != target_column]
+                            st.warning("当前数据集与原始数据集没有共同特征，显示所有可用特征")
+                    else:
+                        # 如果原始数据集不可用，使用当前数据集的所有特征
+                        available_features = [col for col in all_columns if col != target_column]
                     
                     selected_features = st.multiselect(
                         "Select base feature columns:",
@@ -7160,9 +7184,9 @@ with main_container:
                     col2.metric("Error Std Dev", f"{error_std:.4f}")
                     col3.metric("Mean Absolute Error", f"{error_abs_mean:.4f}")
             
-            # 3. RISK ASSESSMENT TAB
+            # 3. PREDICTION QUALITY ANALYSIS TAB
             with prediction_tabs[2]:
-                st.subheader("Risk Assessment")
+                st.subheader("Prediction Quality Analysis")
                 
                 if 'prediction_results' not in st.session_state:
                     st.info("No prediction results available. Please train a model first.")

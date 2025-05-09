@@ -54,8 +54,10 @@ class LlmHandler:
                 
         if self.deepseek_available:
             try:
-                self.deepseek_client = DeepSeekAI(api_key=self.deepseek_api_key)
-                self.deepseek_chat = DeepSeekChat(api_key=self.deepseek_api_key)
+                import os
+                os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
+                self.deepseek_client = DeepSeekAI()
+                self.deepseek_chat = DeepSeekChat()
                 print("Deepseek client successfully initialized")
             except Exception as e:
                 print(f"Error initializing Deepseek client: {e}")

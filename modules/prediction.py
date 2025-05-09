@@ -513,16 +513,28 @@ class Predictor:
         # Ensure arrays are 1D
         if isinstance(self.y_train, pd.Series):
             y_train = self.y_train.values
+        elif isinstance(self.y_train, pd.DataFrame):
+            y_train = self.y_train.values.flatten() if len(self.y_train.shape) > 1 else self.y_train.values
         else:
-            y_train = self.y_train.ravel() if len(self.y_train.shape) > 1 else self.y_train
+            y_train = self.y_train.ravel() if hasattr(self.y_train, 'ravel') and len(self.y_train.shape) > 1 else self.y_train
             
         if isinstance(self.y_test, pd.Series):
             y_test = self.y_test.values
+        elif isinstance(self.y_test, pd.DataFrame):
+            y_test = self.y_test.values.flatten() if len(self.y_test.shape) > 1 else self.y_test.values
         else:
-            y_test = self.y_test.ravel() if len(self.y_test.shape) > 1 else self.y_test
+            y_test = self.y_test.ravel() if hasattr(self.y_test, 'ravel') and len(self.y_test.shape) > 1 else self.y_test
             
-        train_pred = train_pred.ravel() if len(train_pred.shape) > 1 else train_pred
-        test_pred = test_pred.ravel() if len(test_pred.shape) > 1 else test_pred
+        # Ensure predictions are 1D
+        if hasattr(train_pred, 'ravel') and len(train_pred.shape) > 1:
+            train_pred = train_pred.ravel()
+        elif isinstance(train_pred, pd.DataFrame) or isinstance(train_pred, pd.Series):
+            train_pred = train_pred.values.flatten() if len(train_pred.shape) > 1 else train_pred.values
+            
+        if hasattr(test_pred, 'ravel') and len(test_pred.shape) > 1:
+            test_pred = test_pred.ravel()
+        elif isinstance(test_pred, pd.DataFrame) or isinstance(test_pred, pd.Series):
+            test_pred = test_pred.values.flatten() if len(test_pred.shape) > 1 else test_pred.values
         
         # Calculate metrics for training set
         train_mse = mean_squared_error(y_train, train_pred)

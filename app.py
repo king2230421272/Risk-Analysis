@@ -6151,31 +6151,90 @@ with main_container:
                     # Create options for dataset selection
                     dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']} rows, created {ds['created_at'].strftime('%Y-%m-%d %H:%M')})") for ds in all_datasets]
                     
-                    # Create columns for database dataset selection
-                    db_col1, db_col2 = st.columns(2)
+                    # Create tabs for different dataset categories
+                    dataset_tabs = st.tabs(["All Datasets", "Dam Breach Datasets", "Non-Breach Datasets"])
                     
-                    with db_col1:
-                        # Filter options
-                        data_type_filter = st.multiselect(
-                            "Filter by data type:",
-                            options=list(set(ds['data_type'] for ds in all_datasets)),
-                            default=[],
-                            key="pred_db_data_type_filter"
+                    with dataset_tabs[0]:
+                        # Create columns for database dataset selection
+                        db_col1, db_col2 = st.columns(2)
+                        
+                        with db_col1:
+                            # Filter options
+                            data_type_filter = st.multiselect(
+                                "Filter by data type:",
+                                options=list(set(ds['data_type'] for ds in all_datasets)),
+                                default=[],
+                                key="pred_db_data_type_filter"
+                            )
+                        
+                        # Filter datasets by selected data types if any filters applied
+                        filtered_datasets = all_datasets
+                        if data_type_filter:
+                            filtered_datasets = [ds for ds in all_datasets if ds['data_type'] in data_type_filter]
+                            dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']} rows, created {ds['created_at'].strftime('%Y-%m-%d %H:%M')})") for ds in filtered_datasets]
+                        
+                        # Dataset selection
+                        selected_dataset = st.selectbox(
+                            "Select dataset from database:",
+                            options=dataset_options,
+                            format_func=lambda x: x[1],
+                            key="pred_db_dataset_select_all"
                         )
                     
-                    # Filter datasets by selected data types if any filters applied
-                    filtered_datasets = all_datasets
-                    if data_type_filter:
-                        filtered_datasets = [ds for ds in all_datasets if ds['data_type'] in data_type_filter]
-                        dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']} rows, created {ds['created_at'].strftime('%Y-%m-%d %H:%M')})") for ds in filtered_datasets]
+                    with dataset_tabs[1]:
+                        # Filter for breach datasets
+                        breach_keywords = ["breach", "dam failure", "failure", "collapsed"]
+                        breach_datasets = [ds for ds in all_datasets if any(keyword.lower() in ds['name'].lower() for keyword in breach_keywords)]
+                        
+                        if not breach_datasets:
+                            st.info("No identified dam breach datasets found. If you have breach datasets, consider naming them with keywords like 'breach', 'failure', etc.")
+                            breach_dataset_options = []
+                        else:
+                            breach_dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']} rows, created {ds['created_at'].strftime('%Y-%m-%d %H:%M')})") for ds in breach_datasets]
+                            selected_breach_dataset = st.selectbox(
+                                "Select dam breach dataset:",
+                                options=breach_dataset_options,
+                                format_func=lambda x: x[1],
+                                key="pred_db_dataset_select_breach"
+                            )
                     
-                    # Dataset selection
-                    selected_dataset = st.selectbox(
-                        "Select main dataset from database:",
-                        options=dataset_options,
-                        format_func=lambda x: x[1],
-                        key="pred_db_dataset_select"
+                    with dataset_tabs[2]:
+                        # Filter for non-breach datasets
+                        non_breach_keywords = ["non breach", "non-breach", "no breach", "intact", "normal"]
+                        non_breach_datasets = [ds for ds in all_datasets if any(keyword.lower() in ds['name'].lower() for keyword in non_breach_keywords)]
+                        
+                        if not non_breach_datasets:
+                            st.info("No identified non-breach datasets found. If you have non-breach datasets, consider naming them with keywords like 'non-breach', 'intact', 'normal', etc.")
+                            non_breach_dataset_options = []
+                        else:
+                            non_breach_dataset_options = [(ds['id'], f"{ds['name']} ({ds['data_type']}, {ds['row_count']} rows, created {ds['created_at'].strftime('%Y-%m-%d %H:%M')})") for ds in non_breach_datasets]
+                            selected_non_breach_dataset = st.selectbox(
+                                "Select non-breach dataset:",
+                                options=non_breach_dataset_options,
+                                format_func=lambda x: x[1],
+                                key="pred_db_dataset_select_non_breach"
+                            )
+                    
+                    # Record which tab is active
+                    if "pred_db_dataset_select_all" in st.session_state:
+                        # Default to the first tab's selection
+                        selected_dataset_id = st.session_state.pred_db_dataset_select_all[0]
+                        
+                    # Add a callback to track selected tab
+                    selected_tab = st.radio(
+                        "Confirm dataset category to use:",
+                        ["All Datasets", "Dam Breach Datasets", "Non-Breach Datasets"],
+                        horizontal=True,
+                        key="pred_selected_category"
                     )
+                    
+                    # Update selected_dataset_id based on the radio button selection
+                    if selected_tab == "All Datasets" and "pred_db_dataset_select_all" in st.session_state and dataset_options:
+                        selected_dataset_id = st.session_state.pred_db_dataset_select_all[0]
+                    elif selected_tab == "Dam Breach Datasets" and "pred_db_dataset_select_breach" in st.session_state and breach_dataset_options:
+                        selected_dataset_id = st.session_state.pred_db_dataset_select_breach[0]
+                    elif selected_tab == "Non-Breach Datasets" and "pred_db_dataset_select_non_breach" in st.session_state and non_breach_dataset_options:
+                        selected_dataset_id = st.session_state.pred_db_dataset_select_non_breach[0]
                     
                     # Reference dataset selection (optional)
                     st.write("#### Reference Dataset (Optional)")
@@ -6192,11 +6251,15 @@ with main_container:
                     # Load button
                     if st.button("Load Selected Dataset(s)", key="pred_load_db_btn"):
                         try:
-                            # Load main dataset
-                            main_df = db_handler.load_dataset(dataset_id=selected_dataset[0])
-                            
-                            # Store in session state
-                            st.session_state.prediction_data = main_df
+                            if selected_dataset_id:
+                                # Load main dataset
+                                main_df = db_handler.load_dataset(dataset_id=selected_dataset_id)
+                                
+                                # Store in session state
+                                st.session_state.prediction_data = main_df
+                            else:
+                                st.error("No dataset selected. Please select a dataset from one of the tabs.")
+                                prediction_data_loaded = False
                             
                             if use_reference and 'reference_dataset' in locals():
                                 # Load reference dataset

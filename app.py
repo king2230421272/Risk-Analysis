@@ -1406,6 +1406,44 @@ with main_container:
                                                 st.session_state.convergence_iterations += 1
                                             
                                             st.info(f"Added {iterations} datasets to the Multiple Interpolation Analysis. Please proceed to that tab for analysis.")
+                                                
+                                            # 自动保存数据集到数据库
+                                            try:
+                                                from utils.database import DatabaseHandler
+                                                db_handler = DatabaseHandler()
+                                                saved_ids = []
+                                                
+                                                # 保存主数据集
+                                                if 'interpolated_data' in st.session_state and st.session_state.interpolated_data is not None:
+                                                    current_timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M')
+                                                    dataset_name = f"MCMC_Interpolated_{current_timestamp}_main"
+                                                    dataset_desc = f"MCMC interpolated dataset with {num_samples} samples, {chains} chains"
+                                                    
+                                                    current_result = db_handler.save_dataset(
+                                                        st.session_state.interpolated_data,
+                                                        name=dataset_name,
+                                                        description=dataset_desc,
+                                                        data_type="mcmc_interpolated"
+                                                    )
+                                                    if current_result:
+                                                        saved_ids.append(current_result)
+                                                
+                                                # 保存所有生成的数据集
+                                                for i, dataset_info in enumerate(generated_datasets):
+                                                    dataset_name = f"MCMC_Interpolated_{current_timestamp}_{i+1}"
+                                                    result = db_handler.save_dataset(
+                                                        dataset_info['data'],
+                                                        name=dataset_name,
+                                                        description=f"MCMC interpolated dataset with {num_samples} samples, {chains} chains (dataset {i+1})",
+                                                        data_type="mcmc_interpolated"
+                                                    )
+                                                    if result:
+                                                        saved_ids.append(result)
+                                                
+                                                if saved_ids:
+                                                    st.success(f"自动保存了 {len(saved_ids)} 个数据集到数据库，ID: {', '.join(map(str, saved_ids))}")
+                                            except Exception as e:
+                                                st.warning(f"自动保存数据集到数据库时出错: {e}")
                                         
                                         # Display side-by-side comparison of before and after
                                         col1, col2 = st.columns(2)

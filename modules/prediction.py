@@ -607,10 +607,23 @@ class Predictor:
                         self.y_test = np.zeros_like(self.y_test, dtype=float)
             elif isinstance(self.y_train, pd.Series):
                 if not np.issubdtype(self.y_train.dtype, np.number):
-                    print("Warning: 目标列包含非数值类型，尝试转换为数值。")
+                    print("Warning: Target contains non-numeric values. Converting to numeric.")
                     try:
-                        self.y_train = pd.to_numeric(self.y_train, errors='coerce').fillna(0).values.reshape(-1, 1)
-                        self.y_test = pd.to_numeric(self.y_test, errors='coerce').fillna(0).values.reshape(-1, 1)
+                        # Convert to Series for processing with improved regex extraction
+                        y_train_series = self.y_train.astype(str)
+                        y_test_series = self.y_test.astype(str)
+                        
+                        # Extract numeric parts using improved regex pattern
+                        y_train_extracted = y_train_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                        y_test_extracted = y_test_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                        
+                        # Convert to numeric and handle any remaining issues
+                        y_train_numeric = pd.to_numeric(y_train_extracted[0], errors='coerce').fillna(0)
+                        y_test_numeric = pd.to_numeric(y_test_extracted[0], errors='coerce').fillna(0)
+                        
+                        # Convert back to numpy arrays with correct shape
+                        self.y_train = y_train_numeric.values.reshape(-1, 1)
+                        self.y_test = y_test_numeric.values.reshape(-1, 1)
                     except Exception as e:
                         print(f"Error converting target to numeric: {e}. Using zeros.")
                         self.y_train = np.zeros_like(self.y_train, dtype=float)

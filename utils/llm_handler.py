@@ -6,12 +6,26 @@ processing tasks within the Data Analysis Platform.
 """
 
 import os
+import sys
 import json
+import re
 import openai
-from anthropic import Anthropic
 import traceback
-from deepseek_ai import DeepSeekAI
-from deepseek_ai.chat import DeepSeekChat
+
+# Import optional dependencies with error handling
+try:
+    from anthropic import Anthropic
+except ImportError:
+    Anthropic = None
+    print("Warning: Anthropic library not available")
+
+try:
+    from deepseek_ai import DeepSeekAI
+    from deepseek_ai.chat import DeepSeekChat
+except ImportError:
+    DeepSeekAI = None
+    DeepSeekChat = None
+    print("Warning: Deepseek AI library not available")
 
 class LlmHandler:
     """
@@ -93,11 +107,15 @@ class LlmHandler:
                 
         if self.deepseek_available:
             try:
-                import os
-                os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
-                self.deepseek_client = DeepSeekAI()
-                self.deepseek_chat = DeepSeekChat()
-                print("Deepseek client successfully initialized")
+                if DeepSeekAI is not None and DeepSeekChat is not None:
+                    # Set the environment variable for Deepseek
+                    os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
+                    self.deepseek_client = DeepSeekAI()
+                    self.deepseek_chat = DeepSeekChat()
+                    print("Deepseek client successfully initialized")
+                else:
+                    print("Deepseek libraries not available")
+                    self.deepseek_available = False
             except Exception as e:
                 print(f"Error initializing Deepseek client: {e}")
                 self.deepseek_available = False

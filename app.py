@@ -7475,6 +7475,293 @@ with main_container:
                                 except Exception as e:
                                     st.error(f"Error detecting outliers: {str(e)}")
                                     st.exception(e)
+                    
+                    # 4. PARAMETER PREDICTION TAB
+                    with risk_tabs[3]:
+                        st.write("### Target Parameter Prediction")
+                        st.write("使用训练好的模型来预测特定目标参数值。")
+                        
+                        # Check if we have a trained model
+                        if 'trained_model' not in st.session_state:
+                            st.warning("No trained model available. Please train a model first in the Model Training tab.")
+                        else:
+                            # Get the feature names from the model
+                            if hasattr(st.session_state, 'feature_names') and st.session_state.feature_names:
+                                feature_names = st.session_state.feature_names
+                                
+                                # Create input fields for each feature
+                                st.write("#### Input Parameters")
+                                st.write("Please enter values for model input features:")
+                                
+                                # Use columns for better layout
+                                cols = st.columns(3)
+                                input_data = {}
+                                
+                                for i, feature in enumerate(feature_names):
+                                    col_idx = i % 3
+                                    with cols[col_idx]:
+                                        # Get min and max values from training data if available
+                                        if hasattr(st.session_state, 'data') and st.session_state.data is not None and feature in st.session_state.data.columns:
+                                            min_val = float(st.session_state.data[feature].min())
+                                            max_val = float(st.session_state.data[feature].max())
+                                            # Ensure min and max are different
+                                            if min_val == max_val:
+                                                max_val = min_val + 1.0
+                                            
+                                            # Use slider for numeric inputs with values from data
+                                            input_data[feature] = st.slider(
+                                                f"{feature}:",
+                                                min_value=min_val,
+                                                max_value=max_val,
+                                                value=(min_val + max_val) / 2,
+                                                key=f"param_pred_{feature}"
+                                            )
+                                        else:
+                                            # Use number input if no data range available
+                                            input_data[feature] = st.number_input(
+                                                f"{feature}:",
+                                                value=0.0,
+                                                key=f"param_pred_{feature}"
+                                            )
+                                
+                                # Prediction button
+                                predict_button = st.button("Predict Parameter", key="predict_parameter_btn")
+                                
+                                if predict_button:
+                                    with st.spinner("Predicting parameter value..."):
+                                        try:
+                                            # Get the trained model
+                                            model = st.session_state.trained_model
+                                            
+                                            # Predict the parameter
+                                            predicted_value = risk_assessor.predict_parameter(model, input_data)
+                                            
+                                            # Display the prediction
+                                            st.success(f"Prediction completed successfully")
+                                            st.metric("Predicted Parameter Value", f"{predicted_value:.4f}")
+                                            
+                                            # Store the predicted value for risk calculation
+                                            st.session_state.predicted_parameter_value = predicted_value
+                                            
+                                            # Note about using this value in Risk Evaluation
+                                            st.info("This predicted value can be used in the Risk Evaluation tab for comprehensive risk assessment.")
+                                            
+                                        except Exception as e:
+                                            st.error(f"Error predicting parameter: {str(e)}")
+                                            st.exception(e)
+                            else:
+                                st.warning("Feature names not available. Please train a model first.")
+                    
+                    # 5. LAND USE ANALYSIS TAB
+                    with risk_tabs[4]:
+                        st.write("### Land Use Map Analysis")
+                        st.write("分析土地利用图并计算单位损失值。")
+                        
+                        # Upload land use map
+                        st.write("#### Upload Land Use Map")
+                        land_use_map = st.file_uploader("Upload land use map image (PNG/JPG)", type=["png", "jpg", "jpeg"], key="land_use_map_uploader")
+                        
+                        # Display land use type description
+                        st.write("#### Land Use Types and Loss Factors")
+                        
+                        # Create a DataFrame to display land use types
+                        land_use_df = pd.DataFrame({
+                            "Type": list(risk_assessor.land_use_types.keys()),
+                            "RGB Color": [str(item["color"]) for item in risk_assessor.land_use_types.values()],
+                            "Loss Factor": [item["loss_factor"] for item in risk_assessor.land_use_types.values()]
+                        })
+                        
+                        # Display the land use types table
+                        st.dataframe(land_use_df, use_container_width=True)
+                        
+                        # Note about land use map preparation
+                        st.info("Prepare your land use map with the RGB colors shown above for accurate analysis.")
+                        
+                        # Analyze button
+                        analyze_button = st.button("Analyze Land Use Map", key="analyze_land_use_btn")
+                        
+                        if land_use_map is not None and analyze_button:
+                            with st.spinner("Analyzing land use map..."):
+                                try:
+                                    # Analyze the land use map
+                                    analysis_result = risk_assessor.analyze_land_use_image(land_use_map)
+                                    
+                                    # Store unit loss for risk evaluation
+                                    st.session_state.unit_loss = analysis_result["unit_loss"]
+                                    
+                                    # Display analysis results
+                                    st.success("Land use map analysis completed")
+                                    
+                                    # Display the processed image
+                                    st.write("#### Analyzed Land Use Map")
+                                    st.image(f"data:image/png;base64,{analysis_result['result_image']}", caption="Analyzed Land Use Map")
+                                    
+                                    # Display summary statistics
+                                    st.write("#### Analysis Summary")
+                                    col1, col2 = st.columns(2)
+                                    
+                                    with col1:
+                                        st.metric("Total Area", f"{analysis_result['total_area']} pixels")
+                                        st.metric("Image Dimensions", f"{analysis_result['dimensions']}")
+                                    
+                                    with col2:
+                                        st.metric("Unit Loss Value", f"{analysis_result['unit_loss']:.4f}", 
+                                                 delta="Higher values indicate greater potential loss")
+                                    
+                                    # Display land use area breakdown
+                                    st.write("#### Land Use Area Breakdown")
+                                    
+                                    # Create area breakdown DataFrame
+                                    area_df = pd.DataFrame({
+                                        "Land Use Type": list(analysis_result["land_use_areas"].keys()),
+                                        "Pixels": [item["pixels"] for item in analysis_result["land_use_areas"].values()],
+                                        "Percentage (%)": [f"{item['percentage']:.2f}" for item in analysis_result["land_use_areas"].values()],
+                                        "Loss Factor": [item["loss_factor"] for item in analysis_result["land_use_areas"].values()],
+                                        "Loss Contribution": [item["percentage"] * item["loss_factor"] / 100 for item in analysis_result["land_use_areas"].values()]
+                                    })
+                                    
+                                    # Sort by percentage
+                                    area_df = area_df.sort_values(by="Pixels", ascending=False).reset_index(drop=True)
+                                    
+                                    # Display the area breakdown
+                                    st.dataframe(area_df, use_container_width=True)
+                                    
+                                    # Create a pie chart of land use distribution
+                                    fig, ax = plt.subplots(figsize=(8, 8))
+                                    ax.pie(
+                                        [float(p.replace('%', '')) for p in area_df["Percentage (%)"]],
+                                        labels=area_df["Land Use Type"],
+                                        autopct='%1.1f%%',
+                                        startangle=90,
+                                        colors=['blue', 'cyan', 'red', 'green', 'darkgreen', 'yellow', 'gray'][:len(area_df)]
+                                    )
+                                    ax.axis('equal')
+                                    ax.set_title('Land Use Distribution')
+                                    
+                                    st.pyplot(fig)
+                                    
+                                    # Note about using this result in Risk Evaluation
+                                    st.info("This unit loss value can be used in the Risk Evaluation tab for comprehensive risk assessment.")
+                                    
+                                except Exception as e:
+                                    st.error(f"Error analyzing land use map: {str(e)}")
+                                    st.exception(e)
+                    
+                    # 6. RISK EVALUATION TAB
+                    with risk_tabs[5]:
+                        st.write("### Risk Level Evaluation")
+                        st.write("综合评估风险等级，考虑预测参数值和单位损失。")
+                        
+                        # Two sources for parameter value: direct input or predicted value
+                        st.write("#### Parameter Value")
+                        param_value_source = st.radio(
+                            "Parameter value source:",
+                            ["Direct Input", "Use Predicted Value"]
+                        )
+                        
+                        if param_value_source == "Direct Input":
+                            parameter_value = st.number_input(
+                                "Enter parameter value:",
+                                min_value=0.0,
+                                value=0.5,
+                                step=0.01,
+                                key="direct_param_value"
+                            )
+                        else:
+                            if 'predicted_parameter_value' in st.session_state:
+                                parameter_value = st.session_state.predicted_parameter_value
+                                st.success(f"Using predicted parameter value: {parameter_value:.4f}")
+                            else:
+                                st.warning("No predicted parameter value available. Please predict a parameter first or use direct input.")
+                                parameter_value = 0.0
+                        
+                        # Two sources for unit loss: direct input or land use analysis
+                        st.write("#### Unit Loss Value")
+                        unit_loss_source = st.radio(
+                            "Unit loss value source:",
+                            ["Direct Input", "Use Land Use Analysis"]
+                        )
+                        
+                        if unit_loss_source == "Direct Input":
+                            unit_loss = st.number_input(
+                                "Enter unit loss value:",
+                                min_value=0.0,
+                                max_value=1.0,
+                                value=0.3,
+                                step=0.01,
+                                key="direct_unit_loss"
+                            )
+                        else:
+                            if 'unit_loss' in st.session_state:
+                                unit_loss = st.session_state.unit_loss
+                                st.success(f"Using calculated unit loss: {unit_loss:.4f}")
+                            else:
+                                st.warning("No calculated unit loss available. Please analyze a land use map first or use direct input.")
+                                unit_loss = 0.0
+                        
+                        # Evaluate risk button
+                        evaluate_button = st.button("Evaluate Risk Level", key="evaluate_risk_btn")
+                        
+                        if evaluate_button:
+                            with st.spinner("Evaluating risk level..."):
+                                try:
+                                    # Calculate risk level
+                                    risk_result = risk_assessor.calculate_risk_level(parameter_value, unit_loss)
+                                    
+                                    # Display risk level
+                                    st.success("Risk evaluation completed")
+                                    
+                                    # Risk visualization
+                                    risk_img = risk_assessor.visualize_risk_assessment(risk_result)
+                                    
+                                    # Display the risk visualization
+                                    st.image(f"data:image/png;base64,{risk_img}", caption="Risk Assessment Visualization")
+                                    
+                                    # Display risk details
+                                    st.write("#### Risk Assessment Details")
+                                    
+                                    col1, col2, col3 = st.columns(3)
+                                    
+                                    with col1:
+                                        st.metric("Parameter Value", f"{risk_result['predicted_value']:.4f}")
+                                    
+                                    with col2:
+                                        st.metric("Unit Loss", f"{risk_result['unit_loss']:.4f}")
+                                    
+                                    with col3:
+                                        st.metric(
+                                            "Risk Level", 
+                                            risk_result['risk_level'],
+                                            delta="Critical" if risk_result['risk_level'] == "Critical" else None,
+                                            delta_color="inverse"
+                                        )
+                                    
+                                    # Display total risk value
+                                    st.metric("Total Risk Value", f"{risk_result['total_risk']:.4f}", 
+                                            delta=f"Based on parameter value × unit loss")
+                                    
+                                    # Risk explanation based on level
+                                    risk_explanations = {
+                                        "Low": "Risk is minimal. No significant action required, but continue regular monitoring.",
+                                        "Medium": "Risk is moderate. Consider implementing preventive measures and increased monitoring.",
+                                        "High": "Risk is significant. Immediate action recommended to mitigate potential impacts.",
+                                        "Critical": "Risk is severe. Urgent and comprehensive action required to address the situation."
+                                    }
+                                    
+                                    # Display explanation box with appropriate color
+                                    st.markdown(
+                                        f"""
+                                        <div style="padding: 15px; border-radius: 5px; background-color: {risk_result['color']}; color: {'white' if risk_result['risk_level'] in ['High', 'Critical'] else 'black'}">
+                                            <h4>Risk Level: {risk_result['risk_level']}</h4>
+                                            <p>{risk_explanations.get(risk_result['risk_level'], "")}</p>
+                                        </div>
+                                        """,
+                                        unsafe_allow_html=True
+                                    )
+                                    
+                                except Exception as e:
+                                    st.error(f"Error evaluating risk level: {str(e)}")
+                                    st.exception(e)
     
     # 4. DATABASE TAB
     with tab4:

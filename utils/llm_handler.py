@@ -19,6 +19,45 @@ class LlmHandler:
     Supports OpenAI, Anthropic, and Deepseek models for natural language processing tasks.
     """
     
+    def _extract_json_from_text(self, text):
+        """
+        Extract JSON data from text that might contain other content or markdown formatting.
+        
+        Parameters:
+        -----------
+        text : str
+            The text potentially containing JSON data
+            
+        Returns:
+        --------
+        dict
+            The extracted JSON data, or empty dict if extraction failed
+        """
+        import re
+        
+        # Try to extract JSON object from text
+        json_pattern = r'(\{.*\})'
+        json_matches = re.search(json_pattern, text, re.DOTALL)
+        
+        if json_matches:
+            try:
+                return json.loads(json_matches.group(1))
+            except json.JSONDecodeError:
+                pass
+                
+        # Try for JSON array
+        array_pattern = r'(\[.*\])'
+        array_matches = re.search(array_pattern, text, re.DOTALL)
+        
+        if array_matches:
+            try:
+                return json.loads(array_matches.group(1))
+            except json.JSONDecodeError:
+                pass
+        
+        # If all extraction methods fail
+        return {}
+    
     def __init__(self):
         """Initialize the LLM handler with available API keys."""
         self.openai_api_key = os.environ.get('OPENAI_API_KEY')
@@ -136,21 +175,24 @@ class LlmHandler:
             )
             
             # Parse the response
-            content = response.choices[0].message.content
-            if not content:
-                return {"error": "Empty content received from OpenAI API"}
-                
-            try:
-                result = json.loads(content)
-                return result
-            except json.JSONDecodeError as e:
-                print(f"JSON decode error: {e}")
-                print(f"Raw content from OpenAI: {content}")
-                # Fall back to regex-based extraction
-                extracted = self._extract_json_from_text(content)
-                if extracted:
-                    return extracted
-                return {"error": f"Failed to parse JSON response from OpenAI: {str(e)}"}
+            if hasattr(response, 'choices') and response.choices and len(response.choices) > 0:
+                content = response.choices[0].message.content
+                if not content:
+                    return {"error": "Empty content received from OpenAI API"}
+                    
+                try:
+                    result = json.loads(content)
+                    return result
+                except json.JSONDecodeError as e:
+                    print(f"JSON decode error: {e}")
+                    print(f"Raw content from OpenAI: {content}")
+                    # Fall back to regex-based extraction
+                    extracted = self._extract_json_from_text(content)
+                    if extracted:
+                        return extracted
+                    return {"error": f"Failed to parse JSON response from OpenAI: {str(e)}"}
+            else:
+                return {"error": "Invalid response format from OpenAI API"}
             
         except Exception as e:
             return {
@@ -522,8 +564,24 @@ class LlmHandler:
                 )
                 
                 # Parse the response
-                result = json.loads(response.choices[0].message.content)
-                return result
+                if hasattr(response, 'choices') and response.choices and len(response.choices) > 0:
+                    content = response.choices[0].message.content
+                    if not content:
+                        return {"error": "Empty content received from OpenAI API"}
+                        
+                    try:
+                        result = json.loads(content)
+                        return result
+                    except json.JSONDecodeError as e:
+                        print(f"JSON decode error in process_prediction_conditions: {e}")
+                        print(f"Raw content from OpenAI: {content}")
+                        # Fall back to regex-based extraction
+                        extracted = self._extract_json_from_text(content)
+                        if extracted:
+                            return extracted
+                        return {"error": f"Failed to parse JSON response from OpenAI: {str(e)}"}
+                else:
+                    return {"error": "Invalid response format from OpenAI API"}
                 
             elif self.anthropic_available and (service == "anthropic"):
                 prompt = f"""
@@ -561,15 +619,30 @@ class LlmHandler:
                 )
                 
                 # Extract and parse the JSON response
-                content = response.content[0].text
-                # Strip any potential markdown code blocks
-                if "```json" in content:
-                    content = content.split("```json")[1].split("```")[0].strip()
-                elif "```" in content:
-                    content = content.split("```")[1].split("```")[0].strip()
-                
-                result = json.loads(content)
-                return result
+                if hasattr(response, 'content') and response.content and len(response.content) > 0:
+                    content = response.content[0].text
+                    if not content:
+                        return {"error": "Empty content received from Anthropic API"}
+                        
+                    # Strip any potential markdown code blocks
+                    if "```json" in content:
+                        content = content.split("```json")[1].split("```")[0].strip()
+                    elif "```" in content:
+                        content = content.split("```")[1].split("```")[0].strip()
+                    
+                    try:
+                        result = json.loads(content)
+                        return result
+                    except json.JSONDecodeError as e:
+                        print(f"JSON decode error in process_prediction_conditions: {e}")
+                        print(f"Raw content from Anthropic: {content}")
+                        # Fall back to regex-based extraction
+                        extracted = self._extract_json_from_text(content)
+                        if extracted:
+                            return extracted
+                        return {"error": f"Failed to parse JSON response from Anthropic: {str(e)}"}
+                else:
+                    return {"error": "Invalid response format from Anthropic API"}
                 
             elif self.deepseek_available and (service == "deepseek"):
                 system_message = f"""
@@ -603,8 +676,24 @@ class LlmHandler:
                 )
                 
                 # Parse the response
-                result = json.loads(response.choices[0].message.content)
-                return result
+                if hasattr(response, 'choices') and response.choices and len(response.choices) > 0:
+                    content = response.choices[0].message.content
+                    if not content:
+                        return {"error": "Empty content received from Deepseek API"}
+                        
+                    try:
+                        result = json.loads(content)
+                        return result
+                    except json.JSONDecodeError as e:
+                        print(f"JSON decode error in process_prediction_conditions: {e}")
+                        print(f"Raw content from Deepseek: {content}")
+                        # Fall back to regex-based extraction
+                        extracted = self._extract_json_from_text(content)
+                        if extracted:
+                            return extracted
+                        return {"error": f"Failed to parse JSON response from Deepseek: {str(e)}"}
+                else:
+                    return {"error": "Invalid response format from Deepseek API"}
             else:
                 # Use code-based fallback method
                 return self.parse_condition_text_with_code(natural_language_text, column_info)

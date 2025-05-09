@@ -183,15 +183,15 @@ class RiskAssessor:
         
         Parameters:
         -----------
-        risk_assessment : pandas.DataFrame
-            DataFrame with risk assessment results
+        risk_assessment : pandas.DataFrame or dict
+            DataFrame with risk assessment results or dictionary with results
         assessment_method : str
             Method used for risk assessment
             
         Returns:
         --------
-        dict
-            Dictionary with risk summary statistics
+        dict or str
+            Dictionary with risk summary statistics or formatted string summary
         """
         summary = {}
         
@@ -230,6 +230,190 @@ class RiskAssessor:
               - High: {error_counts.get('High', 0)}
               - Critical: {error_counts.get('Critical', 0)}
             """
+        
+        elif assessment_method == "prob_loss":
+            # 处理概率损失法的结果汇总
+            summary = {}
+            
+            if isinstance(risk_assessment, pd.DataFrame):
+                # 如果是DataFrame，计算平均风险值
+                if 'prob' in risk_assessment.columns and 'loss' in risk_assessment.columns:
+                    risk_assessment['risk'] = risk_assessment['prob'] * risk_assessment['loss']
+                    avg_risk = risk_assessment['risk'].mean()
+                else:
+                    # 查找可能包含风险信息的列
+                    risk_cols = [col for col in risk_assessment.columns if 'risk' in col.lower()]
+                    if risk_cols:
+                        avg_risk = risk_assessment[risk_cols[0]].mean()
+                    else:
+                        avg_risk = 0
+                
+                # 根据风险值确定风险等级
+                if avg_risk < 0.3:
+                    risk_level = "低风险"
+                elif avg_risk < 0.6:
+                    risk_level = "中风险"
+                elif avg_risk < 0.8:
+                    risk_level = "高风险"
+                else:
+                    risk_level = "极高风险"
+                
+                summary["risk_value"] = avg_risk
+                summary["risk_level"] = risk_level
+                
+            elif isinstance(risk_assessment, dict):
+                # 如果是字典，直接使用字典中的值
+                if "risk_value" in risk_assessment:
+                    avg_risk = risk_assessment["risk_value"]
+                elif "risk" in risk_assessment:
+                    avg_risk = risk_assessment["risk"]
+                else:
+                    avg_risk = 0
+                    
+                if "risk_level" in risk_assessment:
+                    risk_level = risk_assessment["risk_level"]
+                else:
+                    # 根据风险值确定风险等级
+                    if avg_risk < 0.3:
+                        risk_level = "低风险"
+                    elif avg_risk < 0.6:
+                        risk_level = "中风险"
+                    elif avg_risk < 0.8:
+                        risk_level = "高风险"
+                    else:
+                        risk_level = "极高风险"
+                
+                summary["risk_value"] = avg_risk
+                summary["risk_level"] = risk_level
+            else:
+                # 如果是单一数值，直接计算风险等级
+                avg_risk = float(risk_assessment) if isinstance(risk_assessment, (int, float, str)) else 0
+                
+                # 根据风险值确定风险等级
+                if avg_risk < 0.3:
+                    risk_level = "低风险"
+                elif avg_risk < 0.6:
+                    risk_level = "中风险"
+                elif avg_risk < 0.8:
+                    risk_level = "高风险"
+                else:
+                    risk_level = "极高风险"
+                
+                summary["risk_value"] = avg_risk
+                summary["risk_level"] = risk_level
+            
+            return summary
+            
+        elif assessment_method == "iahp_critic_gt":
+            # 处理IAHP-CRITIC-GT法的结果汇总
+            summary = {}
+            
+            if isinstance(risk_assessment, dict):
+                # 提取风险得分
+                if "risk_scores" in risk_assessment:
+                    avg_score = sum(risk_assessment["risk_scores"]) / len(risk_assessment["risk_scores"])
+                    max_score = max(risk_assessment["risk_scores"])
+                    min_score = min(risk_assessment["risk_scores"])
+                    
+                    summary["avg_risk_score"] = avg_score
+                    summary["max_risk_score"] = max_score
+                    summary["min_risk_score"] = min_score
+                    
+                    # 根据平均风险得分确定风险等级
+                    if avg_score < 0.3:
+                        risk_level = "低风险"
+                    elif avg_score < 0.6:
+                        risk_level = "中风险"
+                    elif avg_score < 0.8:
+                        risk_level = "高风险"
+                    else:
+                        risk_level = "极高风险"
+                    
+                    summary["risk_level"] = risk_level
+                    summary["risk_value"] = avg_score
+                
+                # 提取风险分类
+                if "risk_categories" in risk_assessment:
+                    category_counts = {}
+                    for category in risk_assessment["risk_categories"]:
+                        category_counts[category] = category_counts.get(category, 0) + 1
+                    
+                    summary["risk_category_counts"] = category_counts
+                    
+                # 提取权重信息
+                if "weights" in risk_assessment:
+                    summary["weights"] = risk_assessment["weights"]
+            
+            return summary
+            
+        elif assessment_method == "dynamic_bayes":
+            # 处理动态贝叶斯网络法的结果汇总
+            summary = {}
+            
+            if isinstance(risk_assessment, dict):
+                # 提取预测概率
+                if "risk_probabilities" in risk_assessment:
+                    if isinstance(risk_assessment["risk_probabilities"], dict):
+                        # 提取最高风险状态及其概率
+                        max_state = max(risk_assessment["risk_probabilities"].items(), 
+                                       key=lambda x: x[1])
+                        summary["max_risk_state"] = max_state[0]
+                        summary["max_risk_prob"] = max_state[1]
+                        
+                        # 如果有高风险状态，计算综合风险值
+                        high_risk_states = [s for s, p in risk_assessment["risk_probabilities"].items() 
+                                         if "高" in str(s) or "危险" in str(s) or "严重" in str(s)]
+                        if high_risk_states:
+                            high_risk_prob = sum(risk_assessment["risk_probabilities"][s] for s in high_risk_states)
+                            summary["high_risk_prob"] = high_risk_prob
+                            
+                            # 根据高风险概率确定风险等级
+                            if high_risk_prob < 0.3:
+                                risk_level = "低风险"
+                            elif high_risk_prob < 0.6:
+                                risk_level = "中风险"
+                            elif high_risk_prob < 0.8:
+                                risk_level = "高风险"
+                            else:
+                                risk_level = "极高风险"
+                                
+                            summary["risk_level"] = risk_level
+                            summary["risk_value"] = high_risk_prob
+                        else:
+                            # 如果没有明确的高风险状态，使用最高概率状态
+                            if summary["max_risk_prob"] < 0.3:
+                                risk_level = "低风险"
+                            elif summary["max_risk_prob"] < 0.6:
+                                risk_level = "中风险"
+                            elif summary["max_risk_prob"] < 0.8:
+                                risk_level = "高风险"
+                            else:
+                                risk_level = "极高风险"
+                                
+                            summary["risk_level"] = risk_level
+                            summary["risk_value"] = summary["max_risk_prob"]
+                    else:
+                        # 如果风险概率是列表或数组
+                        max_prob_index = np.argmax(risk_assessment["risk_probabilities"])
+                        max_prob = risk_assessment["risk_probabilities"][max_prob_index]
+                        
+                        summary["max_risk_state"] = f"状态 {max_prob_index}"
+                        summary["max_risk_prob"] = max_prob
+                        
+                        # 根据最大概率确定风险等级
+                        if max_prob < 0.3:
+                            risk_level = "低风险"
+                        elif max_prob < 0.6:
+                            risk_level = "中风险"
+                        elif max_prob < 0.8:
+                            risk_level = "高风险"
+                        else:
+                            risk_level = "极高风险"
+                            
+                        summary["risk_level"] = risk_level
+                        summary["risk_value"] = max_prob
+            
+            return summary
             
         elif assessment_method == "Outlier Detection":
             # Calculate outlier statistics

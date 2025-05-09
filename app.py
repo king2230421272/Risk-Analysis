@@ -2407,7 +2407,7 @@ with main_container:
                                                 if not (ds.get('is_analysis_result', False) and ds['id'] in selected_to_clear)
                                             ]
                                             st.success(f"Cleared {len(selected_to_clear)} selected analysis results.")
-                                            st.experimental_rerun()
+                                            st.rerun()
                                 
                                 # Create a separate section for selecting analysis results
                                 st.write("### Compare Analysis Results")

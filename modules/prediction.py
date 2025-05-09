@@ -195,7 +195,27 @@ class Predictor:
         elif isinstance(feature_columns, str):
             feature_columns = [feature_columns]
         
-        X = data[feature_columns]
+        # Process custom conditions if provided
+        custom_conditions = model_params.pop('custom_conditions', None)
+        if custom_conditions:
+            # Create a copy of the data to avoid modifying the original
+            data_with_conditions = data.copy()
+            
+            # Add custom condition columns
+            for cond_name, cond_value in custom_conditions.items():
+                # Add uniform column with the condition value
+                data_with_conditions[cond_name] = cond_value
+                
+                # Add to feature columns if not already there
+                if cond_name not in feature_columns:
+                    feature_columns.append(cond_name)
+            
+            # Use the enhanced dataset
+            X = data_with_conditions[feature_columns]
+        else:
+            # Use original data
+            X = data[feature_columns]
+            
         y = data[target_column]
         
         # Save feature names

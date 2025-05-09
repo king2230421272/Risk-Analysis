@@ -6711,14 +6711,28 @@ with main_container:
                                     model_params['custom_conditions'] = custom_conditions
                                 
                                 # Train model and get predictions
-                                predictions_df, model_details, metrics = predictor.train_and_predict(
-                                    data=st.session_state.prediction_data,
-                                    target_column=target_column,
-                                    feature_columns=selected_features,
-                                    model_type=model_type,
-                                    test_size=test_size,
-                                    **model_params
-                                )
+                                # Check if we should use combined datasets
+                                if st.session_state.get('using_combined_datasets', False) and 'breach_data' in st.session_state and 'non_breach_data' in st.session_state:
+                                    st.info("Training model with both breach and non-breach datasets...")
+                                    predictions_df, model_details, metrics = predictor.train_with_multiple_datasets(
+                                        breach_data=st.session_state.breach_data,
+                                        non_breach_data=st.session_state.non_breach_data,
+                                        target_column=target_column,
+                                        feature_columns=selected_features,
+                                        model_type=model_type,
+                                        test_size=test_size,
+                                        **model_params
+                                    )
+                                else:
+                                    # Use standard training method
+                                    predictions_df, model_details, metrics = predictor.train_and_predict(
+                                        data=st.session_state.prediction_data,
+                                        target_column=target_column,
+                                        feature_columns=selected_features,
+                                        model_type=model_type,
+                                        test_size=test_size,
+                                        **model_params
+                                    )
                                 
                                 # Save results to session state
                                 st.session_state.prediction_results = predictions_df

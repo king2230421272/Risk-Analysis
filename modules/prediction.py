@@ -189,22 +189,24 @@ class Predictor:
         # Ensure both datasets have the same columns
         common_columns = set(breach_data.columns).intersection(set(non_breach_data.columns))
         
+        # 处理target_column参数，确保它总是列表形式
+        if isinstance(target_column, str):
+            target_column_list = [target_column]
+        else:
+            target_column_list = target_column.copy() if hasattr(target_column, 'copy') else list(target_column)
+            
         # Filter feature columns to only include common columns
         if feature_columns is None:
-            feature_columns = [col for col in common_columns if col != target_column]
+            feature_columns = [col for col in common_columns if col not in target_column_list]
         else:
             if isinstance(feature_columns, str):
                 feature_columns = [feature_columns]
             feature_columns = [col for col in feature_columns if col in common_columns]
         
         # Ensure target column is in both datasets
-        if isinstance(target_column, str):
-            if target_column not in common_columns:
-                raise ValueError(f"Target column '{target_column}' not found in both datasets")
-        else:  # it's a list
-            for col in target_column:
-                if col not in common_columns:
-                    raise ValueError(f"Target column '{col}' not found in both datasets")
+        for col in target_column_list:
+            if col not in common_columns:
+                raise ValueError(f"Target column '{col}' not found in both datasets")
         
         # Add a dataset identifier column
         breach_data = breach_data.copy()

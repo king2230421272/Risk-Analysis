@@ -467,9 +467,10 @@ class Predictor:
                         # For string values like "ET 18.90", extract just the numeric part
                         # First convert to string to ensure consistent handling
                         str_series = X[col].astype(str)
-                        # This improved regex extracts numbers with decimal points, supporting various formats
-                        # It will find numbers like 18.90 in "ET 18.90" or just "18.90"
-                        extracted = str_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                        # This enhanced regex extracts numbers with decimal points, supporting various formats
+                        # It will find numbers like 18.90 in "ET 18.90" or just "18.90" or "18,90" (European format)
+                        # Also handles scientific notation (e.g., 1.23e-4)
+                        extracted = str_series.str.extract(r'[-+]?(\d+[.,]\d+[eE]?[-+]?\d*|\d+[eE][-+]?\d+|\d+)')
                         # Handle the case where extraction failed for some values
                         X[col] = pd.to_numeric(extracted[0], errors='coerce')
                     
@@ -531,10 +532,11 @@ class Predictor:
                             str_train = self.X_train[col].astype(str)
                             str_test = self.X_test[col].astype(str)
                             
-                            # This improved regex extracts numbers with decimal points, supporting various formats
-                            # It will find numbers like 18.90 in "ET 18.90" or just "18.90"
-                            train_extracted = str_train.str.extract(r'[-+]?(\d+\.\d+|\d+)')
-                            test_extracted = str_test.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                            # This enhanced regex extracts numbers with decimal points, supporting various formats
+                            # It will find numbers like 18.90 in "ET 18.90" or just "18.90" or "18,90" (European format)
+                            # Also handles scientific notation (e.g., 1.23e-4)
+                            train_extracted = str_train.str.extract(r'[-+]?(\d+[.,]\d+[eE]?[-+]?\d*|\d+[eE][-+]?\d+|\d+)')
+                            test_extracted = str_test.str.extract(r'[-+]?(\d+[.,]\d+[eE]?[-+]?\d*|\d+[eE][-+]?\d+|\d+)')
                             
                             # Convert to numeric with proper error handling
                             self.X_train[col] = pd.to_numeric(train_extracted[0], errors='coerce')
@@ -613,9 +615,11 @@ class Predictor:
                         y_train_series = self.y_train.astype(str)
                         y_test_series = self.y_test.astype(str)
                         
-                        # Extract numeric parts using improved regex pattern
-                        y_train_extracted = y_train_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
-                        y_test_extracted = y_test_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                        # Extract numeric parts using enhanced regex pattern
+                        # It will find numbers like 18.90 in "ET 18.90" or just "18.90" or "18,90" (European format)
+                        # Also handles scientific notation (e.g., 1.23e-4)
+                        y_train_extracted = y_train_series.str.extract(r'[-+]?(\d+[.,]\d+[eE]?[-+]?\d*|\d+[eE][-+]?\d+|\d+)')
+                        y_test_extracted = y_test_series.str.extract(r'[-+]?(\d+[.,]\d+[eE]?[-+]?\d*|\d+[eE][-+]?\d+|\d+)')
                         
                         # Convert to numeric and handle any remaining issues
                         y_train_numeric = pd.to_numeric(y_train_extracted[0], errors='coerce').fillna(0)

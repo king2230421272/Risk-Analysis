@@ -6112,6 +6112,9 @@ with main_container:
             key="prediction_data_source_type"
         )
         
+        # Default value for data availability flag
+        prediction_data_loaded = False
+        
         if data_source_type == "Session Data":
             # Check if we have data available for prediction in session state
             if 'prediction_data_available' not in st.session_state or not st.session_state.prediction_data_available:
@@ -6342,9 +6345,11 @@ with main_container:
                 elif model_type == "Random Forest":
                     n_estimators = st.slider("Number of trees:", min_value=10, max_value=200, value=100, step=10, key="rf_n_estimators")
                     max_depth = st.slider("Maximum depth:", min_value=1, max_value=20, value=5, key="rf_max_depth")
+                    min_samples_split = st.slider("Minimum samples to split:", min_value=2, max_value=20, value=2, key="rf_min_samples_split")
                     
                     model_params["n_estimators"] = n_estimators
                     model_params["max_depth"] = max_depth
+                    model_params["min_samples_split"] = min_samples_split
                     
                 elif model_type == "Gradient Boosting":
                     n_estimators = st.slider("Number of estimators:", min_value=10, max_value=200, value=100, step=10, key="gb_n_estimators")

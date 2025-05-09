@@ -155,6 +155,157 @@ class Predictor:
         self.model_type = None
         self.nn_config = None  # For neural network configurations
         self.training_history = None  # For neural network training history
+        
+    def predict_with_model(self, model_type, model_details, input_data):
+        """
+        Make predictions using a saved model.
+        
+        Parameters:
+        -----------
+        model_type : str
+            Type of the model ('Linear Regression', 'Decision Tree', 
+            'Random Forest', 'Gradient Boosting', 'Neural Network', 'LSTM Network')
+        model_details : dict
+            Dictionary containing model parameters and details
+        input_data : pandas.DataFrame
+            Input data for prediction with feature columns matching the model's requirements
+            
+        Returns:
+        --------
+        numpy.ndarray
+            Predicted values
+        """
+        # Check input data
+        if input_data is None or len(input_data) == 0:
+            raise ValueError("Input data cannot be empty")
+            
+        # Get model object or weights
+        if model_type == 'Linear Regression':
+            model = LinearRegression()
+            model.coef_ = np.array(model_details.get('weights', []))
+            model.intercept_ = model_details.get('intercept', 0)
+            
+        elif model_type == 'Decision Tree':
+            model = joblib.loads(model_details.get('model_binary', ''))
+            
+        elif model_type == 'Random Forest':
+            model = joblib.loads(model_details.get('model_binary', ''))
+            
+        elif model_type == 'Gradient Boosting':
+            model = joblib.loads(model_details.get('model_binary', ''))
+            
+        elif model_type == 'Neural Network':
+            # Recreate the neural network architecture
+            input_dim = model_details.get('neural_network_config', {}).get('input_dim', len(input_data.columns))
+            hidden_dims = model_details.get('neural_network_config', {}).get('hidden_dims', [64, 32])
+            output_dim = model_details.get('neural_network_config', {}).get('output_dim', 1)
+            dropout_rate = model_details.get('neural_network_config', {}).get('dropout_rate', 0.2)
+            
+            # Create model with same architecture
+            model = NeuralNetworkRegressor(
+                input_dim=input_dim,
+                hidden_dims=hidden_dims,
+                output_dim=output_dim,
+                dropout_rate=dropout_rate
+            )
+            
+            # Load model weights if available
+            if 'model_weights' in model_details:
+                # Convert weights back to state dict
+                state_dict = {}
+                for key, value in model_details['model_weights'].items():
+                    state_dict[key] = torch.tensor(value)
+                model.load_state_dict(state_dict)
+            
+            # Set to evaluation mode
+            model.eval()
+            
+        elif model_type == 'LSTM Network':
+            # Recreate the LSTM network architecture
+            input_dim = model_details.get('neural_network_config', {}).get('input_dim', len(input_data.columns))
+            hidden_dim = model_details.get('neural_network_config', {}).get('hidden_dim', 64)
+            num_layers = model_details.get('neural_network_config', {}).get('num_layers', 2)
+            output_dim = model_details.get('neural_network_config', {}).get('output_dim', 1)
+            dropout_rate = model_details.get('neural_network_config', {}).get('dropout_rate', 0.2)
+            
+            # Create model with same architecture
+            model = LSTMRegressor(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                num_layers=num_layers,
+                output_dim=output_dim,
+                dropout_rate=dropout_rate
+            )
+            
+            # Load model weights if available
+            if 'model_weights' in model_details:
+                # Convert weights back to state dict
+                state_dict = {}
+                for key, value in model_details['model_weights'].items():
+                    state_dict[key] = torch.tensor(value)
+                model.load_state_dict(state_dict)
+            
+            # Set to evaluation mode
+            model.eval()
+            
+        else:
+            raise ValueError(f"Unsupported model type: {model_type}")
+        
+        # Check if we need to apply scaling
+        if 'scaler_X_mean' in model_details and 'scaler_X_scale' in model_details:
+            # Create and configure the scaler with saved parameters
+            scaler_X = StandardScaler()
+            scaler_X.mean_ = np.array(model_details['scaler_X_mean'])
+            scaler_X.scale_ = np.array(model_details['scaler_X_scale'])
+            
+            # Scale input data
+            scaled_input = scaler_X.transform(input_data)
+        else:
+            # Use as-is
+            scaled_input = input_data.values
+            
+        # Make prediction based on model type
+        if model_type in ['Neural Network', 'LSTM Network']:
+            # Convert to tensor
+            input_tensor = torch.FloatTensor(scaled_input)
+            
+            # Reshape for LSTM if needed
+            if model_type == 'LSTM Network':
+                sequence_length = model_details.get('neural_network_config', {}).get('sequence_length', 1)
+                if len(input_tensor.shape) < 3:
+                    # Reshape to [batch_size, sequence_length, features]
+                    input_tensor = input_tensor.unsqueeze(0)
+                    if input_tensor.shape[0] > 1 and input_tensor.shape[1] == 1:
+                        # Single sample but multiple features
+                        input_tensor = input_tensor.unsqueeze(1)
+            
+            # Get prediction
+            with torch.no_grad():
+                prediction = model(input_tensor).numpy()
+                
+        else:
+            # Use scikit-learn model
+            prediction = model.predict(scaled_input)
+            
+        # Check if we need to invert scaling for the output
+        if 'scaler_y_mean' in model_details and 'scaler_y_scale' in model_details:
+            # Create and configure the scaler with saved parameters
+            scaler_y = StandardScaler()
+            scaler_y.mean_ = np.array(model_details['scaler_y_mean'])
+            scaler_y.scale_ = np.array(model_details['scaler_y_scale'])
+            
+            # Reshape prediction for inverse transform if needed
+            if len(prediction.shape) == 1:
+                prediction = prediction.reshape(-1, 1)
+                
+            # Invert scaling
+            prediction = scaler_y.inverse_transform(prediction)
+            
+            # Flatten if single dimension
+            if prediction.shape[1] == 1:
+                prediction = prediction.flatten()
+        
+        return prediction
     
     def train_with_multiple_datasets(self, breach_data, non_breach_data, target_column, model_type, test_size=0.2, feature_columns=None, **model_params):
         """

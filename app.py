@@ -6296,17 +6296,115 @@ with main_container:
                 # Model parameters
                 st.write("### Model Configuration")
                 
+                # Data column selection
+                all_columns = st.session_state.prediction_data.columns.tolist()
+                
                 # Target column selection
-                target_options = st.session_state.prediction_data.columns.tolist()
                 # Try to default to the last column
-                default_target_idx = len(target_options) - 1 if target_options else 0
+                default_target_idx = len(all_columns) - 1 if all_columns else 0
                 
                 target_column = st.selectbox(
                     "Select target column for prediction:",
-                    options=target_options,
+                    options=all_columns,
                     index=default_target_idx,
                     key="prediction_target"
                 )
+                
+                # Feature selection
+                st.write("### Feature Selection")
+                
+                feature_selection_method = st.radio(
+                    "Feature selection method:",
+                    ["Use all non-target columns", "Manually select features", "Advanced condition inputs"],
+                    key="feature_selection_method"
+                )
+                
+                selected_features = []
+                use_condition_inputs = False
+                
+                if feature_selection_method == "Use all non-target columns":
+                    # Use all columns except target as features
+                    selected_features = [col for col in all_columns if col != target_column]
+                    st.info(f"Using all {len(selected_features)} non-target columns as features.")
+                    
+                elif feature_selection_method == "Manually select features":
+                    # Allow manual selection of feature columns
+                    available_features = [col for col in all_columns if col != target_column]
+                    
+                    # Use multiselect for feature selection with a default of all features
+                    selected_features = st.multiselect(
+                        "Select columns to use as features:",
+                        options=available_features,
+                        default=available_features,
+                        key="manual_feature_selection"
+                    )
+                    
+                    if not selected_features:
+                        st.warning("Please select at least one feature column.")
+                        
+                elif feature_selection_method == "Advanced condition inputs":
+                    # First, select base features as usual
+                    available_features = [col for col in all_columns if col != target_column]
+                    
+                    selected_features = st.multiselect(
+                        "Select base feature columns:",
+                        options=available_features,
+                        default=available_features,
+                        key="condition_base_features"
+                    )
+                    
+                    # Enable custom condition inputs
+                    use_condition_inputs = True
+                    st.write("#### Additional Condition Inputs")
+                    
+                    # Create expandable section for condition inputs
+                    with st.expander("Add custom condition inputs", expanded=True):
+                        st.write("""
+                        Use this section to add custom condition inputs that aren't directly available in your dataset. 
+                        These values will be applied uniformly to all samples in the dataset during training.
+                        """)
+                        
+                        # Number of custom conditions
+                        num_conditions = st.number_input(
+                            "Number of custom conditions:", 
+                            min_value=0, 
+                            max_value=10, 
+                            value=1,
+                            key="num_custom_conditions"
+                        )
+                        
+                        custom_conditions = {}
+                        
+                        # Create input fields for each condition
+                        for i in range(int(num_conditions)):
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                cond_name = st.text_input(
+                                    f"Condition {i+1} name:", 
+                                    value=f"condition_{i+1}",
+                                    key=f"cond_name_{i}"
+                                )
+                                
+                            with col2:
+                                cond_value = st.number_input(
+                                    f"Condition {i+1} value:", 
+                                    value=0.0,
+                                    format="%.4f",
+                                    key=f"cond_value_{i}"
+                                )
+                            
+                            if cond_name:
+                                custom_conditions[cond_name] = cond_value
+                        
+                        # Show custom conditions summary
+                        if custom_conditions:
+                            st.write("##### Custom Conditions Summary:")
+                            cond_df = pd.DataFrame({
+                                'Condition': list(custom_conditions.keys()),
+                                'Value': list(custom_conditions.values())
+                            })
+                            st.dataframe(cond_df)
                 
                 # Model type selection
                 model_type = st.selectbox(
@@ -6414,107 +6512,116 @@ with main_container:
                 train_model = st.button("Train Model", key="train_prediction_model")
                 
                 if train_model:
-                    with st.spinner("Training model..."):
-                        try:
-                            # Train model and get predictions
-                            predictions_df, model_details, metrics = predictor.train_and_predict(
-                                data=st.session_state.prediction_data,
-                                target_column=target_column,
-                                model_type=model_type,
-                                test_size=test_size,
-                                **model_params
-                            )
-                            
-                            # Save results to session state
-                            st.session_state.prediction_results = predictions_df
-                            st.session_state.prediction_model_details = model_details
-                            st.session_state.prediction_metrics = metrics
-                            
-                            # Show success message
-                            st.success(f"{model_type} model trained successfully!")
-                            
-                            # Display model metrics
-                            st.subheader("Model Performance Metrics")
-                            
-                            # Create metrics display
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.write("Training Set Metrics:")
-                                st.metric("R² Score", f"{metrics['Training R²']:.4f}")
-                                st.metric("MSE", f"{metrics['Training MSE']:.4f}")
-                                st.metric("RMSE", f"{metrics['Training RMSE']:.4f}")
-                                st.metric("MAE", f"{metrics['Training MAE']:.4f}")
-                            
-                            with col2:
-                                st.write("Test Set Metrics:")
-                                st.metric("R² Score", f"{metrics['Test R²']:.4f}")
-                                st.metric("MSE", f"{metrics['Test MSE']:.4f}")
-                                st.metric("RMSE", f"{metrics['Test RMSE']:.4f}")
-                                st.metric("MAE", f"{metrics['Test MAE']:.4f}")
-                            
-                            # Display neural network training history if available
-                            if model_type in ['Neural Network', 'LSTM Network'] and 'neural_network_config' in model_details:
-                                st.subheader("Neural Network Training Details")
+                    # Validate selections
+                    if not selected_features:
+                        st.error("Please select at least one feature column before training the model.")
+                    else:
+                        with st.spinner("Training model..."):
+                            try:
+                                # Store custom conditions in model_params if used
+                                if use_condition_inputs and 'custom_conditions' in locals():
+                                    model_params['custom_conditions'] = custom_conditions
                                 
-                                if 'training_history' in model_details:
-                                    history = model_details['training_history']
+                                # Train model and get predictions
+                                predictions_df, model_details, metrics = predictor.train_and_predict(
+                                    data=st.session_state.prediction_data,
+                                    target_column=target_column,
+                                    feature_columns=selected_features,
+                                    model_type=model_type,
+                                    test_size=test_size,
+                                    **model_params
+                                )
+                                
+                                # Save results to session state
+                                st.session_state.prediction_results = predictions_df
+                                st.session_state.prediction_model_details = model_details
+                                st.session_state.prediction_metrics = metrics
+                                
+                                # Show success message
+                                st.success(f"{model_type} model trained successfully!")
+                                
+                                # Display model metrics
+                                st.subheader("Model Performance Metrics")
+                                
+                                # Create metrics display
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.write("Training Set Metrics:")
+                                    st.metric("R² Score", f"{metrics['Training R²']:.4f}")
+                                    st.metric("MSE", f"{metrics['Training MSE']:.4f}")
+                                    st.metric("RMSE", f"{metrics['Training RMSE']:.4f}")
+                                    st.metric("MAE", f"{metrics['Training MAE']:.4f}")
+                                
+                                with col2:
+                                    st.write("Test Set Metrics:")
+                                    st.metric("R² Score", f"{metrics['Test R²']:.4f}")
+                                    st.metric("MSE", f"{metrics['Test MSE']:.4f}")
+                                    st.metric("RMSE", f"{metrics['Test RMSE']:.4f}")
+                                    st.metric("MAE", f"{metrics['Test MAE']:.4f}")
+                                
+                                # Display neural network training history if available
+                                if model_type in ['Neural Network', 'LSTM Network'] and 'neural_network_config' in model_details:
+                                    st.subheader("Neural Network Training Details")
                                     
-                                    # Display training metrics
-                                    col1, col2, col3 = st.columns(3)
-                                    col1.metric("Total Epochs", f"{history['total_epochs']}")
-                                    col2.metric("Best Epoch", f"{history['best_epoch'] + 1}")
-                                    col3.metric("Training Time", f"{history['training_time']:.2f} s")
+                                    if 'training_history' in model_details:
+                                        history = model_details['training_history']
+                                        
+                                        # Display training metrics
+                                        col1, col2, col3 = st.columns(3)
+                                        col1.metric("Total Epochs", f"{history['total_epochs']}")
+                                        col2.metric("Best Epoch", f"{history['best_epoch'] + 1}")
+                                        col3.metric("Training Time", f"{history['training_time']:.2f} s")
+                                        
+                                        # Plot training history
+                                        st.write("#### Training History")
+                                        fig, ax = plt.subplots(figsize=(10, 6))
+                                        ax.plot(history['train_loss'], label='Training Loss')
+                                        ax.plot(history['val_loss'], label='Validation Loss')
+                                        ax.axvline(x=history['best_epoch'], color='r', linestyle='--', label=f'Best Epoch ({history["best_epoch"]+1})')
+                                        
+                                        ax.set_title(f"Training History - {model_details['neural_network_config']['type']}")
+                                        ax.set_xlabel('Epochs')
+                                        ax.set_ylabel('Loss (MSE)')
+                                        ax.legend()
+                                        ax.grid(True, alpha=0.3)
+                                        
+                                        st.pyplot(fig)
                                     
-                                    # Plot training history
-                                    st.write("#### Training History")
+                                    # Display neural network configuration
+                                    st.write("#### Model Architecture")
+                                    nn_config = model_details['neural_network_config']
+                                    config_df = pd.DataFrame({
+                                        'Parameter': list(nn_config.keys()),
+                                        'Value': [str(v) for v in nn_config.values()]
+                                    })
+                                    st.dataframe(config_df)
+                                
+                                # Display feature importance if available
+                                elif 'feature_importance' in model_details:
+                                    st.subheader("Feature Importance")
+                                    
+                                    # Create DataFrame for feature importance
+                                    importance_df = pd.DataFrame({
+                                        'Feature': model_details['feature_names'],
+                                        'Importance': model_details['feature_importance']
+                                    }).sort_values(by='Importance', ascending=False)
+                                    
+                                    # Display as a table
+                                    st.dataframe(importance_df)
+                                    
+                                    # Display as a bar chart
                                     fig, ax = plt.subplots(figsize=(10, 6))
-                                    ax.plot(history['train_loss'], label='Training Loss')
-                                    ax.plot(history['val_loss'], label='Validation Loss')
-                                    ax.axvline(x=history['best_epoch'], color='r', linestyle='--', label=f'Best Epoch ({history["best_epoch"]+1})')
-                                    
-                                    ax.set_title(f"Training History - {model_details['neural_network_config']['type']}")
-                                    ax.set_xlabel('Epochs')
-                                    ax.set_ylabel('Loss (MSE)')
-                                    ax.legend()
-                                    ax.grid(True, alpha=0.3)
-                                    
+                                    ax.barh(importance_df['Feature'], importance_df['Importance'])
+                                    ax.set_xlabel('Importance')
+                                    ax.set_ylabel('Feature')
+                                    ax.set_title('Feature Importance')
+                                    plt.tight_layout()
                                     st.pyplot(fig)
-                                
-                                # Display neural network configuration
-                                st.write("#### Model Architecture")
-                                nn_config = model_details['neural_network_config']
-                                config_df = pd.DataFrame({
-                                    'Parameter': list(nn_config.keys()),
-                                    'Value': [str(v) for v in nn_config.values()]
-                                })
-                                st.dataframe(config_df)
-                            
-                            # Display feature importance if available
-                            elif 'feature_importance' in model_details:
-                                st.subheader("Feature Importance")
-                                
-                                # Create DataFrame for feature importance
-                                importance_df = pd.DataFrame({
-                                    'Feature': model_details['feature_names'],
-                                    'Importance': model_details['feature_importance']
-                                }).sort_values(by='Importance', ascending=False)
-                                
-                                # Display as a table
-                                st.dataframe(importance_df)
-                                
-                                # Display as a bar chart
-                                fig, ax = plt.subplots(figsize=(10, 6))
-                                ax.barh(importance_df['Feature'], importance_df['Importance'])
-                                ax.set_xlabel('Importance')
-                                ax.set_ylabel('Feature')
-                                ax.set_title('Feature Importance')
-                                plt.tight_layout()
-                                st.pyplot(fig)
-                            
-                        except Exception as e:
-                            st.error(f"Error training model: {str(e)}")
-                            st.exception(e)
+                                    
+                            except Exception as e:
+                                st.error(f"Error training model: {str(e)}")
+                                st.exception(e)
             
             # 2. PREDICTION RESULTS TAB
             with prediction_tabs[1]:

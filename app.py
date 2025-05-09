@@ -7804,7 +7804,8 @@ with main_container:
                 "Outlier Detection",
                 "Parameter Prediction",
                 "Land Use Analysis",
-                "Risk Evaluation"
+                "Risk Evaluation",
+                "Risk Assessment Methods"  # 添加新的选项卡用于三种风险评估方法
             ])
             
             # 1. OVERVIEW TAB
@@ -7819,6 +7820,7 @@ with main_container:
                 3. **Parameter Prediction**: Use trained models to predict target parameters
                 4. **Land Use Analysis**: Calculate unit loss values from land use maps
                 5. **Risk Evaluation**: Combine parameter values and unit loss for comprehensive risk assessment
+                6. **Risk Assessment Methods**: Apply advanced risk assessment methodologies (概率损失法, IAHP-CRITIC-GT法, 动态贝叶斯网络法)
                 """)
                 
                 # Display status of required components

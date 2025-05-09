@@ -95,13 +95,12 @@ main_container = st.container()
 
 with main_container:
     # Create tabs for each section of the workflow
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "1️⃣ Data Import", 
         "2️⃣ Data Processing", 
         "3️⃣ Prediction", 
         "4️⃣ Risk Assessment", 
-        "5️⃣ Visualization",
-        "6️⃣ Database"
+        "5️⃣ Database"
     ])
     
     # 1. DATA IMPORT TAB
@@ -7477,8 +7476,8 @@ with main_container:
                                     st.error(f"Error detecting outliers: {str(e)}")
                                     st.exception(e)
     
-    # 6. DATABASE TAB
-    with tab6:
+    # 5. DATABASE TAB
+    with tab5:
         st.header("Database Management")
         
         # Check if database is available

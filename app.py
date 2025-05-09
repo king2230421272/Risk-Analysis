@@ -6211,6 +6211,13 @@ with main_container:
                         min_rows = int(min(ds['row_count'] for ds in all_datasets))
                         max_rows = int(max(ds['row_count'] for ds in all_datasets))
                         
+                        # Ensure min and max values are different
+                        if min_rows == max_rows:
+                            if max_rows < 1000:
+                                max_rows = min_rows + 10  # Add 10 if small number
+                            else:
+                                max_rows = int(min_rows * 1.1)  # Add 10% if large number
+                        
                         row_count_range = st.slider(
                             "Row count range:", 
                             min_value=min_rows,

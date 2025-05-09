@@ -541,3 +541,36 @@ class DatabaseHandler:
                 
         # Execute the operation with retry logic
         return self._db_operation_with_retry(_delete_dataset_operation)
+
+    def export_dataset(self, dataset_id, file_format='csv', export_path=None):
+        """
+        导出指定ID的数据集为文件。
+
+        参数:
+        - dataset_id: int，数据集ID
+        - file_format: str，导出格式，支持 'csv' 或 'excel'
+        - export_path: str，导出文件路径（可选，不填则返回文件内容）
+
+        返回:
+        - 文件路径（如果指定了 export_path），否则返回文件内容（bytes）
+        """
+        df = self.get_dataset_by_id(dataset_id)
+        if df is None:
+            raise ValueError("未找到指定ID的数据集")
+        if file_format == 'csv':
+            if export_path:
+                df.to_csv(export_path, index=False)
+                return export_path
+            else:
+                return df.to_csv(index=False).encode('utf-8')
+        elif file_format == 'excel':
+            if export_path:
+                df.to_excel(export_path, index=False)
+                return export_path
+            else:
+                from io import BytesIO
+                output = BytesIO()
+                df.to_excel(output, index=False)
+                return output.getvalue()
+        else:
+            raise ValueError("仅支持 csv 或 excel 格式")

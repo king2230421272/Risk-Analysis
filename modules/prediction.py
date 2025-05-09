@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, RandomForestClassifier
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
 import joblib
@@ -15,6 +15,13 @@ from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 import time
 import json
+# 新增Sobol分析相关
+try:
+    from SALib.analyze import sobol
+    from SALib.sample import saltelli
+except ImportError:
+    sobol = None
+    saltelli = None
 
 class NeuralNetworkRegressor(nn.Module):
     """
@@ -386,7 +393,7 @@ class Predictor:
             **model_params
         )
     
-    def train_and_predict(self, data, target_column, model_type, test_size=0.2, feature_columns=None, **model_params):
+    def train_and_predict(self, data, target_column, model_type, test_size=0.2, feature_columns=None, breach_label_col='is_breach', **model_params):
         """
         Train a prediction model and generate forecasts.
         
@@ -403,6 +410,8 @@ class Predictor:
             Proportion of data to use for testing (default: 0.2)
         feature_columns : str or list[str]
             Name(s) of the feature column(s)
+        breach_label_col : str
+            Name of the breach label column
         **model_params : dict
             Additional parameters for the model
             
@@ -581,28 +590,33 @@ class Predictor:
                 self.y_test = self.y_test.values.reshape(-1, 1)
             
             # Check for non-numeric values in target
-            if not np.issubdtype(self.y_train.dtype, np.number):
-                print("Warning: Target contains non-numeric values. Converting to numeric.")
-                try:
-                    # Convert to pandas Series for easier processing
-                    y_train_series = pd.Series([str(y) for y in self.y_train.ravel()])
-                    y_test_series = pd.Series([str(y) for y in self.y_test.ravel()])
-                    
-                    # Extract numeric parts using same regex as for features
-                    y_train_extracted = y_train_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
-                    y_test_extracted = y_test_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
-                    
-                    # Convert to numeric and handle any remaining issues
-                    y_train_numeric = pd.to_numeric(y_train_extracted[0], errors='coerce').fillna(0)
-                    y_test_numeric = pd.to_numeric(y_test_extracted[0], errors='coerce').fillna(0)
-                    
-                    # Convert back to numpy arrays with correct shape
-                    self.y_train = y_train_numeric.values.reshape(-1, 1)
-                    self.y_test = y_test_numeric.values.reshape(-1, 1)
-                except Exception as e:
-                    print(f"Error converting target to numeric: {e}. Using zeros.")
-                    self.y_train = np.zeros_like(self.y_train, dtype=float)
-                    self.y_test = np.zeros_like(self.y_test, dtype=float)
+            if isinstance(self.y_train, pd.DataFrame):
+                # 多目标，检查每一列
+                if not all(np.issubdtype(dt, np.number) for dt in self.y_train.dtypes):
+                    print("Warning: 目标列包含非数值类型，尝试转换为数值。")
+                    try:
+                        for col in self.y_train.columns:
+                            self.y_train[col] = pd.to_numeric(self.y_train[col], errors='coerce').fillna(0)
+                        for col in self.y_test.columns:
+                            self.y_test[col] = pd.to_numeric(self.y_test[col], errors='coerce').fillna(0)
+                        self.y_train = self.y_train.values
+                        self.y_test = self.y_test.values
+                    except Exception as e:
+                        print(f"Error converting target to numeric: {e}. Using zeros.")
+                        self.y_train = np.zeros_like(self.y_train, dtype=float)
+                        self.y_test = np.zeros_like(self.y_test, dtype=float)
+            elif isinstance(self.y_train, pd.Series):
+                if not np.issubdtype(self.y_train.dtype, np.number):
+                    print("Warning: 目标列包含非数值类型，尝试转换为数值。")
+                    try:
+                        self.y_train = pd.to_numeric(self.y_train, errors='coerce').fillna(0).values.reshape(-1, 1)
+                        self.y_test = pd.to_numeric(self.y_test, errors='coerce').fillna(0).values.reshape(-1, 1)
+                    except Exception as e:
+                        print(f"Error converting target to numeric: {e}. Using zeros.")
+                        self.y_train = np.zeros_like(self.y_train, dtype=float)
+                        self.y_test = np.zeros_like(self.y_test, dtype=float)
+            else:
+                raise ValueError("未知的目标数据类型")
             
             self.scaler_y = StandardScaler()
             try:
@@ -707,6 +721,18 @@ class Predictor:
         
         # Get model details
         model_details = self._get_model_details(model_type)
+        # Sobol敏感性分析
+        try:
+            sobol_weights = self.sobol_sensitivity_analysis(self.X_train, self.y_train)
+            model_details['sobol_feature_importance'] = sobol_weights
+        except Exception as e:
+            print(f"Sobol敏感性分析失败: {e}")
+        
+        # 训练时区分溃决/未溃决
+        if breach_label_col in data.columns:
+            self.breach_labels = data[breach_label_col]
+            # 训练溃决概率分类器
+            self.train_breach_classifier(data, feature_columns, breach_label_col)
         
         return predictions_df, model_details, metrics
     
@@ -1114,3 +1140,81 @@ class Predictor:
         except Exception as e:
             print(f"Error loading dataset from database: {e}")
             raise
+
+    def manual_validate(self, input_features: dict, true_target: dict = None):
+        """
+        手动输入特征，预测并与真实目标值对比。
+        input_features: dict，特征名到值
+        true_target: dict，目标名到真实值（可选）
+        返回：预测值、真实值（如有）、误差
+        """
+        X = pd.DataFrame([input_features])
+        pred = self.model.predict(X)[0]
+        result = {'predicted': pred}
+        if true_target:
+            result['true'] = list(true_target.values())[0] if isinstance(true_target, dict) else true_target
+            result['error'] = result['predicted'] - result['true']
+        return result
+
+    def sobol_sensitivity_analysis(self, X, y, n_samples=1000):
+        """
+        对特征做Sobol敏感性分析，返回每个特征的Sobol指数（权重）。
+        """
+        if sobol is None or saltelli is None:
+            print("SALib未安装，无法进行Sobol敏感性分析。")
+            return {col: 1.0/len(X.columns) for col in X.columns}
+        problem = {
+            'num_vars': X.shape[1],
+            'names': list(X.columns),
+            'bounds': [[float(X[col].min()), float(X[col].max())] for col in X.columns]
+        }
+        param_values = saltelli.sample(problem, n_samples)
+        # 预测函数
+        def model_func(X_sample):
+            X_df = pd.DataFrame(X_sample, columns=problem['names'])
+            return self.model.predict(X_df)
+        Y = model_func(param_values)
+        Si = sobol.analyze(problem, Y)
+        # 只取一阶敏感性指数
+        sobol_weights = Si['S1']
+        # 归一化
+        sobol_weights = np.abs(sobol_weights) / np.sum(np.abs(sobol_weights))
+        return dict(zip(problem['names'], sobol_weights))
+
+    def save_sobol_weights_to_db(self, db_handler, dataset_id, sobol_weights):
+        """
+        将Sobol敏感性分析权重保存到数据库。
+        """
+        db_handler.save_analysis_result(
+            dataset_id=dataset_id,
+            analysis_type='sobol_feature_importance',
+            analysis_params=None,
+            result_data=sobol_weights
+        )
+
+    def train_breach_classifier(self, data, feature_columns, breach_label_col='is_breach', **model_params):
+        """
+        训练溃决概率分类器
+        """
+        X = data[feature_columns]
+        y = data[breach_label_col]
+        self.breach_clf = RandomForestClassifier(**model_params)
+        self.breach_clf.fit(X, y)
+
+    def predict_breach_probability(self, input_features: dict):
+        """
+        输入条件值，输出溃决概率
+        """
+        if not hasattr(self, 'breach_clf'):
+            raise ValueError("请先训练溃决概率分类器")
+        X = pd.DataFrame([input_features])
+        prob = self.breach_clf.predict_proba(X)[0][1]  # 1为溃决概率
+        return prob
+
+    def predict_qp(self, input_features: dict):
+        """
+        输入条件值，输出QP溃决峰值流量
+        """
+        X = pd.DataFrame([input_features])
+        qp = self.model.predict(X)[0]
+        return qp

@@ -456,8 +456,13 @@ class Predictor:
                     # Try to clean string values by removing any non-numeric characters except decimal points
                     if X[col].dtype == 'object' or X[col].dtype.name == 'category':
                         # For string values like "ET 18.90", extract just the numeric part
-                        # This regex extracts numbers with decimal points
-                        X[col] = X[col].astype(str).str.extract(r'(\d+\.?\d*)').astype(float)
+                        # First convert to string to ensure consistent handling
+                        str_series = X[col].astype(str)
+                        # This improved regex extracts numbers with decimal points, supporting various formats
+                        # It will find numbers like 18.90 in "ET 18.90" or just "18.90"
+                        extracted = str_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                        # Handle the case where extraction failed for some values
+                        X[col] = pd.to_numeric(extracted[0], errors='coerce')
                     
                     # Try to convert strings to float
                     X[col] = pd.to_numeric(X[col], errors='coerce')
@@ -513,10 +518,18 @@ class Predictor:
                         # Try one more conversion with more aggressive error handling
                         try:
                             # Extract numeric parts from strings like "ET 18.90"
-                            numeric_vals = self.X_train[col].astype(str).str.extract(r'(\d+\.?\d*)')[0]
-                            self.X_train[col] = pd.to_numeric(numeric_vals, errors='coerce')
-                            numeric_vals = self.X_test[col].astype(str).str.extract(r'(\d+\.?\d*)')[0]
-                            self.X_test[col] = pd.to_numeric(numeric_vals, errors='coerce')
+                            # First convert to string to ensure consistent handling
+                            str_train = self.X_train[col].astype(str)
+                            str_test = self.X_test[col].astype(str)
+                            
+                            # This improved regex extracts numbers with decimal points, supporting various formats
+                            # It will find numbers like 18.90 in "ET 18.90" or just "18.90"
+                            train_extracted = str_train.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                            test_extracted = str_test.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                            
+                            # Convert to numeric with proper error handling
+                            self.X_train[col] = pd.to_numeric(train_extracted[0], errors='coerce')
+                            self.X_test[col] = pd.to_numeric(test_extracted[0], errors='coerce')
                         except Exception as e:
                             print(f"Error in final conversion of column {col}: {e}")
                             # If conversion still fails, replace with column mean or zero
@@ -571,10 +584,23 @@ class Predictor:
             if not np.issubdtype(self.y_train.dtype, np.number):
                 print("Warning: Target contains non-numeric values. Converting to numeric.")
                 try:
-                    self.y_train = np.array([float(str(y).replace(',', '')) for y in self.y_train.ravel()]).reshape(-1, 1)
-                    self.y_test = np.array([float(str(y).replace(',', '')) for y in self.y_test.ravel()]).reshape(-1, 1)
-                except:
-                    print("Error converting target to numeric. Using zeros.")
+                    # Convert to pandas Series for easier processing
+                    y_train_series = pd.Series([str(y) for y in self.y_train.ravel()])
+                    y_test_series = pd.Series([str(y) for y in self.y_test.ravel()])
+                    
+                    # Extract numeric parts using same regex as for features
+                    y_train_extracted = y_train_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                    y_test_extracted = y_test_series.str.extract(r'[-+]?(\d+\.\d+|\d+)')
+                    
+                    # Convert to numeric and handle any remaining issues
+                    y_train_numeric = pd.to_numeric(y_train_extracted[0], errors='coerce').fillna(0)
+                    y_test_numeric = pd.to_numeric(y_test_extracted[0], errors='coerce').fillna(0)
+                    
+                    # Convert back to numpy arrays with correct shape
+                    self.y_train = y_train_numeric.values.reshape(-1, 1)
+                    self.y_test = y_test_numeric.values.reshape(-1, 1)
+                except Exception as e:
+                    print(f"Error converting target to numeric: {e}. Using zeros.")
                     self.y_train = np.zeros_like(self.y_train, dtype=float)
                     self.y_test = np.zeros_like(self.y_test, dtype=float)
             

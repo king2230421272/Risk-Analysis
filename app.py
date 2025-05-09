@@ -19,8 +19,8 @@ from utils.llm_handler import LlmHandler
 
 # Set page configuration
 st.set_page_config(
-    page_title="Data Analysis Platform",
-    page_icon="📊",
+    page_title="Risk Analysis Platform",
+    page_icon="🔍",
     layout="wide"
 )
 

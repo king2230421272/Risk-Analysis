@@ -327,7 +327,7 @@ with main_container:
                         st.pyplot(fig)
     
     # 2. DATA PROCESSING TAB
-    with tab2:
+    elif selected_tab == "2️⃣ Data Processing":
         st.header("Data Processing")
         
         if (st.session_state.original_data is None and st.session_state.interpolated_data is None):
@@ -6147,7 +6147,7 @@ with main_container:
                     # End of the Modules Analysis module
     
     # 3. PREDICTION TAB
-    with tab3:
+    elif selected_tab == "3️⃣ Prediction":
         st.header("Prediction")
         
         # Add data source selection - can use data from session state or from database
@@ -7794,7 +7794,7 @@ with main_container:
                                     st.exception(e)
     
     # 4. RISK ASSESSMENT TAB
-    with tab4:
+    elif selected_tab == "4️⃣ Risk Assessment":
         st.header("Risk Assessment")
         
         if (st.session_state.original_data is None and st.session_state.interpolated_data is None):
@@ -8677,7 +8677,7 @@ with main_container:
                                     st.exception(e)
     
     # 5. DATABASE TAB
-    with tab5:
+    elif selected_tab == "5️⃣ Database":
         st.header("Database Management")
         
         # Check if database is available

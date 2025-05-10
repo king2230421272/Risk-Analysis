@@ -18,10 +18,10 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Data Analysis Platform"
+args = "Risk Analysis Platform"
 
 [[workflows.workflow]]
-name = "Data Analysis Platform"
+name = "Risk Analysis Platform"
 author = "agent"
 
 [[workflows.workflow.tasks]]

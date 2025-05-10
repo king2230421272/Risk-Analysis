@@ -80,31 +80,36 @@ visualizer = Visualizer()
 db_handler = DatabaseHandler()
 llm_handler = LlmHandler()
 
-# Application title and description
+# Application title in main area
 st.title("Risk Analysis Platform")
 st.markdown("""
     This platform provides an integrated workflow for risk analysis, from data import to visualization.
-    All steps are available in one interface for easier access and navigation.
+    Use the sidebar to navigate between different modules.
 """)
 
 # 初始化数据库处理程序
 db_handler = DatabaseHandler()
 
+# Create sidebar navigation
+with st.sidebar:
+    st.title("Navigation")
+    selected_tab = st.radio(
+        "Select Module:",
+        [
+            "1️⃣ Data Import", 
+            "2️⃣ Data Processing", 
+            "3️⃣ Prediction", 
+            "4️⃣ Risk Assessment",
+            "5️⃣ Database"
+        ]
+    )
+
 # Main container
 main_container = st.container()
 
 with main_container:
-    # Create tabs for each section of the workflow
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "1️⃣ Data Import", 
-        "2️⃣ Data Processing", 
-        "3️⃣ Prediction", 
-        "4️⃣ Risk Assessment",
-        "5️⃣ Database"
-    ])
-    
-    # 1. DATA IMPORT TAB
-    with tab1:
+    # Display content based on selected tab
+    if selected_tab == "1️⃣ Data Import":
         st.header("Data Import")
         
         # Data import section with two columns for original and interpolated data

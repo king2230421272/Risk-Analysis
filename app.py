@@ -81,9 +81,9 @@ db_handler = DatabaseHandler()
 llm_handler = LlmHandler()
 
 # Application title and description
-st.title("Integrated Data Analysis Platform")
+st.title("Risk Analysis Platform")
 st.markdown("""
-    This platform provides an integrated workflow for data analysis, from data import to visualization.
+    This platform provides an integrated workflow for risk analysis, from data import to visualization.
     All steps are available in one interface for easier access and navigation.
 """)
 

@@ -764,12 +764,36 @@ class Predictor:
         if isinstance(target_column, list):
             # For multiple target columns, only use the first one for error calculation
             # but store all target values
-            for i, col in enumerate(target_column):
-                predictions_df[col] = self.y_test[:, i] if self.y_test.ndim > 1 else self.y_test
+            
+            # Convert y_test to DataFrame for easier handling
+            if self.y_test.ndim > 1 and self.y_test.shape[1] == len(target_column):
+                # If y_test is 2D and matches the number of target columns
+                y_test_df = pd.DataFrame(
+                    self.y_test, 
+                    columns=target_column,
+                    index=predictions_df.index
+                )
+                
+                # Copy each column from y_test dataframe to predictions dataframe
+                for col in target_column:
+                    predictions_df[col] = y_test_df[col]
+            else:
+                # If dimensions don't match, use the same target value for all columns
+                # This handles the case when y_test is 1D but we have multiple target columns
+                for col in target_column:
+                    if col not in predictions_df.columns:
+                        predictions_df[col] = self.y_test
             
             # Use first target column for prediction and error calculation
             primary_target = target_column[0]
-            predictions_df['predicted'] = test_pred[:, 0] if test_pred.ndim > 1 else test_pred
+            
+            # Handle test predictions similarly
+            if test_pred.ndim > 1 and test_pred.shape[1] >= 1:
+                predictions_df['predicted'] = test_pred[:, 0]  # Take first column
+            else:
+                predictions_df['predicted'] = test_pred  # Use as is for 1D array
+                
+            # Calculate error using the primary target
             predictions_df['error'] = predictions_df['predicted'] - predictions_df[primary_target]
             
             # Add a note about this in the model details
@@ -778,8 +802,17 @@ class Predictor:
             model_details['notes'].append(f"Multiple target columns provided, using {primary_target} for error calculation")
         else:
             # Single target column (original behavior)
-            predictions_df[target_column] = self.y_test
-            predictions_df['predicted'] = test_pred
+            # Make sure the target column exists in the dataframe
+            if target_column not in predictions_df.columns:
+                predictions_df[target_column] = self.y_test
+            
+            # Handle predictions
+            if test_pred.ndim > 1 and test_pred.shape[1] >= 1:
+                predictions_df['predicted'] = test_pred[:, 0]  # Take first column
+            else:
+                predictions_df['predicted'] = test_pred  # Use as is for 1D array
+                
+            # Calculate error
             predictions_df['error'] = predictions_df['predicted'] - predictions_df[target_column]
         # Sobol敏感性分析
         try:

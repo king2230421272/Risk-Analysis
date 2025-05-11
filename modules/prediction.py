@@ -470,7 +470,7 @@ class Predictor:
                         # This enhanced regex extracts numbers with decimal points, supporting various formats
                         # It will find numbers like 18.90 in "ET 18.90" or just "18.90" or "18,90" (European format)
                         # Also handles scientific notation (e.g., 1.23e-4)
-                        extracted = str_series.str.extract(r'[-+]?(\d+[.,]\d+[eE]?[-+]?\d*|\d+[eE][-+]?\d+|\d+)')
+                        extracted = str_series.str.extract(r'([-+]?\d*[.,]?\d+(?:[eE][-+]?\d+)?)')
                         # Handle the case where extraction failed for some values
                         X[col] = pd.to_numeric(extracted[0], errors='coerce')
                     
@@ -730,20 +730,40 @@ class Predictor:
         # Calculate performance metrics
         metrics = self._calculate_metrics(train_pred, test_pred)
         
-        # Create a dataframe with test data and predictions
-        predictions_df = self.X_test.copy()
-        predictions_df[target_column] = self.y_test
-        predictions_df['predicted'] = test_pred
-        predictions_df['error'] = predictions_df['predicted'] - predictions_df[target_column]
-        
         # Get model details
         model_details = self._get_model_details(model_type)
+        
+        # Create a dataframe with test data and predictions
+        predictions_df = self.X_test.copy()
+        
+        # Handle single or multiple target columns
+        if isinstance(target_column, list):
+            # For multiple target columns, only use the first one for error calculation
+            # but store all target values
+            for i, col in enumerate(target_column):
+                predictions_df[col] = self.y_test[:, i] if self.y_test.ndim > 1 else self.y_test
+            
+            # Use first target column for prediction and error calculation
+            primary_target = target_column[0]
+            predictions_df['predicted'] = test_pred[:, 0] if test_pred.ndim > 1 else test_pred
+            predictions_df['error'] = predictions_df['predicted'] - predictions_df[primary_target]
+            
+            # Add a note about this in the model details
+            if 'notes' not in model_details:
+                model_details['notes'] = []
+            model_details['notes'].append(f"Multiple target columns provided, using {primary_target} for error calculation")
+        else:
+            # Single target column (original behavior)
+            predictions_df[target_column] = self.y_test
+            predictions_df['predicted'] = test_pred
+            predictions_df['error'] = predictions_df['predicted'] - predictions_df[target_column]
         # Sobol敏感性分析
         try:
             sobol_weights = self.sobol_sensitivity_analysis(self.X_train, self.y_train)
             model_details['sobol_feature_importance'] = sobol_weights
         except Exception as e:
             print(f"Sobol敏感性分析失败: {e}")
+            model_details['sobol_analysis_error'] = str(e)
         
         # 训练时区分溃决/未溃决
         if breach_label_col in data.columns:

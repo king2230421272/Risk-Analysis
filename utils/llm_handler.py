@@ -107,16 +107,19 @@ class LlmHandler:
                 
         if self.deepseek_available:
             try:
-                if deepseek is not None:
+                if deepseek is not None and DeepseekAI is not None:
                     # Set the environment variable for Deepseek
                     os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
+                    # Initialize both client interfaces to ensure compatibility
                     self.deepseek_client = deepseek.Client(api_key=self.deepseek_api_key)
+                    self.deepseek_chat = self.deepseek_client  # Use the same client for chat completions
                     print("Deepseek client successfully initialized")
                 else:
                     print("Deepseek libraries not available")
                     self.deepseek_available = False
             except Exception as e:
                 print(f"Error initializing Deepseek client: {e}")
+                traceback.print_exc()
                 self.deepseek_available = False
     
     def is_any_service_available(self):

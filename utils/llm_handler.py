@@ -686,7 +686,7 @@ class LlmHandler:
                 """
                 
                 # Send request to Deepseek
-                response = self.deepseek_chat.completions.create(
+                response = self.deepseek_client.chat.completions.create(
                     model="deepseek-chat",
                     messages=[
                         {"role": "system", "content": system_message},

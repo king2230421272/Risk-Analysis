@@ -8814,6 +8814,35 @@ with main_container:
                                             })
                                             st.dataframe(col_info)
                                             
+                                        # Download options
+                                        st.write("**Download Dataset:**")
+                                        export_format = st.radio(
+                                            "Select format for download:",
+                                            options=["CSV", "Excel"],
+                                            horizontal=True,
+                                            key=f"download_format_{selected_dataset_id}"
+                                        )
+                                        
+                                        try:
+                                            if export_format == "CSV":
+                                                data_bytes = data_handler.export_data(dataset, format='csv')
+                                                st.download_button(
+                                                    label="Download as CSV",
+                                                    data=data_bytes,
+                                                    file_name=f"{datasets_df[datasets_df['ID']==selected_dataset_id]['Name'].values[0]}.csv",
+                                                    mime="text/csv"
+                                                )
+                                            else:  # Excel
+                                                data_bytes = data_handler.export_data(dataset, format='excel')
+                                                st.download_button(
+                                                    label="Download as Excel",
+                                                    data=data_bytes,
+                                                    file_name=f"{datasets_df[datasets_df['ID']==selected_dataset_id]['Name'].values[0]}.xlsx",
+                                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                                )
+                                        except Exception as e:
+                                            st.error(f"Error downloading dataset: {e}")
+                                            
                                     except Exception as e:
                                         st.error(f"Error loading dataset: {e}")
                             

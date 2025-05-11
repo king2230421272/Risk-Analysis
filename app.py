@@ -8165,7 +8165,7 @@ with main_container:
                 st.write("使用训练好的模型来预测特定目标参数值。")
                 
                 # Check if we have a trained model
-                if 'trained_model' not in st.session_state:
+                if 'trained_models' not in st.session_state or not st.session_state.trained_models:
                     st.warning("No trained model available. Please train a model first in the Model Training tab.")
                 else:
                     # Get the feature names from the model

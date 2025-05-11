@@ -258,6 +258,30 @@ class Predictor:
         else:
             raise ValueError(f"Unsupported model type: {model_type}")
         
+        # Clean input data - handle any non-numeric columns
+        for col in input_data.columns:
+            if not np.issubdtype(input_data[col].dtype, np.number):
+                try:
+                    # Try to clean string values by removing any non-numeric characters except decimal points
+                    if input_data[col].dtype == 'object' or input_data[col].dtype.name == 'category':
+                        # For string values like "ET 18.90", extract just the numeric part
+                        str_series = input_data[col].astype(str)
+                        # Enhanced regex to extract numbers with decimal points
+                        extracted = str_series.str.extract(r'([-+]?\d*[.,]?\d+(?:[eE][-+]?\d+)?)')
+                        input_data[col] = pd.to_numeric(extracted[0], errors='coerce')
+                    
+                    # Convert to numeric
+                    input_data[col] = pd.to_numeric(input_data[col], errors='coerce')
+                    
+                    # Fill NaN values with column mean or 0
+                    if input_data[col].isna().any():
+                        input_data[col] = input_data[col].fillna(input_data[col].mean() if not input_data[col].isna().all() else 0)
+                        
+                except Exception as e:
+                    # If all else fails, set to 0
+                    print(f"Error converting column {col} to numeric: {e}. Using zeros.")
+                    input_data[col] = 0
+        
         # Check if we need to apply scaling
         if 'scaler_X_mean' in model_details and 'scaler_X_scale' in model_details:
             # Create and configure the scaler with saved parameters

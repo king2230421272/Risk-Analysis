@@ -7278,87 +7278,87 @@ with main_container:
                 else:
                     st.info("No prediction results available. Please train a model first or use 'Apply Trained Model' in the Prediction Results tab.")
                     
-                    # 1. PREDICTION INTERVALS TAB
-                    with risk_tabs[0]:
-                        st.write("### Prediction Intervals")
-                        st.write("This analysis shows the uncertainty in predictions by calculating confidence intervals.")
-                        
-                        # Set confidence level
-                        confidence_level = st.slider(
-                            "Confidence level (%):",
-                            min_value=50,
-                            max_value=99,
-                            value=95,
-                            step=1,
-                            key="risk_confidence_level"
-                        )
-                        
-                        # Calculate prediction intervals
-                        run_intervals = st.button("Calculate Prediction Intervals", key="run_prediction_intervals")
-                        
-                        if run_intervals:
-                            with st.spinner("Calculating prediction intervals..."):
-                                try:
-                                    # Get prediction intervals
-                                    intervals_df = risk_assessor.prediction_intervals(
-                                        results_df,
-                                        confidence_level=confidence_level
-                                    )
-                                    
-                                    # Display intervals
-                                    st.write(f"#### {confidence_level}% Prediction Intervals")
-                                    st.dataframe(intervals_df)
-                                    
-                                    # Check what percentage of actual values fall within the intervals
-                                    within_interval_pct = intervals_df['within_interval'].mean() * 100
-                                    
-                                    st.metric(
-                                        "Actual values within interval",
-                                        f"{within_interval_pct:.2f}%",
-                                        f"{within_interval_pct - confidence_level:.2f}%"
-                                    )
-                                    
-                                    # Plot intervals
-                                    st.write("#### Visualization of Prediction Intervals")
-                                    
-                                    # Get target column
-                                    target_col = [col for col in intervals_df.columns if col not in [
-                                        'predicted', 'error', 'lower_bound', 'upper_bound', 
-                                        'interval_width', 'within_interval'
-                                    ]][0]
-                                    
-                                    # Sort by actual values for better visualization
-                                    plot_df = intervals_df.sort_values(by=target_col).reset_index(drop=True)
-                                    
-                                    # Create plot
-                                    fig, ax = plt.subplots(figsize=(12, 6))
-                                    
-                                    # Plot actual values
-                                    ax.scatter(plot_df.index, plot_df[target_col], color='blue', alpha=0.7, label='Actual')
-                                    
-                                    # Plot predicted values
-                                    ax.scatter(plot_df.index, plot_df['predicted'], color='red', alpha=0.7, label='Predicted')
-                                    
-                                    # Plot prediction intervals
-                                    ax.fill_between(
-                                        plot_df.index,
-                                        plot_df['lower_bound'],
-                                        plot_df['upper_bound'],
-                                        alpha=0.2,
-                                        color='gray',
-                                        label=f'{confidence_level}% Prediction Interval'
-                                    )
-                                    
-                                    ax.set_xlabel('Data Point Index')
-                                    ax.set_ylabel('Value')
-                                    ax.set_title(f'Predictions with {confidence_level}% Confidence Intervals')
-                                    ax.legend()
-                                    
-                                    st.pyplot(fig)
-                                    
-                                except Exception as e:
-                                    st.error(f"Error calculating prediction intervals: {str(e)}")
-                                    st.exception(e)
+                # 1. PREDICTION INTERVALS TAB
+                with risk_tabs[0]:
+                    st.write("### Prediction Intervals")
+                    st.write("This analysis shows the uncertainty in predictions by calculating confidence intervals.")
+                    
+                    # Set confidence level
+                    confidence_level = st.slider(
+                        "Confidence level (%):",
+                        min_value=50,
+                        max_value=99,
+                        value=95,
+                        step=1,
+                        key="risk_confidence_level"
+                    )
+                    
+                    # Calculate prediction intervals
+                    run_intervals = st.button("Calculate Prediction Intervals", key="run_prediction_intervals")
+                    
+                    if run_intervals:
+                        with st.spinner("Calculating prediction intervals..."):
+                            try:
+                                # Get prediction intervals
+                                intervals_df = risk_assessor.prediction_intervals(
+                                    results_df,
+                                    confidence_level=confidence_level
+                                )
+                                
+                                # Display intervals
+                                st.write(f"#### {confidence_level}% Prediction Intervals")
+                                st.dataframe(intervals_df)
+                                
+                                # Check what percentage of actual values fall within the intervals
+                                within_interval_pct = intervals_df['within_interval'].mean() * 100
+                                
+                                st.metric(
+                                    "Actual values within interval",
+                                    f"{within_interval_pct:.2f}%",
+                                    f"{within_interval_pct - confidence_level:.2f}%"
+                                )
+                                
+                                # Plot intervals
+                                st.write("#### Visualization of Prediction Intervals")
+                                
+                                # Get target column
+                                target_col = [col for col in intervals_df.columns if col not in [
+                                    'predicted', 'error', 'lower_bound', 'upper_bound', 
+                                    'interval_width', 'within_interval'
+                                ]][0]
+                                
+                                # Sort by actual values for better visualization
+                                plot_df = intervals_df.sort_values(by=target_col).reset_index(drop=True)
+                                
+                                # Create plot
+                                fig, ax = plt.subplots(figsize=(12, 6))
+                                
+                                # Plot actual values
+                                ax.scatter(plot_df.index, plot_df[target_col], color='blue', alpha=0.7, label='Actual')
+                                
+                                # Plot predicted values
+                                ax.scatter(plot_df.index, plot_df['predicted'], color='red', alpha=0.7, label='Predicted')
+                                
+                                # Plot prediction intervals
+                                ax.fill_between(
+                                    plot_df.index,
+                                    plot_df['lower_bound'],
+                                    plot_df['upper_bound'],
+                                    alpha=0.2,
+                                    color='gray',
+                                    label=f'{confidence_level}% Prediction Interval'
+                                )
+                                
+                                ax.set_xlabel('Data Point Index')
+                                ax.set_ylabel('Value')
+                                ax.set_title(f'Predictions with {confidence_level}% Confidence Intervals')
+                                ax.legend()
+                                
+                                st.pyplot(fig)
+                                
+                            except Exception as e:
+                                st.error(f"Error calculating prediction intervals: {str(e)}")
+                                st.exception(e)
                     
                     # 2. ERROR DISTRIBUTION TAB
                     with risk_tabs[1]:

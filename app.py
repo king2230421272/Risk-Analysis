@@ -6504,26 +6504,40 @@ with main_container:
                 # Try to default to the last column
                 default_target_idx = len(all_columns) - 1 if all_columns else 0
                 
-                target_column = st.selectbox(
-                    "Select target column for prediction:",
-                    options=all_columns,
-                    index=default_target_idx,
-                    key="prediction_target"
-                )
+                if all_columns:
+                    target_column = st.selectbox(
+                        "Select target column for prediction:",
+                        options=all_columns,
+                        index=default_target_idx,
+                        key="prediction_target"
+                    )
+                else:
+                    st.text_input("Target column for prediction (data not loaded yet):", 
+                                 value="", disabled=True, key="prediction_target_placeholder")
+                    target_column = None
                 
                 # Feature selection
                 st.write("### Feature Selection")
                 
-                feature_selection_method = st.radio(
-                    "Feature selection method:",
-                    ["Use all non-target columns", "Manually select features", "Advanced condition inputs"],
-                    key="feature_selection_method"
-                )
+                if not all_columns:
+                    st.info("无数据可用，请先加载数据。")
+                    feature_selection_method = "No data available"
+                else:
+                    feature_selection_method = st.radio(
+                        "Feature selection method:",
+                        ["Use all non-target columns", "Manually select features", "Advanced condition inputs"],
+                        key="feature_selection_method"
+                    )
                 
                 selected_features = []
                 use_condition_inputs = False
                 
-                if feature_selection_method == "Use all non-target columns":
+                if not all_columns or feature_selection_method == "No data available":
+                    # 处理没有数据的情况
+                    st.info("需要加载数据才能进行特征选择")
+                    selected_features = []
+                    
+                elif feature_selection_method == "Use all non-target columns":
                     # Use all columns except target as features
                     selected_features = [col for col in all_columns if col != target_column]
                     st.info(f"Using all {len(selected_features)} non-target columns as features.")
@@ -6545,12 +6559,16 @@ with main_container:
                         available_features = [col for col in all_columns if col != target_column]
                     
                     # Use multiselect for feature selection with a default of all features
-                    selected_features = st.multiselect(
-                        "Select columns to use as features:",
-                        options=available_features,
-                        default=available_features,
-                        key="manual_feature_selection"
-                    )
+                    if len(available_features) > 0:
+                        selected_features = st.multiselect(
+                            "Select columns to use as features:",
+                            options=available_features,
+                            default=available_features,
+                            key="manual_feature_selection"
+                        )
+                    else:
+                        st.info("无可用特征选择")
+                        selected_features = []
                     
                     if not selected_features:
                         st.warning("Please select at least one feature column.")

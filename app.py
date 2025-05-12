@@ -6829,12 +6829,18 @@ with main_container:
                     model_params["patience"] = patience
                 
                 # Train model button
-                train_model = st.button("Train Model", key="train_prediction_model")
+                if not all_columns:
+                    st.button("Train Model", key="train_prediction_model", disabled=True, help="请先加载数据才能训练模型")
+                    if not all_columns:
+                        st.info("请先在上方加载预测数据后再训练模型")
+                    train_model = False
+                else:
+                    train_model = st.button("Train Model", key="train_prediction_model")
                 
                 if train_model:
                     # Validate selections
                     if not selected_features:
-                        st.error("Please select at least one feature column before training the model.")
+                        st.error("请至少选择一个特征列进行模型训练")
                     else:
                         with st.spinner("Training model..."):
                             try:
@@ -7025,6 +7031,38 @@ with main_container:
                 
                 # Display options based on available models 
                 # This will always be shown regardless of whether a model was just trained
+                if not ('trained_models' in st.session_state and st.session_state.trained_models):
+                    st.info("No trained models available yet. Train a model in the 'Model Training' tab first.")
+                    st.session_state.trained_models = []
+                
+                # Display model selection even if no models are available yet
+                try:
+                    from utils.database import DatabaseHandler
+                    db_handler = DatabaseHandler()
+                    
+                    # Get models from database
+                    db_models = db_handler.list_analysis_results(analysis_type="Prediction Model")
+                    
+                    # Always initialize the trained_models list if it doesn't exist
+                    if 'trained_models' not in st.session_state:
+                        st.session_state.trained_models = []
+                        
+                    # Add database models to session state if not already there
+                    for model in db_models:
+                        model_id = model['id']
+                        # Check if this model is already in session state
+                        if not any(m['id'] == model_id for m in st.session_state.trained_models):
+                            st.session_state.trained_models.append({
+                                'id': model_id,
+                                'name': model['name'],
+                                'type': model['analysis_type'],
+                                'description': model.get('description', ''),
+                                'created_at': model['created_at']
+                            })
+                except Exception as e:
+                    st.warning(f"无法从数据库加载模型: {str(e)}")
+                    
+                # Now check if we have models to display
                 if 'trained_models' in st.session_state and st.session_state.trained_models:
                     # Show the available models from both session and database
                     # First, try to get models from database to add any that might not be in session
@@ -7223,19 +7261,22 @@ with main_container:
             with prediction_tabs[2]:
                 st.subheader("Prediction Quality Analysis")
                 
-                if 'prediction_results' not in st.session_state:
-                    st.info("No prediction results available. Please train a model first.")
-                else:
-                    # Initialize RiskAssessor from modules
-                    from modules.risk_assessment import RiskAssessor
-                    risk_assessor = RiskAssessor()
-                    
-                    # Create tabs for different risk assessment methods
-                    risk_tabs = st.tabs(["Prediction Intervals", "Error Distribution", "Outlier Detection", 
-                                        "Parameter Prediction", "Land Use Analysis", "Risk Evaluation"])
-                    
-                    # Results dataframe
+                # Initialize RiskAssessor from modules
+                from modules.risk_assessment import RiskAssessor
+                risk_assessor = RiskAssessor()
+                
+                # Create tabs for different risk assessment methods
+                risk_tabs = st.tabs(["Prediction Intervals", "Error Distribution", "Outlier Detection", 
+                                    "Parameter Prediction", "Land Use Analysis", "Risk Evaluation"])
+                                    
+                # Show warning if no prediction results available
+                has_prediction_results = 'prediction_results' in st.session_state
+                
+                # Results dataframe - only access if available
+                if has_prediction_results:
                     results_df = st.session_state.prediction_results
+                else:
+                    st.info("No prediction results available. Please train a model first or use 'Apply Trained Model' in the Prediction Results tab.")
                     
                     # 1. PREDICTION INTERVALS TAB
                     with risk_tabs[0]:

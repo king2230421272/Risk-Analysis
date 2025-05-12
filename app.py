@@ -6479,7 +6479,7 @@ with main_container:
                 st.dataframe(st.session_state.prediction_reference.head(5))
             
             # Create tabs for different steps in the prediction process
-            prediction_tabs = st.tabs(["Model Training", "Prediction Results", "Prediction Quality Analysis"])
+            prediction_tabs = st.tabs(["Model Training", "Prediction Results", "Prediction Quality Analysis", "Factor Analysis", "Model Verification"])
             
             # 1. MODEL TRAINING TAB
             with prediction_tabs[0]:
@@ -6492,8 +6492,13 @@ with main_container:
                 # Model parameters
                 st.write("### Model Configuration")
                 
-                # Data column selection
-                all_columns = st.session_state.prediction_data.columns.tolist()
+                # Check if data is available
+                if 'prediction_data' not in st.session_state or st.session_state.prediction_data is None:
+                    st.warning("No data available for prediction modeling. Please load data first.")
+                    all_columns = []
+                else:
+                    # Data column selection
+                    all_columns = st.session_state.prediction_data.columns.tolist()
                 
                 # Target column selection
                 # Try to default to the last column
